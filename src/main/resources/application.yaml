@@ -37,6 +37,9 @@ search:
   total-deadline: 2800
   public-library-top-n: 20
 
+public-library:
+  bootstrap-enabled: false
+
 elibrary:
   thread-pool-size: 5
   per-library-timeout: 15000

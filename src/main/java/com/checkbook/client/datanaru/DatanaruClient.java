@@ -1,15 +1,104 @@
 package com.checkbook.client.datanaru;
 
+import com.checkbook.client.datanaru.dto.DatanaruBookExistResponse;
+import com.checkbook.client.datanaru.dto.DatanaruBookExistResult;
+import com.checkbook.client.datanaru.dto.DatanaruLibSrchResponse;
 import com.checkbook.client.datanaru.dto.DatanaruLibSrchResult;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
 
 import java.util.List;
+import java.util.Objects;
 
-/**
- * Task 8에서 RestClient 기반 구현으로 교체될 정보나루 클라이언트 자리다.
- */
+@Slf4j
+@Component
 public class DatanaruClient {
 
+    private final RestClient restClient;
+    private final String authKey;
+
+    public DatanaruClient(
+            @Value("${datanaru.base-url}") String baseUrl,
+            @Value("${datanaru.auth-key}") String authKey,
+            @Value("${datanaru.timeout:2000}") int timeout
+    ) {
+        this.authKey = authKey;
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(timeout);
+        factory.setReadTimeout(timeout);
+        this.restClient = RestClient.builder()
+                .baseUrl(baseUrl)
+                .requestFactory(factory)
+                .build();
+    }
+
+    public DatanaruBookExistResult bookExist(String isbn13, String libCode) {
+        try {
+            DatanaruBookExistResponse response = restClient.get()
+                    .uri("/bookExist?authKey={key}&libCode={code}&isbn13={isbn}&format=json",
+                            authKey, libCode, isbn13)
+                    .retrieve()
+                    .body(DatanaruBookExistResponse.class);
+
+            if (response == null || response.response() == null || response.response().result() == null) {
+                return new DatanaruBookExistResult(libCode, false, false);
+            }
+
+            DatanaruBookExistResponse.Result result = response.response().result();
+            return new DatanaruBookExistResult(
+                    libCode,
+                    "Y".equalsIgnoreCase(result.hasBook()),
+                    "Y".equalsIgnoreCase(result.loanAvailable())
+            );
+        } catch (Exception e) {
+            log.error("정보나루 bookExist 실패: isbn13={}, libCode={}", isbn13, libCode, e);
+            return new DatanaruBookExistResult(libCode, false, false);
+        }
+    }
+
     public List<DatanaruLibSrchResult> libSrch(int pageNo, int pageSize) {
-        throw new UnsupportedOperationException("DatanaruClient is not implemented yet");
+        try {
+            DatanaruLibSrchResponse response = restClient.get()
+                    .uri("/libSrch?authKey={key}&pageNo={page}&pageSize={size}&format=json",
+                            authKey, pageNo, pageSize)
+                    .retrieve()
+                    .body(DatanaruLibSrchResponse.class);
+
+            if (response == null || response.response() == null || response.response().libs() == null) {
+                return List.of();
+            }
+
+            return response.response().libs().stream()
+                    .map(DatanaruLibSrchResponse.LibEntry::lib)
+                    .filter(Objects::nonNull)
+                    .map(lib -> new DatanaruLibSrchResult(
+                            lib.libCode(),
+                            lib.libName(),
+                            lib.address(),
+                            parseDouble(lib.latitude()),
+                            parseDouble(lib.longitude()),
+                            lib.region(),
+                            lib.homepage()))
+                    .filter(result -> result.lat() != null && result.lon() != null)
+                    .toList();
+        } catch (Exception e) {
+            log.error("정보나루 libSrch 실패: pageNo={}", pageNo, e);
+            return List.of();
+        }
+    }
+
+    private Double parseDouble(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        try {
+            return Double.parseDouble(value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 }
