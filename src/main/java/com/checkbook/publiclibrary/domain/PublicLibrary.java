@@ -41,11 +41,23 @@ public class PublicLibrary extends BaseEntity {
     @Column(nullable = false)
     private Double lon;
 
-    @Column(length = 10)
-    private String region;
+    @Column(name = "region_name", length = 100)
+    private String regionName;
 
     @Column(length = 500)
     private String homepage;
+
+    @Column(length = 50)
+    private String phone;
+
+    @Column(length = 50)
+    private String fax;
+
+    @Column(name = "operating_hours", length = 1000)
+    private String operatingHours;
+
+    @Column(name = "closed_days", length = 1000)
+    private String closedDays;
 
     @Builder
     public PublicLibrary(
@@ -54,15 +66,23 @@ public class PublicLibrary extends BaseEntity {
             String address,
             Double lat,
             Double lon,
-            String region,
-            String homepage
+            String regionName,
+            String homepage,
+            String phone,
+            String fax,
+            String operatingHours,
+            String closedDays
     ) {
         this.libCode = libCode;
         this.name = name;
         this.address = address;
         this.lat = lat;
         this.lon = lon;
-        this.region = region;
+        this.regionName = regionName;
         this.homepage = homepage;
+        this.phone = phone;
+        this.fax = fax;
+        this.operatingHours = operatingHours;
+        this.closedDays = closedDays;
     }
 }

@@ -53,8 +53,12 @@ public class PublicLibraryDataLoader implements ApplicationRunner {
                             .address(result.address())
                             .lat(result.lat())
                             .lon(result.lon())
-                            .region(result.region())
+                            .regionName(result.regionName())
                             .homepage(result.homepage())
+                            .phone(result.phone())
+                            .fax(result.fax())
+                            .operatingHours(result.operatingHours())
+                            .closedDays(result.closedDays())
                             .build())
                     .toList();
 

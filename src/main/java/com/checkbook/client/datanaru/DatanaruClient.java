@@ -81,7 +81,11 @@ public class DatanaruClient {
                             parseDouble(lib.latitude()),
                             parseDouble(lib.longitude()),
                             lib.region(),
-                            lib.homepage()))
+                            lib.homepage(),
+                            lib.tel(),
+                            lib.fax(),
+                            lib.operatingTime(),
+                            lib.closed()))
                     .filter(result -> result.lat() != null && result.lon() != null)
                     .toList();
         } catch (Exception e) {

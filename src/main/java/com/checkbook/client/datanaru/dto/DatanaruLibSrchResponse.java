@@ -20,10 +20,14 @@ public record DatanaruLibSrchResponse(Response response) {
             String libCode,
             String libName,
             String address,
+            String tel,
+            String fax,
             String latitude,
             String longitude,
             String region,
-            String homepage
+            String homepage,
+            String operatingTime,
+            String closed
     ) {
     }
 }

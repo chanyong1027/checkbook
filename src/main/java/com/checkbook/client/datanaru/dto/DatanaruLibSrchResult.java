@@ -6,7 +6,11 @@ public record DatanaruLibSrchResult(
         String address,
         Double lat,
         Double lon,
-        String region,
-        String homepage
+        String regionName,
+        String homepage,
+        String phone,
+        String fax,
+        String operatingHours,
+        String closedDays
 ) {
 }
