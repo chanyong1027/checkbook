@@ -47,10 +47,10 @@ public class PublicLibrary extends BaseEntity {
     @Column(length = 500)
     private String homepage;
 
-    @Column(length = 50)
+    @Column(length = 200)
     private String phone;
 
-    @Column(length = 50)
+    @Column(length = 200)
     private String fax;
 
     @Column(name = "operating_hours", length = 1000)
