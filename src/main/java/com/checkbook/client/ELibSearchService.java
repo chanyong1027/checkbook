@@ -3,13 +3,13 @@ package com.checkbook.client;
 import com.checkbook.dto.EBookSearchResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * 여러 전자도서관을 동시에 검색하는 서비스
@@ -23,7 +23,8 @@ import java.util.concurrent.Executors;
 public class ELibSearchService {
 
     private final KyoboELibClient kyoboClient;
-    private final ExecutorService executor = Executors.newFixedThreadPool(5);
+    @Qualifier("eLibraryExecutor")
+    private final ExecutorService executor;
 
     /**
      * PoC용: 교보 전자도서관 여러 곳을 동시 검색
