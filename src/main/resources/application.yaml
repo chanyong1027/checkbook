@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: checkbook
+server:
+  port: 8080
+
+logging:
+  level:
+    com.checkbook: DEBUG
