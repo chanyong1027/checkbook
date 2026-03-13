@@ -1,6 +1,7 @@
 package com.checkbook.elibrary.controller;
 
 import com.checkbook.elibrary.dto.ELibraryResponse;
+import com.checkbook.elibrary.service.ELibrarySearchService;
 import com.checkbook.elibrary.service.ELibraryService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,6 +20,9 @@ class ELibraryListControllerTest {
 
     @Mock
     private ELibraryService eLibraryService;
+
+    @Mock
+    private ELibrarySearchService eLibrarySearchService;
 
     @InjectMocks
     private ELibraryController eLibraryController;
