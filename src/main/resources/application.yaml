@@ -1,6 +1,17 @@
 spring:
   application:
     name: checkbook
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/checkbook}
+    username: ${DB_USERNAME:checkbook}
+    password: ${DB_PASSWORD:checkbook}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:validate}
+    open-in-view: false
 server:
   port: 8080
 
