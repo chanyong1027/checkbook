@@ -71,6 +71,26 @@ class KyoboELibClientTest {
     }
 
     @Test
+    void searchNoResultMessageWithoutResultListReturnsEmptyList() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/search/searchList.ink", exchange -> respond(exchange,
+                """
+                        <html>
+                          <body>
+                            <div class="search_empty">검색 결과가 없습니다.</div>
+                          </body>
+                        </html>
+                        """));
+        server.start();
+
+        try {
+            assertThat(client.search("http://127.0.0.1:" + server.getAddress().getPort(), "자바")).isEmpty();
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void implementsELibClient() {
         assertThat(client).isInstanceOf(ELibClient.class);
     }

@@ -22,6 +22,16 @@ import java.util.regex.Pattern;
 @Component
 public class KyoboELibClient implements ELibClient {
 
+    private static final List<String> EMPTY_RESULT_MARKERS = List.of(
+            "검색 결과가 없습니다",
+            "검색결과가 없습니다",
+            "조회된 결과가 없습니다",
+            "조회 결과가 없습니다",
+            "검색된 자료가 없습니다",
+            "검색된 도서가 없습니다",
+            "검색하신 자료가 없습니다"
+    );
+
     private static final Map<String, String> HEADERS = Map.of(
             "User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
             "Accept-Language", "ko,en-US;q=0.9",
@@ -60,6 +70,9 @@ public class KyoboELibClient implements ELibClient {
     private List<ELibrarySearchResponse.ELibraryBook> parseResults(Document document, String baseUrl) {
         Element resultList = document.selectFirst("ul.book_resultList");
         if (resultList == null) {
+            if (isEmptyResultPage(document)) {
+                return List.of();
+            }
             throw new ELibraryClientException("교보 검색 결과 DOM을 찾을 수 없습니다.");
         }
 
@@ -79,6 +92,11 @@ public class KyoboELibClient implements ELibClient {
         }
 
         return results;
+    }
+
+    private boolean isEmptyResultPage(Document document) {
+        String text = document.text();
+        return EMPTY_RESULT_MARKERS.stream().anyMatch(text::contains);
     }
 
     private ELibrarySearchResponse.ELibraryBook parseBook(Element book, String baseUrl) {
