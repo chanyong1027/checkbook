@@ -41,9 +41,8 @@ class ELibraryServiceTest {
                 .loginRequired(false)
                 .build();
 
-        when(eLibraryRepository.findAllByFilter(
+        when(eLibraryRepository.findAllByFilterWithoutKeyword(
                 eq(ELibraryStatus.ACTIVE),
-                isNull(),
                 isNull(),
                 isNull())
         ).thenReturn(List.of(library));
@@ -53,6 +52,30 @@ class ELibraryServiceTest {
         assertThat(result).hasSize(1);
         assertThat(result.get(0).name()).isEqualTo("테스트도서관");
         assertThat(result.get(0).vendorType()).isEqualTo("KYOBO");
+    }
+
+    @Test
+    void readLibrariesKeywordUsesKeywordFilter() {
+        ELibrary library = ELibrary.builder()
+                .name("자바도서관")
+                .baseUrl("https://test.dkyobobook.co.kr")
+                .vendorType(VendorType.KYOBO)
+                .status(ELibraryStatus.ACTIVE)
+                .region("11")
+                .loginRequired(false)
+                .build();
+
+        when(eLibraryRepository.findAllByFilterWithKeyword(
+                eq(ELibraryStatus.ACTIVE),
+                isNull(),
+                isNull(),
+                eq("자바"))
+        ).thenReturn(List.of(library));
+
+        List<ELibraryResponse> result = eLibraryService.readLibraries(null, null, "자바");
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).name()).isEqualTo("자바도서관");
     }
 
     @Test

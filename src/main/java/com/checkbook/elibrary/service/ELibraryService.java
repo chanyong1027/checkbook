@@ -2,6 +2,7 @@ package com.checkbook.elibrary.service;
 
 import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
+import com.checkbook.elibrary.domain.ELibrary;
 import com.checkbook.elibrary.domain.ELibraryStatus;
 import com.checkbook.elibrary.domain.VendorType;
 import com.checkbook.elibrary.dto.ELibraryResponse;
@@ -31,14 +32,36 @@ public class ELibraryService {
         validateRegion(normalizedRegion);
         VendorType vendorTypeEnum = parseVendorType(normalizedVendorType);
 
-        return eLibraryRepository.findAllByFilter(
-                        ELibraryStatus.ACTIVE,
-                        normalizedRegion,
-                        vendorTypeEnum,
-                        normalizedKeyword
-                ).stream()
+        List<ELibraryResponse> libraries = readFilteredLibraries(
+                normalizedRegion,
+                vendorTypeEnum,
+                normalizedKeyword
+        ).stream()
                 .map(ELibraryResponse::from)
                 .toList();
+
+        return libraries;
+    }
+
+    private List<ELibrary> readFilteredLibraries(
+            String region,
+            VendorType vendorType,
+            String keyword
+    ) {
+        if (keyword == null) {
+            return eLibraryRepository.findAllByFilterWithoutKeyword(
+                    ELibraryStatus.ACTIVE,
+                    region,
+                    vendorType
+            );
+        }
+
+        return eLibraryRepository.findAllByFilterWithKeyword(
+                ELibraryStatus.ACTIVE,
+                region,
+                vendorType,
+                keyword
+        );
     }
 
     private void validateRegion(String region) {
