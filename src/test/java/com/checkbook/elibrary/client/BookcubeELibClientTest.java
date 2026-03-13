@@ -12,13 +12,13 @@ import java.nio.charset.StandardCharsets;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-class KyoboELibClientTest {
+class BookcubeELibClientTest {
 
-    private final KyoboELibClient client = new KyoboELibClient();
+    private final BookcubeELibClient client = new BookcubeELibClient();
 
     @Test
-    void getVendorTypeReturnsKyobo() {
-        assertThat(client.getVendorType()).isEqualTo(VendorType.KYOBO);
+    void getVendorTypeReturnsBookcube() {
+        assertThat(client.getVendorType()).isEqualTo(VendorType.BOOKCUBE);
     }
 
     @Test
@@ -31,11 +31,11 @@ class KyoboELibClientTest {
     @Test
     void searchEmptyResultReturnsEmptyList() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
-        server.createContext("/search/searchList.ink", exchange -> respond(exchange,
+        server.createContext("/product/list/", exchange -> respond(exchange,
                 """
                         <html>
                           <body>
-                            <ul class="book_resultList"></ul>
+                            <ul class="list typelist"></ul>
                           </body>
                         </html>
                         """));
@@ -51,7 +51,7 @@ class KyoboELibClientTest {
     @Test
     void searchInvalidDomThrowsException() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
-        server.createContext("/search/searchList.ink", exchange -> respond(exchange,
+        server.createContext("/product/list/", exchange -> respond(exchange,
                 """
                         <html>
                           <body>
@@ -68,11 +68,6 @@ class KyoboELibClientTest {
         } finally {
             server.stop(0);
         }
-    }
-
-    @Test
-    void implementsELibClient() {
-        assertThat(client).isInstanceOf(ELibClient.class);
     }
 
     private void respond(com.sun.net.httpserver.HttpExchange exchange, String body) throws IOException {

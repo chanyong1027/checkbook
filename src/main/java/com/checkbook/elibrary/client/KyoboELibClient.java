@@ -53,13 +53,18 @@ public class KyoboELibClient implements ELibClient {
             return parseResults(document, baseUrl);
         } catch (IOException e) {
             log.error("교보 전자도서관 검색 실패: {}", baseUrl, e);
-            return List.of();
+            throw new ELibraryClientException("교보 전자도서관 접속 실패", e);
         }
     }
 
     private List<ELibrarySearchResponse.ELibraryBook> parseResults(Document document, String baseUrl) {
+        Element resultList = document.selectFirst("ul.book_resultList");
+        if (resultList == null) {
+            throw new ELibraryClientException("교보 검색 결과 DOM을 찾을 수 없습니다.");
+        }
+
         List<ELibrarySearchResponse.ELibraryBook> results = new ArrayList<>();
-        Elements books = document.select("ul.book_resultList > li");
+        Elements books = resultList.select("> li");
 
         for (Element book : books) {
             try {
@@ -69,11 +74,18 @@ public class KyoboELibClient implements ELibClient {
             }
         }
 
+        if (!books.isEmpty() && results.isEmpty()) {
+            throw new ELibraryClientException("교보 검색 결과를 파싱하지 못했습니다.");
+        }
+
         return results;
     }
 
     private ELibrarySearchResponse.ELibraryBook parseBook(Element book, String baseUrl) {
         String title = book.select("li.tit > a").text().trim();
+        if (title.isBlank()) {
+            throw new ELibraryClientException("교보 도서 제목 파싱 실패");
+        }
         Element writerElement = book.selectFirst("li.writer");
         String author = "";
         String publisher = "";

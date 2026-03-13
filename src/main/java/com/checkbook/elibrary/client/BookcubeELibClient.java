@@ -51,13 +51,18 @@ public class BookcubeELibClient implements ELibClient {
             return parseResults(document, baseUrl);
         } catch (IOException e) {
             log.error("북큐브 전자도서관 검색 실패: {}", baseUrl, e);
-            return List.of();
+            throw new ELibraryClientException("북큐브 전자도서관 접속 실패", e);
         }
     }
 
     private List<ELibrarySearchResponse.ELibraryBook> parseResults(Document document, String baseUrl) {
+        Element resultList = document.selectFirst("ul.list.typelist");
+        if (resultList == null) {
+            throw new ELibraryClientException("북큐브 검색 결과 DOM을 찾을 수 없습니다.");
+        }
+
         List<ELibrarySearchResponse.ELibraryBook> results = new ArrayList<>();
-        Elements books = document.select("ul.list.typelist > li.item");
+        Elements books = resultList.select("> li.item");
 
         for (Element book : books) {
             try {
@@ -67,12 +72,19 @@ public class BookcubeELibClient implements ELibClient {
             }
         }
 
+        if (!books.isEmpty() && results.isEmpty()) {
+            throw new ELibraryClientException("북큐브 검색 결과를 파싱하지 못했습니다.");
+        }
+
         return results;
     }
 
     private ELibrarySearchResponse.ELibraryBook parseBook(Element book, String baseUrl) {
         Element titleLink = book.selectFirst("div.subject > a");
         String title = titleLink != null ? titleLink.text().trim() : "";
+        if (title.isBlank()) {
+            throw new ELibraryClientException("북큐브 도서 제목 파싱 실패");
+        }
         String detailUrl = titleLink == null ? null : normalizeUrl(baseUrl, titleLink.attr("href"));
 
         List<String> infoItems = book.select("ul.i1 li").eachText();
