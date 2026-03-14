@@ -3,6 +3,7 @@ package com.checkbook.elibrary.client;
 import com.checkbook.elibrary.domain.VendorType;
 import com.checkbook.elibrary.dto.ELibrarySearchResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.jsoup.HttpStatusException;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
@@ -40,6 +41,10 @@ public class KyoboELibClient implements ELibClient {
 
     private static final Pattern DATE_PATTERN = Pattern.compile("(\\d{4}-\\d{2}-\\d{2})");
 
+    // fnContentClick(this, 'cttsDvsnCode', 'brcd', 'ctgrId', 'sntnAuthCode', ...)
+    private static final Pattern CONTENT_CLICK_PATTERN = Pattern.compile(
+            "fnContentClick\\(this,\\s*'([^']*)',\\s*'([^']*)',\\s*'([^']*)',\\s*'([^']*)'");
+
     @Override
     public VendorType getVendorType() {
         return VendorType.KYOBO;
@@ -47,24 +52,56 @@ public class KyoboELibClient implements ELibClient {
 
     @Override
     public List<ELibrarySearchResponse.ELibraryBook> search(String baseUrl, String keyword) {
-        String searchUrl = baseUrl + "/search/searchList.ink"
-                + "?schClst=all"
-                + "&schDvsn=000"
-                + "&schTxt=" + URLEncoder.encode(keyword, StandardCharsets.UTF_8);
-
+        String encoded = URLEncoder.encode(keyword, StandardCharsets.UTF_8);
         log.info("교보 전자도서관 검색: {}", baseUrl);
 
-        try {
-            Document document = Jsoup.connect(searchUrl)
-                    .headers(HEADERS)
-                    .timeout(15_000)
-                    .get();
+        List<String> candidates = buildCandidates(baseUrl);
+        IOException lastException = null;
 
-            return parseResults(document, baseUrl);
-        } catch (IOException e) {
-            log.error("교보 전자도서관 검색 실패: {}", baseUrl, e);
-            throw new ELibraryClientException("교보 전자도서관 접속 실패", e);
+        for (String candidate : candidates) {
+            try {
+                return doSearch(candidate, encoded);
+            } catch (HttpStatusException e) {
+                if (e.getStatusCode() == 404) {
+                    log.debug("교보 전자도서관 404, 다음 경로 시도: {}", candidate);
+                    lastException = e;
+                } else {
+                    log.error("교보 전자도서관 검색 실패: {}", candidate, e);
+                    throw new ELibraryClientException("교보 전자도서관 접속 실패", e);
+                }
+            } catch (IOException e) {
+                log.error("교보 전자도서관 검색 실패: {}", candidate, e);
+                throw new ELibraryClientException("교보 전자도서관 접속 실패", e);
+            }
         }
+
+        log.error("교보 전자도서관 모든 경로 실패: {}", baseUrl);
+        throw new ELibraryClientException("교보 전자도서관 접속 실패", lastException);
+    }
+
+    private List<String> buildCandidates(String baseUrl) {
+        List<String> candidates = new ArrayList<>();
+        candidates.add(baseUrl);
+        candidates.add(baseUrl + "/elibrary-front");
+        if (baseUrl.startsWith("http://")) {
+            String httpsBase = "https" + baseUrl.substring(4);
+            candidates.add(httpsBase + "/elibrary-front");
+        }
+        return candidates;
+    }
+
+    private List<ELibrarySearchResponse.ELibraryBook> doSearch(String searchBase, String encodedKeyword) throws IOException {
+        String searchUrl = searchBase + "/search/searchList.ink"
+                + "?schClst=all"
+                + "&schDvsn=000"
+                + "&schTxt=" + encodedKeyword;
+
+        Document document = Jsoup.connect(searchUrl)
+                .headers(HEADERS)
+                .timeout(15_000)
+                .get();
+
+        return parseResults(document, searchBase);
     }
 
     private List<ELibrarySearchResponse.ELibraryBook> parseResults(Document document, String baseUrl) {
@@ -123,7 +160,7 @@ public class KyoboELibClient implements ELibClient {
         boolean available = !book.select("input[name=brwBtn][value=대출]").isEmpty();
 
         Element titleLink = book.selectFirst("li.tit > a");
-        String detailUrl = titleLink == null ? null : normalizeUrl(baseUrl, titleLink.attr("href"));
+        String detailUrl = titleLink == null ? null : buildDetailUrl(baseUrl, titleLink);
 
         return new ELibrarySearchResponse.ELibraryBook(
                 title,
@@ -133,6 +170,25 @@ public class KyoboELibClient implements ELibClient {
                 available,
                 blankToNull(detailUrl)
         );
+    }
+
+    private String buildDetailUrl(String baseUrl, Element titleLink) {
+        String onclick = titleLink.attr("onclick");
+        Matcher m = CONTENT_CLICK_PATTERN.matcher(onclick);
+        if (m.find()) {
+            String cttsDvsnCode = m.group(1);
+            String brcd = m.group(2);
+            String ctgrId = m.group(3);
+            String sntnAuthCode = m.group(4);
+            String href = titleLink.attr("href"); // e.g. /elibrary-front/content/contentView.ink
+            return normalizeUrl(baseUrl, href)
+                    + "?cttsDvsnCode=" + cttsDvsnCode
+                    + "&brcd=" + brcd
+                    + "&ctgrId=" + ctgrId
+                    + "&sntnAuthCode=" + sntnAuthCode;
+        }
+        // onclick 파싱 실패 시 href 그대로 사용
+        return normalizeUrl(baseUrl, titleLink.attr("href"));
     }
 
     private String normalizeUrl(String baseUrl, String url) {
@@ -146,7 +202,15 @@ public class KyoboELibClient implements ELibClient {
             return url;
         }
         if (url.startsWith("/")) {
-            return baseUrl + url;
+            // root-relative: scheme+host+port만 사용 (path 제외)
+            try {
+                java.net.URI uri = java.net.URI.create(baseUrl);
+                String origin = uri.getScheme() + "://" + uri.getHost()
+                        + (uri.getPort() != -1 ? ":" + uri.getPort() : "");
+                return origin + url;
+            } catch (IllegalArgumentException e) {
+                return baseUrl + url;
+            }
         }
         return baseUrl + "/" + url;
     }
