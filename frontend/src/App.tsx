@@ -1,77 +1,122 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { BookCandidate } from './types'
-import { StepBar } from './components/StepBar'
 import { BookSearchStep } from './components/BookSearchStep'
-import { SearchResultStep } from './components/SearchResultStep'
 import { ELibraryStep } from './components/ELibraryStep'
+import { PricesStep } from './components/PricesStep'
 
-type Step = 'search' | 'result' | 'elibrary'
+type Step = 'search' | 'elibrary' | 'prices'
+
+const STEP_ORDER: Step[] = ['search', 'elibrary', 'prices']
+
+function loadSession(): { step: Step; book: BookCandidate | null } {
+  try {
+    const step = (sessionStorage.getItem('cb_step') as Step) || 'search'
+    const raw = sessionStorage.getItem('cb_book')
+    const book: BookCandidate | null = raw ? JSON.parse(raw) : null
+    // elibrary/prices 스텝인데 book이 없으면 search로 fallback
+    if (step !== 'search' && !book) return { step: 'search', book: null }
+    return { step, book }
+  } catch {
+    return { step: 'search', book: null }
+  }
+}
 
 export default function App() {
-  const [step, setStep] = useState<Step>('search')
-  const [selectedBook, setSelectedBook] = useState<BookCandidate | null>(null)
-  const [isbn13ForElib, setIsbn13ForElib] = useState('')
-  const [titleForElib, setTitleForElib] = useState('')
+  const initial = loadSession()
+  const [step, setStep] = useState<Step>(initial.step)
+  const [direction, setDirection] = useState<'forward' | 'back'>('forward')
+  const [selectedBook, setSelectedBook] = useState<BookCandidate | null>(initial.book)
 
-  const stepIndex: Record<Step, number> = { search: 0, result: 2, elibrary: 3 }
+  useEffect(() => {
+    sessionStorage.setItem('cb_step', step)
+  }, [step])
 
-  function handleBookSelect(book: BookCandidate) {
-    setSelectedBook(book)
-    setStep('result')
+  useEffect(() => {
+    if (selectedBook) sessionStorage.setItem('cb_book', JSON.stringify(selectedBook))
+    else sessionStorage.removeItem('cb_book')
+  }, [selectedBook])
+
+  function goForward(newStep: Step) {
+    setDirection('forward')
+    setStep(newStep)
   }
 
-  function handleGoELib(isbn13: string, title: string) {
-    setIsbn13ForElib(isbn13)
-    setTitleForElib(title)
-    setStep('elibrary')
+  function goBack(newStep: Step) {
+    setDirection('back')
+    setStep(newStep)
   }
 
   function handleReset() {
     setSelectedBook(null)
-    setIsbn13ForElib('')
-    setTitleForElib('')
-    setStep('search')
+    goBack('search')
   }
 
+  const stepIdx = STEP_ORDER.indexOf(step)
+
   return (
-    <div className="min-h-dvh bg-slate-50 flex flex-col">
+    <div className="min-h-dvh bg-surface flex flex-col">
       {/* Header */}
-      <header className="bg-white border-b border-slate-100 px-6 py-4 flex items-center gap-3">
-        <button onClick={handleReset} className="flex items-center gap-2 cursor-pointer group">
-          <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shadow-sm">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+      <header className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm border-b border-orange-100 px-4 h-14 flex items-center">
+        <button
+          onClick={handleReset}
+          className="flex items-center gap-2 cursor-pointer"
+          aria-label="홈으로"
+        >
+          <div className="w-8 h-8 bg-primary rounded-xl flex items-center justify-center shadow-sm shadow-orange-200">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
               <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
               <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
             </svg>
           </div>
-          <span className="font-bold text-slate-900 text-lg group-hover:text-primary transition">CheckBook</span>
+          <span className="font-bold text-slate-800 text-[15px] tracking-tight">CheckBook</span>
         </button>
-        <span className="text-xs text-slate-400 font-mono ml-auto">dev</span>
+
+        {/* Step dots */}
+        <div className="ml-auto flex items-center gap-1.5">
+          {STEP_ORDER.map((s, i) => (
+            <div
+              key={s}
+              className={`rounded-full transition-all duration-300 ${
+                i === stepIdx
+                  ? 'w-5 h-2 bg-primary'
+                  : i < stepIdx
+                  ? 'w-2 h-2 bg-orange-300'
+                  : 'w-2 h-2 bg-slate-200'
+              }`}
+            />
+          ))}
+        </div>
       </header>
 
       {/* Main */}
-      <main className="flex-1 flex items-start justify-center px-4 py-8">
-        <div className="w-full max-w-2xl">
-          <StepBar current={stepIndex[step]} />
-
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 sm:p-8">
+      <main className="flex-1 flex justify-center px-4 py-5 overflow-x-hidden">
+        <div className="w-full max-w-sm">
+          <div
+            key={step}
+            className={direction === 'forward' ? 'slide-in-right' : 'slide-in-left'}
+          >
             {step === 'search' && (
-              <BookSearchStep onSelect={handleBookSelect} />
-            )}
-
-            {step === 'result' && selectedBook && (
-              <SearchResultStep
-                book={selectedBook}
-                onNext={handleGoELib}
-                onBack={handleReset}
+              <BookSearchStep
+                onSelect={book => {
+                  setSelectedBook(book)
+                  goForward('elibrary')
+                }}
               />
             )}
 
-            {step === 'elibrary' && (
+            {step === 'elibrary' && selectedBook && (
               <ELibraryStep
-                isbn13={isbn13ForElib}
-                bookTitle={titleForElib}
-                onBack={() => setStep('result')}
+                book={selectedBook}
+                onNext={() => goForward('prices')}
+                onBack={() => goBack('search')}
+                onReset={handleReset}
+              />
+            )}
+
+            {step === 'prices' && selectedBook && (
+              <PricesStep
+                book={selectedBook}
+                onBack={() => goBack('elibrary')}
                 onReset={handleReset}
               />
             )}
