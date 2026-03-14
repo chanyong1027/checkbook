@@ -180,13 +180,17 @@ class ELibrarySearchServiceTest {
 
         when(eLibraryRepository.findAllById(List.of(3L))).thenReturn(List.of(library));
         when(clientResolver.resolve(VendorType.KYOBO)).thenReturn(mockClient);
-        when(mockClient.search(library.getBaseUrl(), "자바")).thenThrow(new RuntimeException("parse error"));
+        when(mockClient.search(library.getBaseUrl(), "자바")).thenAnswer(invocation -> {
+            Thread.sleep(25);
+            throw new RuntimeException("parse error");
+        });
 
         ELibrarySearchResponse response = service.search("자바", "3", null);
 
         assertThat(response.results()).hasSize(1);
         assertThat(response.results().get(0).status()).isEqualTo(ELibrarySearchStatus.FAILED);
         assertThat(response.results().get(0).books()).isEmpty();
+        assertThat(response.results().get(0).elapsedMs()).isGreaterThan(0L);
     }
 
     private ELibrary activeLibrary(Long id) {

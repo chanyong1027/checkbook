@@ -78,16 +78,22 @@ public class ELibrarySearchService {
             }
         }
 
-        Map<Long, CompletableFuture<ScrapeOutcome>> futureMap = new LinkedHashMap<>();
+        Map<Long, ScrapeTask> futureMap = new LinkedHashMap<>();
         for (Long id : validIds) {
             ELibrary library = foundMap.get(id);
-            futureMap.put(id, CompletableFuture
-                    .supplyAsync(() -> searchBooks(library, normalizedQuery, fallbackKeyword), eLibraryExecutor)
-                    .orTimeout(perLibraryTimeoutMs, TimeUnit.MILLISECONDS));
+            long startedAt = System.currentTimeMillis();
+            futureMap.put(id, new ScrapeTask(
+                    CompletableFuture
+                            .supplyAsync(() -> searchBooks(library, normalizedQuery, fallbackKeyword), eLibraryExecutor)
+                            .orTimeout(perLibraryTimeoutMs, TimeUnit.MILLISECONDS),
+                    startedAt
+            ));
         }
 
         CompletableFuture<Void> all = CompletableFuture.allOf(
-                futureMap.values().toArray(new CompletableFuture[0])
+                futureMap.values().stream()
+                        .map(ScrapeTask::future)
+                        .toArray(CompletableFuture[]::new)
         );
 
         try {
@@ -101,8 +107,8 @@ public class ELibrarySearchService {
         List<ELibrarySearchResponse.ELibraryResult> results = new ArrayList<>();
         for (Long id : validIds) {
             ELibrary library = foundMap.get(id);
-            CompletableFuture<ScrapeOutcome> future = futureMap.get(id);
-            results.add(toResult(library, future));
+            ScrapeTask scrapeTask = futureMap.get(id);
+            results.add(toResult(library, scrapeTask));
         }
 
         long totalElapsed = System.currentTimeMillis() - startAll;
@@ -144,8 +150,9 @@ public class ELibrarySearchService {
 
     private ELibrarySearchResponse.ELibraryResult toResult(
             ELibrary library,
-            CompletableFuture<ScrapeOutcome> future
+            ScrapeTask scrapeTask
     ) {
+        CompletableFuture<ScrapeOutcome> future = scrapeTask.future();
         if (!future.isDone()) {
             return timedOutResult(library, perLibraryTimeoutMs);
         }
@@ -167,13 +174,14 @@ public class ELibrarySearchService {
             }
 
             log.warn("전자도서관 검색 실패: {}", library.getName(), cause);
+            long elapsedMs = Math.max(1L, System.currentTimeMillis() - scrapeTask.startedAt());
             return new ELibrarySearchResponse.ELibraryResult(
                     library.getId(),
                     library.getName(),
                     library.getVendorType().name(),
                     List.of(),
                     ELibrarySearchStatus.FAILED,
-                    0L
+                    elapsedMs
             );
         }
     }
@@ -219,6 +227,12 @@ public class ELibrarySearchService {
     private record ScrapeOutcome(
             List<ELibrarySearchResponse.ELibraryBook> books,
             long elapsedMs
+    ) {
+    }
+
+    private record ScrapeTask(
+            CompletableFuture<ScrapeOutcome> future,
+            long startedAt
     ) {
     }
 }
