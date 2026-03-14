@@ -74,6 +74,24 @@ class ELibrarySearchServiceTest {
     }
 
     @Test
+    void searchDuplicateIdsWithinUniqueLimitDoesNotThrow() {
+        ELibrary library = activeLibrary(1L);
+
+        when(eLibraryRepository.findAllById(List.of(1L))).thenReturn(List.of(library));
+        when(clientResolver.resolve(VendorType.KYOBO)).thenReturn(mockClient);
+        when(mockClient.search(anyString(), anyString())).thenReturn(List.of());
+
+        ELibrarySearchResponse response = service.search(
+                "자바",
+                "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1",
+                null
+        );
+
+        assertThat(response.results()).hasSize(1);
+        assertThat(response.results().get(0).status()).isEqualTo(ELibrarySearchStatus.SUCCESS);
+    }
+
+    @Test
     void searchStaleIdRecordedAsFailure() {
         when(eLibraryRepository.findAllById(List.of(999L))).thenReturn(List.of());
 

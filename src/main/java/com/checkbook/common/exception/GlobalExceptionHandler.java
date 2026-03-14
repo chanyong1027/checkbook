@@ -46,12 +46,12 @@ public class GlobalExceptionHandler {
                             .annotationType()
                             .getSimpleName();
 
-                    if ("Size".equals(annotationName)) {
-                        return ErrorCode.KEYWORD_TOO_LONG;
-                    }
-
                     if (propertyPath.contains("libraryIds")) {
                         return ErrorCode.LIBRARY_IDS_REQUIRED;
+                    }
+
+                    if ("Size".equals(annotationName)) {
+                        return ErrorCode.KEYWORD_TOO_LONG;
                     }
 
                     return ErrorCode.INVALID_SEARCH_KEYWORD;

@@ -70,6 +70,26 @@ class BookcubeELibClientTest {
         }
     }
 
+    @Test
+    void searchNoResultMessageWithoutResultListReturnsEmptyList() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/product/list/", exchange -> respond(exchange,
+                """
+                        <html>
+                          <body>
+                            <div class="search_empty">검색 결과가 없습니다.</div>
+                          </body>
+                        </html>
+                        """));
+        server.start();
+
+        try {
+            assertThat(client.search("http://127.0.0.1:" + server.getAddress().getPort(), "자바")).isEmpty();
+        } finally {
+            server.stop(0);
+        }
+    }
+
     private void respond(com.sun.net.httpserver.HttpExchange exchange, String body) throws IOException {
         exchange.getResponseHeaders().add("Content-Type", "text/html; charset=UTF-8");
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);

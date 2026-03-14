@@ -195,10 +195,6 @@ public class ELibrarySearchService {
         }
 
         String[] parts = libraryIds.split(",");
-        if (parts.length > 20) {
-            throw new BusinessException(ErrorCode.LIBRARY_IDS_LIMIT_EXCEEDED);
-        }
-
         LinkedHashSet<Long> uniqueIds = new LinkedHashSet<>();
         for (String part : parts) {
             String trimmed = part.trim();
@@ -211,6 +207,10 @@ public class ELibrarySearchService {
             } catch (NumberFormatException e) {
                 throw new BusinessException(ErrorCode.INVALID_LIBRARY_ID);
             }
+        }
+
+        if (uniqueIds.size() > 20) {
+            throw new BusinessException(ErrorCode.LIBRARY_IDS_LIMIT_EXCEEDED);
         }
 
         return List.copyOf(uniqueIds);
