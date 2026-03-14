@@ -176,4 +176,24 @@ class SearchServiceTest {
                 .extracting(SearchResponse.FailureDetail::section)
                 .contains(SearchSection.USED_BOOK);
     }
+
+    @Test
+    void searchNewBookClientThrowsSectionIsFailed() {
+        AladinSearchResult aladinResult = new AladinSearchResult(
+                "9788936439743", "혼자가 혼자에게", "성해나", "창비", null);
+        when(aladinClient.searchBook("혼모노")).thenReturn(Optional.of(aladinResult));
+        when(aladinClient.getUsedBooks("9788936439743")).thenReturn(null);
+        when(naverClient.searchNewBooks("9788936439743")).thenThrow(new RuntimeException("naver timeout"));
+
+        SearchResponse response = searchService.search("혼모노", null, null);
+
+        assertThat(response.newBooks()).isEmpty();
+        assertThat(response.metadata().sectionStatuses())
+                .filteredOn(status -> status.section() == SearchSection.NEW_BOOK)
+                .extracting(SearchResponse.SectionStatusDetail::status)
+                .containsOnly(SearchSectionStatus.FAILED);
+        assertThat(response.metadata().failures())
+                .extracting(SearchResponse.FailureDetail::section)
+                .contains(SearchSection.NEW_BOOK);
+    }
 }

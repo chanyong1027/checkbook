@@ -53,7 +53,7 @@ public class NaverShoppingClient {
                     .toList();
         } catch (Exception e) {
             log.error("네이버 쇼핑 검색 실패: isbn13={}", isbn13, e);
-            return List.of();
+            throw new IllegalStateException("네이버 쇼핑 API 오류", e);
         }
     }
 

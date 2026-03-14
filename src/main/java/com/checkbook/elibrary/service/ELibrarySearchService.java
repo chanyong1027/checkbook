@@ -12,6 +12,7 @@ import com.checkbook.elibrary.dto.ELibrarySearchStatus;
 import com.checkbook.elibrary.repository.ELibraryRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -35,7 +36,10 @@ public class ELibrarySearchService {
     private final ELibClientResolver eLibClientResolver;
     private final ExecutorService eLibraryExecutor;
 
+    @Value("${elibrary.per-library-timeout:15000}")
     private long perLibraryTimeoutMs = 15_000;
+
+    @Value("${elibrary.total-timeout:20000}")
     private long totalTimeoutMs = 20_000;
 
     public ELibrarySearchService(

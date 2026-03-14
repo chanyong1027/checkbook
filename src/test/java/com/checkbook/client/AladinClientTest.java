@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AladinClientTest {
 
@@ -94,7 +95,9 @@ class AladinClientTest {
 
         assertThat(client.searchBook("자바")).isEmpty();
         assertThat(client.lookupBook("9788936439743")).isEmpty();
-        assertThat(client.getUsedBooks("9788936439743")).isNull();
+        assertThatThrownBy(() -> client.getUsedBooks("9788936439743"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("알라딘 중고 조회 오류");
     }
 
     private String baseUrl(String path) {

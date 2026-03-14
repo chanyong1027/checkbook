@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class NaverShoppingClientTest {
 
@@ -54,7 +55,7 @@ class NaverShoppingClientTest {
     }
 
     @Test
-    void searchNewBooksOnFailureReturnsEmptyList() {
+    void searchNewBooksOnFailureThrowsException() {
         NaverShoppingClient client = new NaverShoppingClient(
                 "http://127.0.0.1:1/v1/search/shop.json",
                 "test-id",
@@ -62,7 +63,9 @@ class NaverShoppingClientTest {
                 50
         );
 
-        assertThat(client.searchNewBooks("9788936439743")).isEmpty();
+        assertThatThrownBy(() -> client.searchNewBooks("9788936439743"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("네이버 쇼핑 API 오류");
     }
 
     private String baseUrl(String path) {

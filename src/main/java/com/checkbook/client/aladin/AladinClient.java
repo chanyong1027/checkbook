@@ -93,7 +93,7 @@ public class AladinClient {
             );
         } catch (Exception e) {
             log.error("알라딘 중고 조회 실패: isbn13={}", isbn13, e);
-            return null;
+            throw new IllegalStateException("알라딘 중고 조회 오류", e);
         }
     }
 
