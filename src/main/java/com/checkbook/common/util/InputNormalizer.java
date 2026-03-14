@@ -11,14 +11,14 @@ public final class InputNormalizer {
         }
 
         String normalized = rawQuery.trim().replaceAll("\\s+", " ");
-        String digitsOnly = normalized.replace("-", "");
+        String digitsOnly = normalized.replace("-", "").toUpperCase();
 
         if (digitsOnly.matches("\\d{13}")) {
             return new NormalizedQuery(digitsOnly, QueryType.ISBN);
         }
 
-        if (digitsOnly.matches("\\d{10}")) {
-            return new NormalizedQuery(isbn10ToIsbn13(digitsOnly), QueryType.ISBN);
+        if (digitsOnly.matches("\\d{9}[0-9X]")) {
+            return new NormalizedQuery(isbn10ToIsbn13(digitsOnly.substring(0, 9)), QueryType.ISBN);
         }
 
         return new NormalizedQuery(normalized, QueryType.KEYWORD);

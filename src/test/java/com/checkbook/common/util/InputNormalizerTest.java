@@ -47,6 +47,14 @@ class InputNormalizerTest {
     }
 
     @Test
+    void normalizeIsbn10EndingWithXConvertedToIsbn13() {
+        InputNormalizer.NormalizedQuery result = InputNormalizer.normalize("0-471-41549-x");
+
+        assertThat(result.value()).isEqualTo("9780471415497");
+        assertThat(result.type()).isEqualTo(InputNormalizer.QueryType.ISBN);
+    }
+
+    @Test
     void normalizeMultipleSpacesCollapsed() {
         InputNormalizer.NormalizedQuery result = InputNormalizer.normalize("자바  의  정석");
 
