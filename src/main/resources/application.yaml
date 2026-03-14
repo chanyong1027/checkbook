@@ -36,9 +36,11 @@ datanaru:
 search:
   total-deadline: 2800
   public-library-top-n: 20
+  executor-pool-size: 3
 
 public-library:
   bootstrap-enabled: false
+  executor-pool-size: 20
 
 elibrary:
   thread-pool-size: 5
