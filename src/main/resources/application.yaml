@@ -36,6 +36,7 @@ datanaru:
 search:
   total-deadline: 2800
   public-library-top-n: 20
+  public-library-fanout-timeout: 2200
   executor-pool-size: 3
 
 public-library:
