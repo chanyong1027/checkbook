@@ -83,13 +83,16 @@ public class AladinClient {
             }
 
             AladinItemResponse.UsedList usedList = item.subInfo().usedList();
+            String usedBase = item.itemId() != null
+                    ? "https://www.aladin.co.kr/shop/UsedShop/wuseditemall.aspx?ItemId=" + item.itemId()
+                    : null;
             return new AladinUsedBookResult(
                     extractMinPrice(usedList.userUsed()),
                     extractMinPrice(usedList.aladinUsed()),
                     extractMinPrice(usedList.spaceUsed()),
-                    item.itemId() != null
-                            ? "https://www.aladin.co.kr/shop/wproduct.aspx?ItemId=" + item.itemId()
-                            : null
+                    usedBase != null ? usedBase + "&TabType=2" : null,  // 개인판매
+                    usedBase != null ? usedBase + "&TabType=1" : null,  // 알라딘 직접
+                    usedBase != null ? usedBase + "&TabType=3" : null   // 알라딘 매장
             );
         } catch (Exception e) {
             log.error("알라딘 중고 조회 실패: isbn13={}", isbn13, e);

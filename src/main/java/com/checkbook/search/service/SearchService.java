@@ -148,7 +148,9 @@ public class SearchService {
                 usedResult.userUsedPrice(),
                 usedResult.aladinUsedPrice(),
                 usedResult.spaceUsedPrice(),
-                usedResult.detailUrl());
+                usedResult.userUsedUrl(),
+                usedResult.aladinUsedUrl(),
+                usedResult.spaceUsedUrl());
 
         List<SearchResponse.NewBookInfo> newBookInfos = newResults.stream()
                 .sorted(Comparator.comparingInt(NaverShoppingResult::price))

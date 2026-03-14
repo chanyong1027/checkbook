@@ -36,7 +36,9 @@ public record SearchResponse(
             Integer userUsedPrice,
             Integer aladinUsedPrice,
             Integer spaceUsedPrice,
-            String detailUrl
+            String userUsedUrl,
+            String aladinUsedUrl,
+            String spaceUsedUrl
     ) {
     }
 

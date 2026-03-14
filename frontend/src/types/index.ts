@@ -44,7 +44,9 @@ export interface UsedBookInfo {
   userUsedPrice: number | null
   aladinUsedPrice: number | null
   spaceUsedPrice: number | null
-  detailUrl: string
+  userUsedUrl: string | null
+  aladinUsedUrl: string | null
+  spaceUsedUrl: string | null
 }
 
 export interface NewBookInfo {
