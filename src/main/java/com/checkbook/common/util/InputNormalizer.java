@@ -18,7 +18,7 @@ public final class InputNormalizer {
         }
 
         if (digitsOnly.matches("\\d{9}[0-9X]")) {
-            return new NormalizedQuery(isbn10ToIsbn13(digitsOnly.substring(0, 9)), QueryType.ISBN);
+            return new NormalizedQuery(isbn10ToIsbn13(digitsOnly), QueryType.ISBN);
         }
 
         return new NormalizedQuery(normalized, QueryType.KEYWORD);

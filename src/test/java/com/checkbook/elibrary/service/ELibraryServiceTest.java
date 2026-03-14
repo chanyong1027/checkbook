@@ -79,6 +79,20 @@ class ELibraryServiceTest {
     }
 
     @Test
+    void readLibrariesKeywordEscapesLikeMetacharacters() {
+        when(eLibraryRepository.findAllByFilterWithKeyword(
+                eq(ELibraryStatus.ACTIVE),
+                isNull(),
+                isNull(),
+                eq("50\\%\\_도서관\\\\")
+        )).thenReturn(List.of());
+
+        List<ELibraryResponse> result = eLibraryService.readLibraries(null, null, "50%_도서관\\");
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
     void readLibrariesInvalidVendorTypeThrowsException() {
         assertThatThrownBy(() -> eLibraryService.readLibraries(null, "INVALID", null))
                 .isInstanceOf(BusinessException.class)

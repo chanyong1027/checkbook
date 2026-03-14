@@ -60,8 +60,15 @@ public class ELibraryService {
                 ELibraryStatus.ACTIVE,
                 region,
                 vendorType,
-                keyword
+                escapeLikePattern(keyword)
         );
+    }
+
+    private String escapeLikePattern(String keyword) {
+        return keyword
+                .replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
     }
 
     private void validateRegion(String region) {

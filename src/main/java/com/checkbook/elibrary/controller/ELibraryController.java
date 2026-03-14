@@ -29,7 +29,7 @@ public class ELibraryController {
     public ResponseEntity<List<ELibraryResponse>> readLibraries(
             @RequestParam(required = false) String region,
             @RequestParam(required = false) String vendorType,
-            @RequestParam(required = false) String keyword
+            @RequestParam(required = false) @Size(max = 200) String keyword
     ) {
         return ResponseEntity.ok(
                 eLibraryService.readLibraries(region, vendorType, keyword)

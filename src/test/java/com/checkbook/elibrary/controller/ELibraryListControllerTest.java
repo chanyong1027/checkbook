@@ -3,6 +3,7 @@ package com.checkbook.elibrary.controller;
 import com.checkbook.elibrary.dto.ELibraryResponse;
 import com.checkbook.elibrary.service.ELibrarySearchService;
 import com.checkbook.elibrary.service.ELibraryService;
+import jakarta.validation.constraints.Size;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -10,6 +11,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.ResponseEntity;
 
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Method;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,5 +44,26 @@ class ELibraryListControllerTest {
         assertThat(response.getBody().get(0).libraryId()).isEqualTo(3L);
         assertThat(response.getBody().get(0).vendorType()).isEqualTo("KYOBO");
         assertThat(response.getBody().get(0).region()).isEqualTo("11");
+    }
+
+    @Test
+    void readLibrariesKeywordParamHasMaxSizeConstraint() throws NoSuchMethodException {
+        Method method = ELibraryController.class.getMethod(
+                "readLibraries",
+                String.class,
+                String.class,
+                String.class
+        );
+
+        Size size = null;
+        for (Annotation annotation : method.getParameterAnnotations()[2]) {
+            if (annotation instanceof Size found) {
+                size = found;
+                break;
+            }
+        }
+
+        assertThat(size).isNotNull();
+        assertThat(size.max()).isEqualTo(200);
     }
 }

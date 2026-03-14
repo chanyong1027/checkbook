@@ -193,6 +193,26 @@ class ELibrarySearchServiceTest {
         assertThat(response.results().get(0).elapsedMs()).isGreaterThan(0L);
     }
 
+    @Test
+    void searchTotalTimeoutUsesActualElapsedMs() {
+        ELibrary library = activeLibrary(3L);
+        ReflectionTestUtils.setField(service, "totalTimeoutMs", 20L);
+        ReflectionTestUtils.setField(service, "perLibraryTimeoutMs", 200L);
+
+        when(eLibraryRepository.findAllById(List.of(3L))).thenReturn(List.of(library));
+        when(clientResolver.resolve(VendorType.KYOBO)).thenReturn(mockClient);
+        when(mockClient.search(library.getBaseUrl(), "자바")).thenAnswer(invocation -> {
+            Thread.sleep(80);
+            return List.of();
+        });
+
+        ELibrarySearchResponse response = service.search("자바", "3", null);
+
+        assertThat(response.results()).hasSize(1);
+        assertThat(response.results().get(0).status()).isEqualTo(ELibrarySearchStatus.TIMEOUT);
+        assertThat(response.results().get(0).elapsedMs()).isGreaterThanOrEqualTo(20L);
+    }
+
     private ELibrary activeLibrary(Long id) {
         ELibrary library = ELibrary.builder()
                 .name("테스트도서관")

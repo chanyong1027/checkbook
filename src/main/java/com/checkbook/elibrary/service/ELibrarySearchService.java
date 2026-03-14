@@ -154,7 +154,8 @@ public class ELibrarySearchService {
     ) {
         CompletableFuture<ScrapeOutcome> future = scrapeTask.future();
         if (!future.isDone()) {
-            return timedOutResult(library, perLibraryTimeoutMs);
+            long elapsedMs = Math.max(1L, System.currentTimeMillis() - scrapeTask.startedAt());
+            return timedOutResult(library, elapsedMs);
         }
 
         try {
@@ -170,7 +171,8 @@ public class ELibrarySearchService {
         } catch (CompletionException exception) {
             Throwable cause = exception.getCause();
             if (cause instanceof TimeoutException) {
-                return timedOutResult(library, perLibraryTimeoutMs);
+                long elapsedMs = Math.max(1L, System.currentTimeMillis() - scrapeTask.startedAt());
+                return timedOutResult(library, elapsedMs);
             }
 
             log.warn("전자도서관 검색 실패: {}", library.getName(), cause);

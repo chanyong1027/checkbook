@@ -26,7 +26,7 @@ public interface ELibraryRepository extends JpaRepository<ELibrary, Long> {
             "WHERE l.status = :status AND l.loginRequired = false " +
             "AND (:region IS NULL OR l.region = :region) " +
             "AND (:vendorType IS NULL OR l.vendorType = :vendorType) " +
-            "AND l.name LIKE CONCAT('%', :keyword, '%') " +
+            "AND l.name LIKE CONCAT('%', :keyword, '%') ESCAPE '\\' " +
             "ORDER BY l.name ASC")
     List<ELibrary> findAllByFilterWithKeyword(
             @Param("status") ELibraryStatus status,
