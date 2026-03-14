@@ -20,7 +20,6 @@ public enum ErrorCode {
     INVALID_VENDOR_TYPE(HttpStatus.BAD_REQUEST, "올바른 벤더 타입을 입력해주세요. (KYOBO, BOOKCUBE)"),
 
     LIBRARY_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 도서관입니다."),
-    BOOK_NOT_FOUND(HttpStatus.NOT_FOUND, "도서를 찾을 수 없습니다."),
 
     RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "요청이 너무 많습니다. 잠시 후 다시 시도해주세요."),
 

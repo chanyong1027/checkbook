@@ -31,7 +31,7 @@ class GlobalExceptionHandlerTest {
 
         @GetMapping("/test/biz")
         void biz() {
-            throw new BusinessException(ErrorCode.BOOK_NOT_FOUND);
+            throw new BusinessException(ErrorCode.LIBRARY_NOT_FOUND);
         }
 
         @GetMapping("/test/search")
@@ -48,7 +48,7 @@ class GlobalExceptionHandlerTest {
     void businessExceptionReturns404() throws Exception {
         mockMvc.perform(get("/test/biz"))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("BOOK_NOT_FOUND"))
+                .andExpect(jsonPath("$.code").value("LIBRARY_NOT_FOUND"))
                 .andExpect(jsonPath("$.timestamp").exists());
     }
 

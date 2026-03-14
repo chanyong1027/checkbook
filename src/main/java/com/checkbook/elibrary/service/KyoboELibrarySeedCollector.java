@@ -4,12 +4,10 @@ import com.checkbook.elibrary.dto.KyoboELibrarySeedCandidate;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
-import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.util.List;
 
-@Component
 public class KyoboELibrarySeedCollector {
 
     public static final String SOURCE_URL = "https://ebook.kyobobook.co.kr/dig/cff/e-library";

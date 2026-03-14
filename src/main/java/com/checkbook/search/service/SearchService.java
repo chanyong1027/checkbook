@@ -50,6 +50,9 @@ public class SearchService {
     @Value("${search.public-library-top-n:20}")
     private int publicLibraryTopN = 20;
 
+    @Value("${search.public-library-fanout-timeout:2200}")
+    private long publicLibraryFanoutTimeoutMs = 2200;
+
     public SearchService(
             AladinClient aladinClient,
             NaverShoppingClient naverClient,
@@ -202,10 +205,18 @@ public class SearchService {
                 }))
                 .toList();
 
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        CompletableFuture<Void> all = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
+        try {
+            all.get(publicLibraryFanoutTimeoutMs, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            log.warn("공공도서관 bookExist fan-out 타임아웃 {}ms", publicLibraryFanoutTimeoutMs);
+        } catch (Exception e) {
+            log.warn("공공도서관 bookExist fan-out 대기 중 오류", e);
+        }
 
         return futures.stream()
-                .map(CompletableFuture::join)
+                .filter(CompletableFuture::isDone)
+                .map(future -> future.getNow(null))
                 .filter(Objects::nonNull)
                 .sorted(Comparator.comparingDouble(SearchResponse.PublicLibraryInfo::distance))
                 .toList();

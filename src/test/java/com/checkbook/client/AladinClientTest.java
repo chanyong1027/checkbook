@@ -3,14 +3,11 @@ package com.checkbook.client;
 import com.checkbook.client.aladin.AladinClient;
 import com.checkbook.client.aladin.dto.AladinSearchResult;
 import com.checkbook.client.aladin.dto.AladinUsedBookResult;
-import com.sun.net.httpserver.HttpServer;
+import okhttp3.mockwebserver.MockResponse;
+import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
-import java.io.OutputStream;
-import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -18,20 +15,21 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AladinClientTest {
 
-    private HttpServer server;
+    private MockWebServer server;
 
     @AfterEach
-    void tearDown() {
+    void tearDown() throws Exception {
         if (server != null) {
-            server.stop(0);
+            server.shutdown();
         }
     }
 
     @Test
-    void searchBookParsesFirstItem() throws IOException {
-        server = HttpServer.create(new InetSocketAddress(0), 0);
-        server.createContext("/ttb/api/ItemSearch.aspx", exchange -> respond(exchange,
-                """
+    void searchBookParsesFirstItem() throws Exception {
+        server = new MockWebServer();
+        server.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""
                         {
                           "item": [
                             {
@@ -57,10 +55,11 @@ class AladinClientTest {
     }
 
     @Test
-    void getUsedBooksParsesUsedList() throws IOException {
-        server = HttpServer.create(new InetSocketAddress(0), 0);
-        server.createContext("/ttb/api/ItemLookUp.aspx", exchange -> respond(exchange,
-                """
+    void getUsedBooksParsesUsedList() throws Exception {
+        server = new MockWebServer();
+        server.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""
                         {
                           "item": [
                             {
@@ -101,15 +100,6 @@ class AladinClientTest {
     }
 
     private String baseUrl(String path) {
-        return "http://127.0.0.1:" + server.getAddress().getPort() + path;
-    }
-
-    private void respond(com.sun.net.httpserver.HttpExchange exchange, String body) throws IOException {
-        exchange.getResponseHeaders().add("Content-Type", "application/json");
-        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-        exchange.sendResponseHeaders(200, bytes.length);
-        try (OutputStream outputStream = exchange.getResponseBody()) {
-            outputStream.write(bytes);
-        }
+        return server.url(path).toString();
     }
 }
