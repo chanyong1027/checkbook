@@ -4,11 +4,12 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: '#2563EB',
-        accent: '#F97316',
+        primary: '#F97316',
+        'primary-dark': '#EA580C',
+        surface: '#FFF8F3',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Pretendard', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
     },
