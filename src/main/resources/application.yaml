@@ -28,6 +28,12 @@ naver:
   base-url: https://openapi.naver.com/v1/search/shop.json
   timeout: 2000
 
+kakao:
+  book:
+    rest-api-key: ${KAKAO_BOOK_REST_API_KEY:}
+    base-url: https://dapi.kakao.com
+    timeout: 3000
+
 datanaru:
   auth-key: ${DATANARU_AUTH_KEY:}
   base-url: https://data4library.kr/api
