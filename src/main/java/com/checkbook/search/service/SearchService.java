@@ -168,15 +168,10 @@ public class SearchService {
     }
 
     private Optional<AladinSearchResult> identify(InputNormalizer.NormalizedQuery normalized) {
-        try {
-            if (normalized.type() == InputNormalizer.QueryType.ISBN) {
-                return aladinClient.lookupBook(normalized.value());
-            }
-            return aladinClient.searchBook(normalized.value());
-        } catch (Exception e) {
-            log.warn("책 식별 실패: query={}", normalized.value(), e);
-            return Optional.empty();
+        if (normalized.type() == InputNormalizer.QueryType.ISBN) {
+            return aladinClient.lookupBook(normalized.value());
         }
+        return aladinClient.searchBook(normalized.value());
     }
 
     private List<SearchResponse.PublicLibraryInfo> fetchPublicLibraries(String isbn13, double lat, double lon) {
