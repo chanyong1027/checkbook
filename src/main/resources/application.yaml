@@ -66,3 +66,15 @@ logging:
   level:
     com.checkbook: INFO
     com.checkbook.client: DEBUG
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      datanaru:
+        sliding-window-size: 10
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-calls-in-half-open-state: 3
+        ignore-exceptions:
+          - com.checkbook.client.datanaru.DatanaruResponseException
