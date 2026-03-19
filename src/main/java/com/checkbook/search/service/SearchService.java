@@ -3,11 +3,9 @@ package com.checkbook.search.service;
 import com.checkbook.client.aladin.AladinClient;
 import com.checkbook.client.aladin.dto.AladinSearchResult;
 import com.checkbook.client.aladin.dto.AladinUsedBookResult;
-import com.checkbook.client.datanaru.DatanaruClient;
-import com.checkbook.client.datanaru.dto.DatanaruBookExistResult;
-import com.checkbook.client.naver.NaverShoppingClient;
-import com.checkbook.client.naver.dto.NaverShoppingResult;
 import com.checkbook.common.exception.BusinessException;
+import com.checkbook.publiclibrary.snapshot.dto.LibraryAvailabilityResult;
+import com.checkbook.publiclibrary.snapshot.service.LibraryAvailabilitySnapshotService;
 import com.checkbook.common.exception.ErrorCode;
 import com.checkbook.common.util.DistanceCalculator;
 import com.checkbook.common.util.InputNormalizer;
@@ -16,6 +14,7 @@ import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
 import com.checkbook.search.dto.SearchResponse;
 import com.checkbook.search.dto.SearchSection;
 import com.checkbook.search.dto.SearchSectionStatus;
+import java.util.Comparator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,7 +23,6 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -38,8 +36,7 @@ import java.util.concurrent.TimeoutException;
 public class SearchService {
 
     private final AladinClient aladinClient;
-    private final NaverShoppingClient naverClient;
-    private final DatanaruClient datanaruClient;
+    private final LibraryAvailabilitySnapshotService snapshotService;
     private final PublicLibraryRepository publicLibraryRepository;
     private final ExecutorService searchExecutor;
     private final ExecutorService publicLibraryExecutor;
@@ -55,15 +52,13 @@ public class SearchService {
 
     public SearchService(
             AladinClient aladinClient,
-            NaverShoppingClient naverClient,
-            DatanaruClient datanaruClient,
+            LibraryAvailabilitySnapshotService snapshotService,
             PublicLibraryRepository publicLibraryRepository,
             @Qualifier("searchExecutor") ExecutorService searchExecutor,
             @Qualifier("publicLibraryExecutor") ExecutorService publicLibraryExecutor
     ) {
         this.aladinClient = aladinClient;
-        this.naverClient = naverClient;
-        this.datanaruClient = datanaruClient;
+        this.snapshotService = snapshotService;
         this.publicLibraryRepository = publicLibraryRepository;
         this.searchExecutor = searchExecutor;
         this.publicLibraryExecutor = publicLibraryExecutor;
@@ -95,14 +90,6 @@ public class SearchService {
                     return null;
                 });
 
-        CompletableFuture<List<NaverShoppingResult>> newFuture = CompletableFuture
-                .supplyAsync(() -> naverClient.searchNewBooks(isbn13), searchExecutor)
-                .exceptionally(exception -> {
-                    failures.add(new SearchResponse.FailureDetail(
-                            SearchSection.NEW_BOOK,
-                            failureReason(exception)));
-                    return List.of();
-                });
 
         CompletableFuture<List<SearchResponse.PublicLibraryInfo>> publicFuture;
         if (lat != null && lon != null) {
@@ -118,7 +105,7 @@ public class SearchService {
             publicFuture = CompletableFuture.completedFuture(List.of());
         }
 
-        CompletableFuture<Void> allFutures = CompletableFuture.allOf(usedFuture, newFuture, publicFuture);
+        CompletableFuture<Void> allFutures = CompletableFuture.allOf(usedFuture, publicFuture);
         try {
             allFutures.get(totalDeadlineMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
@@ -129,13 +116,11 @@ public class SearchService {
 
         AladinUsedBookResult usedResult =
                 usedFuture.isDone() && !usedFuture.isCompletedExceptionally() ? usedFuture.join() : null;
-        List<NaverShoppingResult> newResults =
-                newFuture.isDone() && !newFuture.isCompletedExceptionally() ? newFuture.join() : List.of();
         List<SearchResponse.PublicLibraryInfo> publicResults =
                 publicFuture.isDone() && !publicFuture.isCompletedExceptionally() ? publicFuture.join() : List.of();
 
         List<SearchResponse.SectionStatusDetail> statuses =
-                buildStatuses(usedFuture, newFuture, publicFuture, lat, lon, failures);
+                buildStatuses(usedFuture, publicFuture, lat, lon, failures);
 
         SearchResponse.BookInfo bookInfo = identifiedBook
                 .map(book -> new SearchResponse.BookInfo(
@@ -152,19 +137,18 @@ public class SearchService {
                 usedResult.aladinUsedUrl(),
                 usedResult.spaceUsedUrl());
 
-        List<SearchResponse.NewBookInfo> newBookInfos = newResults.stream()
-                .sorted(Comparator.comparingInt(NaverShoppingResult::price))
+        SearchResponse.NewBookInfo newBookInfo = identifiedBook
+                .filter(book -> book.priceSales() != null && book.priceSales() > 0)
                 .map(book -> new SearchResponse.NewBookInfo(
-                        book.mallName(),
-                        book.price(),
-                        book.productUrl()))
-                .toList();
+                        book.priceSales(),
+                        "https://www.aladin.co.kr/shop/wproduct.aspx?ISBN=" + book.isbn13()))
+                .orElse(null);
 
         return new SearchResponse(
                 bookInfo,
                 publicResults,
                 usedBookInfo,
-                newBookInfos,
+                newBookInfo,
                 new SearchResponse.SearchMetadata(LocalDateTime.now(), statuses, List.copyOf(failures))
         );
     }
@@ -181,15 +165,17 @@ public class SearchService {
 
         List<CompletableFuture<SearchResponse.PublicLibraryInfo>> futures = nearbyLibraries.stream()
                 .map(library -> CompletableFuture.supplyAsync(() -> {
-                    DatanaruBookExistResult existResult = datanaruClient.bookExist(isbn13, library.getLibCode());
+                    LibraryAvailabilityResult availability = snapshotService.getAvailability(isbn13, library.getLibCode());
+                    boolean hasBook = availability.hasBook();
+                    boolean loanAvailable = availability.loanAvailable();
                     double distance = Math.round(
                             DistanceCalculator.km(lat, lon, library.getLat(), library.getLon()) * 10.0
                     ) / 10.0;
 
                     return new SearchResponse.PublicLibraryInfo(
                             library.getName(),
-                            existResult.hasBook(),
-                            existResult.loanAvailable(),
+                            hasBook,
+                            loanAvailable,
                             library.getAddress(),
                             library.getLat(),
                             library.getLon(),
@@ -244,22 +230,20 @@ public class SearchService {
 
         List<SearchResponse.SectionStatusDetail> statuses = List.of(
                 new SearchResponse.SectionStatusDetail(SearchSection.PUBLIC_LIBRARY, SearchSectionStatus.SKIPPED),
-                new SearchResponse.SectionStatusDetail(SearchSection.USED_BOOK, SearchSectionStatus.SKIPPED),
-                new SearchResponse.SectionStatusDetail(SearchSection.NEW_BOOK, SearchSectionStatus.SKIPPED)
+                new SearchResponse.SectionStatusDetail(SearchSection.USED_BOOK, SearchSectionStatus.SKIPPED)
         );
 
         return new SearchResponse(
                 bookInfo,
                 List.of(),
                 null,
-                List.of(),
+                null,
                 new SearchResponse.SearchMetadata(LocalDateTime.now(), statuses, List.of())
         );
     }
 
     private List<SearchResponse.SectionStatusDetail> buildStatuses(
             CompletableFuture<?> usedFuture,
-            CompletableFuture<?> newFuture,
             CompletableFuture<?> publicFuture,
             Double lat,
             Double lon,
@@ -290,17 +274,6 @@ public class SearchService {
         } else {
             statuses.add(new SearchResponse.SectionStatusDetail(
                     SearchSection.USED_BOOK, SearchSectionStatus.SUCCESS));
-        }
-
-        if (!newFuture.isDone()
-                || newFuture.isCompletedExceptionally()
-                || hasFailure(failures, SearchSection.NEW_BOOK)) {
-            addTimeoutFailureIfAbsent(failures, SearchSection.NEW_BOOK);
-            statuses.add(new SearchResponse.SectionStatusDetail(
-                    SearchSection.NEW_BOOK, SearchSectionStatus.FAILED));
-        } else {
-            statuses.add(new SearchResponse.SectionStatusDetail(
-                    SearchSection.NEW_BOOK, SearchSectionStatus.SUCCESS));
         }
 
         return statuses;
