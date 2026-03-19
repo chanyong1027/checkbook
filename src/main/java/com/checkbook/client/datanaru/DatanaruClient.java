@@ -36,27 +36,23 @@ public class DatanaruClient {
     }
 
     public DatanaruBookExistResult bookExist(String isbn13, String libCode) {
-        try {
-            DatanaruBookExistResponse response = restClient.get()
-                    .uri("/bookExist?authKey={key}&libCode={code}&isbn13={isbn}&format=json",
-                            authKey, libCode, isbn13)
-                    .retrieve()
-                    .body(DatanaruBookExistResponse.class);
+        DatanaruBookExistResponse response = restClient.get()
+                .uri("/bookExist?authKey={key}&libCode={code}&isbn13={isbn}&format=json",
+                        authKey, libCode, isbn13)
+                .retrieve()
+                .body(DatanaruBookExistResponse.class);
 
-            if (response == null || response.response() == null || response.response().result() == null) {
-                return new DatanaruBookExistResult(libCode, false, false);
-            }
-
-            DatanaruBookExistResponse.Result result = response.response().result();
-            return new DatanaruBookExistResult(
-                    libCode,
-                    "Y".equalsIgnoreCase(result.hasBook()),
-                    "Y".equalsIgnoreCase(result.loanAvailable())
-            );
-        } catch (Exception e) {
-            log.error("정보나루 bookExist 실패: isbn13={}, libCode={}", isbn13, libCode, e);
-            return new DatanaruBookExistResult(libCode, false, false);
+        if (response == null || response.response() == null || response.response().result() == null) {
+            throw new DatanaruResponseException(
+                    "유효하지 않은 응답: isbn13=" + isbn13 + ", libCode=" + libCode);
         }
+
+        DatanaruBookExistResponse.Result result = response.response().result();
+        return new DatanaruBookExistResult(
+                libCode,
+                "Y".equalsIgnoreCase(result.hasBook()),
+                "Y".equalsIgnoreCase(result.loanAvailable())
+        );
     }
 
     public List<DatanaruLibSrchResult> libSrch(int pageNo, int pageSize) {

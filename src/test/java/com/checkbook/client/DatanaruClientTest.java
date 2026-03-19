@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DatanaruClientTest {
 
@@ -96,11 +97,17 @@ class DatanaruClientTest {
     }
 
     @Test
-    void apiFailureReturnsSafeDefaults() {
+    void bookExistThrowsOnNetworkFailure() {
         DatanaruClient client = new DatanaruClient("http://127.0.0.1:1/api", "test-key", 50);
 
-        assertThat(client.bookExist("9788936439743", "111111"))
-                .isEqualTo(new DatanaruBookExistResult("111111", false, false));
+        assertThatThrownBy(() -> client.bookExist("9788936439743", "111111"))
+                .isInstanceOf(Exception.class);
+    }
+
+    @Test
+    void libSrchReturnsEmptyOnNetworkFailure() {
+        DatanaruClient client = new DatanaruClient("http://127.0.0.1:1/api", "test-key", 50);
+
         assertThat(client.libSrch(1, 100)).isEmpty();
     }
 
