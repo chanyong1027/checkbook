@@ -108,15 +108,9 @@ export function ELibraryStep({ book, onNext, onBack, onReset }: Props) {
     })
   }
 
-  function toggleAll() {
-    if (selected.size === libraries.length) {
-      setSelected(new Set())
-      saveIds([])
-    } else {
-      const all = new Set(libraries.map(l => l.libraryId))
-      setSelected(all)
-      saveIds([...all])
-    }
+  function clearAll() {
+    setSelected(new Set())
+    saveIds([])
   }
 
   async function handleSearch() {
@@ -181,12 +175,14 @@ export function ELibraryStep({ book, onNext, onBack, onReset }: Props) {
                     {selected.size}/{MAX_SELECT}
                   </span>
                 </p>
-                <button
-                  onClick={toggleAll}
-                  className="text-xs text-primary hover:underline cursor-pointer"
-                >
-                  {selected.size === libraries.length ? '전체 해제' : '전체 선택'}
-                </button>
+                {selected.size > 0 && (
+                  <button
+                    onClick={clearAll}
+                    className="text-xs text-primary hover:underline cursor-pointer"
+                  >
+                    전체 해제
+                  </button>
+                )}
               </div>
 
               {/* Selected chips */}
