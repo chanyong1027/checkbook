@@ -45,7 +45,7 @@ class AladinClientTest {
                         """));
         server.start();
 
-        AladinClient client = new AladinClient(baseUrl("/ttb/api"), "test-key", 200, 200);
+        AladinClient client = new AladinClient(baseUrl("/ttb/api"), "test-key", 2000, 2000);
 
         Optional<AladinSearchResult> result = client.searchBook("자바");
 
@@ -77,7 +77,7 @@ class AladinClientTest {
                         """));
         server.start();
 
-        AladinClient client = new AladinClient(baseUrl("/ttb/api"), "test-key", 200, 200);
+        AladinClient client = new AladinClient(baseUrl("/ttb/api"), "test-key", 2000, 2000);
 
         AladinUsedBookResult result = client.getUsedBooks("9788936439743");
 
@@ -85,7 +85,9 @@ class AladinClientTest {
         assertThat(result.userUsedPrice()).isEqualTo(6500);
         assertThat(result.aladinUsedPrice()).isEqualTo(7000);
         assertThat(result.spaceUsedPrice()).isEqualTo(6000);
-        assertThat(result.detailUrl()).endsWith("123456");
+        assertThat(result.userUsedUrl()).endsWith("123456&TabType=1");
+        assertThat(result.aladinUsedUrl()).endsWith("123456&TabType=2");
+        assertThat(result.spaceUsedUrl()).endsWith("123456&TabType=3");
     }
 
     @Test

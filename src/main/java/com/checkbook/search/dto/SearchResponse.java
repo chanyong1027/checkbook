@@ -7,7 +7,7 @@ public record SearchResponse(
         BookInfo book,
         List<PublicLibraryInfo> publicLibraries,
         UsedBookInfo usedBook,
-        List<NewBookInfo> newBooks,
+        NewBookInfo newBook,
         SearchMetadata metadata
 ) {
 
@@ -43,7 +43,6 @@ public record SearchResponse(
     }
 
     public record NewBookInfo(
-            String mallName,
             int price,
             String productUrl
     ) {

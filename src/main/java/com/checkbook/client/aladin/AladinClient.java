@@ -90,8 +90,8 @@ public class AladinClient {
                     extractMinPrice(usedList.userUsed()),
                     extractMinPrice(usedList.aladinUsed()),
                     extractMinPrice(usedList.spaceUsed()),
-                    usedBase != null ? usedBase + "&TabType=2" : null,  // 개인판매
-                    usedBase != null ? usedBase + "&TabType=1" : null,  // 알라딘 직접
+                    usedBase != null ? usedBase + "&TabType=1" : null,  // 개인판매
+                    usedBase != null ? usedBase + "&TabType=2" : null,  // 알라딘 직접
                     usedBase != null ? usedBase + "&TabType=3" : null   // 알라딘 매장
             );
         } catch (Exception e) {
@@ -111,12 +111,14 @@ public class AladinClient {
                 item.title(),
                 item.author(),
                 item.publisher(),
-                item.cover()
+                item.cover(),
+                item.priceSales()
         ));
     }
 
     private Integer extractMinPrice(AladinItemResponse.UsedEntry entry) {
-        return entry != null ? entry.minPrice() : null;
+        if (entry == null || entry.minPrice() == null || entry.minPrice() <= 0) return null;
+        return entry.minPrice();
     }
 
     private SimpleClientHttpRequestFactory requestFactory(int timeoutMs) {

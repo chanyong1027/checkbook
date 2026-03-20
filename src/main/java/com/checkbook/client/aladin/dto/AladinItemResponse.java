@@ -15,6 +15,7 @@ public record AladinItemResponse(List<Item> item) {
             String publisher,
             String cover,
             Long itemId,
+            Integer priceSales,
             SubInfo subInfo
     ) {
     }

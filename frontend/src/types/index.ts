@@ -50,7 +50,6 @@ export interface UsedBookInfo {
 }
 
 export interface NewBookInfo {
-  mallName: string
   price: number
   productUrl: string
 }
@@ -77,7 +76,7 @@ export interface SearchResponse {
   book: BookInfo
   publicLibraries: PublicLibraryInfo[]
   usedBook: UsedBookInfo | null
-  newBooks: NewBookInfo[]
+  newBook: NewBookInfo | null
   metadata: SearchMetadata
 }
 

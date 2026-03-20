@@ -5,6 +5,7 @@ public record AladinSearchResult(
         String title,
         String author,
         String publisher,
-        String coverUrl
+        String coverUrl,
+        Integer priceSales
 ) {
 }

@@ -277,84 +277,44 @@ export function PricesStep({ book, onBack, onReset }: Props) {
               title="중고도서"
             >
               <div className="space-y-0">
-                {result.usedBook.userUsedPrice != null && (
-                  <div className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
-                    <div>
-                      <p className="text-sm text-slate-600">개인판매</p>
-                    </div>
+                {([
+                  { label: '개인 판매', price: result.usedBook.userUsedPrice, url: result.usedBook.userUsedUrl },
+                  { label: '알라딘 온라인', price: result.usedBook.aladinUsedPrice, url: result.usedBook.aladinUsedUrl },
+                  { label: '알라딘 매장', price: result.usedBook.spaceUsedPrice, url: result.usedBook.spaceUsedUrl },
+                ] as const).map(({ label, price, url }) => (
+                  <div key={label} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
+                    <p className="text-sm text-slate-600">{label}</p>
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-800 text-sm">{result.usedBook.userUsedPrice.toLocaleString()}원</span>
-                      {result.usedBook.userUsedUrl && (
-                        <a
-                          href={result.usedBook.userUsedUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#e8400c]/10
-                            text-xs text-[#e8400c] font-medium hover:bg-[#e8400c]/20 transition"
-                        >
-                          알라딘
-                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
-                          </svg>
-                        </a>
+                      {price != null ? (
+                        <>
+                          <span className="font-semibold text-slate-800 text-sm">{price.toLocaleString()}원</span>
+                          {url && (
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#e8400c]/10
+                                text-xs text-[#e8400c] font-medium hover:bg-[#e8400c]/20 transition"
+                            >
+                              알라딘
+                              <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
+                              </svg>
+                            </a>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-sm text-slate-400">재고 없음</span>
                       )}
                     </div>
                   </div>
-                )}
-                {result.usedBook.aladinUsedPrice != null && (
-                  <div className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
-                    <div>
-                      <p className="text-sm text-slate-600">알라딘 직접</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-800 text-sm">{result.usedBook.aladinUsedPrice.toLocaleString()}원</span>
-                      {result.usedBook.aladinUsedUrl && (
-                        <a
-                          href={result.usedBook.aladinUsedUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#e8400c]/10
-                            text-xs text-[#e8400c] font-medium hover:bg-[#e8400c]/20 transition"
-                        >
-                          알라딘
-                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
-                          </svg>
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {result.usedBook.spaceUsedPrice != null && (
-                  <div className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
-                    <div>
-                      <p className="text-sm text-slate-600">알라딘 매장</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-slate-800 text-sm">{result.usedBook.spaceUsedPrice.toLocaleString()}원</span>
-                      {result.usedBook.spaceUsedUrl && (
-                        <a
-                          href={result.usedBook.spaceUsedUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#e8400c]/10
-                            text-xs text-[#e8400c] font-medium hover:bg-[#e8400c]/20 transition"
-                        >
-                          알라딘
-                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
-                          </svg>
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                )}
+                ))}
               </div>
             </SectionCard>
           )}
 
-          {/* New books */}
-          {result.newBooks.length > 0 && (
+          {/* New book */}
+          {result.newBook && (
             <SectionCard
               icon={
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
@@ -363,22 +323,25 @@ export function PricesStep({ book, onBack, onReset }: Props) {
                   <path d="M16 10a4 4 0 0 1-8 0" />
                 </svg>
               }
-              title="신간 최저가"
+              title="새책"
             >
-              <div className="space-y-1">
-                {result.newBooks.map((b, i) => (
-                  <div key={i} className="flex justify-between items-center py-1.5 border-b border-slate-50 last:border-0">
-                    <a
-                      href={b.productUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-slate-600 hover:text-primary hover:underline"
-                    >
-                      {b.mallName}
-                    </a>
-                    <span className="font-semibold text-slate-800 text-sm">{b.price.toLocaleString()}원</span>
-                  </div>
-                ))}
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-600">알라딘</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-slate-800 text-sm">{result.newBook.price.toLocaleString()}원</span>
+                  <a
+                    href={result.newBook.productUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#e8400c]/10
+                      text-xs text-[#e8400c] font-medium hover:bg-[#e8400c]/20 transition"
+                  >
+                    알라딘
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
+                    </svg>
+                  </a>
+                </div>
               </div>
             </SectionCard>
           )}

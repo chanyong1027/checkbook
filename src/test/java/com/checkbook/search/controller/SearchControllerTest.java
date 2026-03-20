@@ -50,7 +50,7 @@ class SearchControllerTest {
                         new SearchResponse.BookInfo("자바의 정석", "남궁성", "9788994492032", "도우출판", null),
                         List.of(),
                         null,
-                        List.of(),
+                        new SearchResponse.NewBookInfo(32000, "https://www.aladin.co.kr/shop/wproduct.aspx?ISBN=9788994492032"),
                         new SearchResponse.SearchMetadata(LocalDateTime.now(), List.of(), List.of())
                 ));
 
@@ -58,7 +58,7 @@ class SearchControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.book.title").value("자바의 정석"))
                 .andExpect(jsonPath("$.publicLibraries").isArray())
-                .andExpect(jsonPath("$.newBooks").isArray())
+                .andExpect(jsonPath("$.newBook.price").value(32000))
                 .andExpect(jsonPath("$.metadata").exists());
     }
 
