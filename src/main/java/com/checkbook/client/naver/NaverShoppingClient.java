@@ -33,10 +33,10 @@ public class NaverShoppingClient {
                 .build();
     }
 
-    public List<NaverShoppingResult> searchNewBooks(String isbn13) {
+    public List<NaverShoppingResult> searchNewBooks(String query) {
         try {
             NaverShoppingResponse response = restClient.get()
-                    .uri("?query={query}&display=20&sort=sim", isbn13)
+                    .uri("?query={query}&display=20&sort=sim", query)
                     .retrieve()
                     .body(NaverShoppingResponse.class);
 
@@ -52,7 +52,7 @@ public class NaverShoppingClient {
                     .filter(item -> item.price() > 0)
                     .toList();
         } catch (Exception e) {
-            log.error("네이버 쇼핑 검색 실패: isbn13={}", isbn13, e);
+            log.error("네이버 쇼핑 검색 실패: query={}", query, e);
             throw new IllegalStateException("네이버 쇼핑 API 오류", e);
         }
     }
