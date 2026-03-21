@@ -3,6 +3,7 @@ package com.checkbook.publiclibrary.snapshot.service;
 import com.checkbook.client.datanaru.DatanaruClient;
 import com.checkbook.publiclibrary.snapshot.domain.SnapshotSourceStatus;
 import com.checkbook.publiclibrary.snapshot.dto.LibraryAvailabilityResult;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,8 +29,13 @@ class LibraryAvailabilitySnapshotCircuitBreakerIT {
     @MockitoBean
     DatanaruClient datanaruClient;
 
+    @Autowired
+    CircuitBreakerRegistry circuitBreakerRegistry;
+
     @BeforeEach
-    void seedStaleSnapshot() {
+    void setUp() {
+        // 다른 테스트에서 공유되는 서킷브레이커 상태 초기화
+        circuitBreakerRegistry.circuitBreaker("datanaru").reset();
         // 서킷 OPEN 상태에서 반환될 stale snapshot 미리 삽입
         persister.upsert("9781234567890", "LIB001", true, true);
     }
