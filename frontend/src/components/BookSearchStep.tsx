@@ -82,10 +82,18 @@ export function BookSearchStep({ onSelect }: Props) {
         sessionStorage.removeItem(SEARCH_CACHE_KEY)
         return
       }
-      setResults(cache.results)
+      const safeResults = (cache.results as unknown[])
+        .filter((v): v is BookCandidate => {
+          if (!v || typeof v !== 'object') return false
+          const b = v as Record<string, unknown>
+          return typeof b.title === 'string' && typeof b.isbn13 === 'string'
+        })
+        .slice(0, SEARCH_CACHE_MAX_ITEMS)
+      const safePage = Number.isInteger(cache.page) && cache.page >= 1 ? cache.page : 1
+      setResults(safeResults)
       setQuery(cache.query)
       currentQueryRef.current = cache.query
-      setPage(typeof cache.page === 'number' ? cache.page : 1)
+      setPage(safePage)
       setIsEnd(cache.isEnd === true)
       setSearched(true)
     } catch {

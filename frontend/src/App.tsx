@@ -7,13 +7,27 @@ type Step = 'search' | 'detail'
 
 const SEARCH_CACHE_KEY = 'cb_search_cache'
 
+function isBookCandidate(value: unknown): value is BookCandidate {
+  if (!value || typeof value !== 'object') return false
+  const v = value as Record<string, unknown>
+  return (
+    typeof v.title === 'string' &&
+    typeof v.author === 'string' &&
+    typeof v.publisher === 'string' &&
+    typeof v.isbn13 === 'string' &&
+    typeof v.coverUrl === 'string' &&
+    typeof v.publishedAt === 'string'
+  )
+}
+
 function loadSession(): { step: Step; book: BookCandidate | null } {
   try {
     const raw = sessionStorage.getItem('cb_step')
     // Unknown steps (legacy 'elibrary', 'prices') fallback to search
     const step: Step = raw === 'detail' ? 'detail' : 'search'
     const bookRaw = sessionStorage.getItem('cb_book')
-    const book: BookCandidate | null = bookRaw ? JSON.parse(bookRaw) : null
+    const parsed = bookRaw ? JSON.parse(bookRaw) : null
+    const book: BookCandidate | null = isBookCandidate(parsed) ? parsed : null
     if (step === 'detail' && !book) return { step: 'search', book: null }
     return { step, book }
   } catch {
@@ -102,6 +116,7 @@ export default function App() {
 
             {step === 'detail' && selectedBook && (
               <BookDetailPage
+                key={selectedBook.isbn13}
                 book={selectedBook}
                 onReset={handleReset}
               />

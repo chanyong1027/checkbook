@@ -45,20 +45,20 @@
   animation: slideInFromLeft 0.22s ease-out both;
 }
 
-@keyframes slideUpSheet {
+@keyframes slide-up-sheet {
   from { transform: translateY(100%); }
   to { transform: translateY(0); }
 }
 
-@keyframes fadeIn {
+@keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
 }
 
 .sheet-slide-up {
-  animation: slideUpSheet 0.28s ease-out both;
+  animation: slide-up-sheet 0.28s ease-out both;
 }
 
 .sheet-backdrop {
-  animation: fadeIn 0.2s ease-out both;
+  animation: fade-in 0.2s ease-out both;
 }

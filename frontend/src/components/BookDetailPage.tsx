@@ -11,6 +11,16 @@ import { SectionCard } from './shared/SectionCard'
 import { Skeleton } from './shared/Skeleton'
 import { BottomSheet } from './shared/BottomSheet'
 
+function isSafeUrl(url: string | null | undefined): url is string {
+  if (!url) return false
+  try {
+    const { protocol } = new URL(url)
+    return protocol === 'http:' || protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 interface Props {
   book: BookCandidate
   onReset: () => void
@@ -23,7 +33,11 @@ const MAX_SELECT = 20
 
 function getSavedIds(): number[] {
   try {
-    return JSON.parse(localStorage.getItem(ELIB_SELECTION_KEY) || '[]')
+    const parsed: unknown = JSON.parse(localStorage.getItem(ELIB_SELECTION_KEY) ?? '[]')
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((id): id is number => Number.isInteger(id) && id > 0)
+      .slice(0, MAX_SELECT)
   } catch {
     return []
   }
@@ -248,12 +262,12 @@ function ELibrarySelector({
         </button>
         <button
           onClick={() => onConfirm([...draftIds])}
-          disabled={draftIds.size === 0 || overLimit}
+          disabled={overLimit}
           className="flex-1 py-3 bg-primary text-white rounded-2xl font-semibold text-sm
             hover:bg-primary-dark active:scale-[0.98] transition disabled:opacity-40
             disabled:cursor-not-allowed cursor-pointer shadow-sm shadow-orange-200"
         >
-          {draftIds.size}개 선택 완료
+          {draftIds.size === 0 ? '설정 해제' : `${draftIds.size}개 선택 완료`}
         </button>
       </div>
     </div>
@@ -338,12 +352,8 @@ export function BookDetailPage({ book, onReset }: Props) {
   useEffect(() => {
     runSearch()
 
-    // E-library: filter saved IDs and search immediately
-    const rawIds = getSavedIds()
-    const savedIds = rawIds
-      .filter(id => typeof id === 'number' && id > 0)
-      .slice(0, MAX_SELECT)
-    if (savedIds.length !== rawIds.length) saveIds(savedIds)
+    // E-library: getSavedIds() already validates (Array.isArray, integer > 0, max 20)
+    const savedIds = getSavedIds()
     if (savedIds.length > 0) runElibSearch(savedIds)
 
     return () => {
@@ -502,7 +512,7 @@ export function BookDetailPage({ book, onReset }: Props) {
                       </div>
                       {/* Link buttons */}
                       <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                        {lib.homepage && (
+                        {isSafeUrl(lib.homepage) && (
                           <a
                             href={lib.homepage}
                             target="_blank"
@@ -580,7 +590,7 @@ export function BookDetailPage({ book, onReset }: Props) {
                         {price != null ? (
                           <>
                             <span className="font-semibold text-slate-800 text-sm">{price.toLocaleString()}원</span>
-                            {url && (
+                            {isSafeUrl(url) && (
                               <a
                                 href={url}
                                 target="_blank"
@@ -621,6 +631,7 @@ export function BookDetailPage({ book, onReset }: Props) {
                   <span className="text-sm text-slate-600">알라딘</span>
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-slate-800 text-sm">{searchResult.newBook.price.toLocaleString()}원</span>
+                    {isSafeUrl(searchResult.newBook.productUrl) && (
                     <a
                       href={searchResult.newBook.productUrl}
                       target="_blank"
@@ -633,6 +644,7 @@ export function BookDetailPage({ book, onReset }: Props) {
                         <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
                       </svg>
                     </a>
+                    )}
                   </div>
                 </div>
               </SectionCard>
@@ -704,14 +716,18 @@ export function BookDetailPage({ book, onReset }: Props) {
                         <img src={b.coverUrl} alt={b.title} className="w-8 h-11 object-cover rounded-lg shadow-sm shrink-0" />
                       )}
                       <div className="min-w-0 flex-1">
-                        <a
-                          href={b.detailUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm font-medium text-slate-700 hover:text-primary hover:underline truncate block"
-                        >
-                          {b.title}
-                        </a>
+                        {isSafeUrl(b.detailUrl) ? (
+                          <a
+                            href={b.detailUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm font-medium text-slate-700 hover:text-primary hover:underline truncate block"
+                          >
+                            {b.title}
+                          </a>
+                        ) : (
+                          <span className="text-sm font-medium text-slate-700 truncate block">{b.title}</span>
+                        )}
                         <p className="text-xs text-slate-300 truncate">{b.author}</p>
                       </div>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${b.available ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
