@@ -55,7 +55,7 @@ rm "$ENV_FILE"
 
 # 헬스 체크 (10초 대기 후 확인)
 echo "헬스 체크 대기 중..."
-sleep 10
+sleep 30
 if curl -sf http://localhost/actuator/health > /dev/null; then
   echo "=== 배포 완료: $(date) ==="
 else
