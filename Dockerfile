@@ -5,7 +5,7 @@ WORKDIR /app
 # Gradle 래퍼와 빌드 파일 먼저 복사 (의존성 캐시 레이어 분리)
 COPY gradlew .
 COPY gradle gradle
-COPY build.gradle settings.gradle .
+COPY build.gradle settings.gradle ./
 
 # 의존성만 먼저 다운로드 (소스 변경 없으면 이 레이어 캐시 재사용)
 RUN chmod +x gradlew && ./gradlew dependencies --no-daemon

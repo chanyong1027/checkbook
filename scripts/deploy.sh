@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-DOCKERHUB_IMAGE="도커허브유저명/checkbook:latest"
+DOCKERHUB_IMAGE="cyhong2/checkbook:latest"
 REGION="ap-northeast-2"
 
 echo "=== 배포 시작: $(date) ==="
