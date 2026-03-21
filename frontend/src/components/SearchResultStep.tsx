@@ -213,9 +213,9 @@ export function SearchResultStep({ book, onNext, onBack }: Props) {
                   </div>
                 )}
               </div>
-              {result.usedBook.detailUrl && (
+              {result.usedBook.aladinUsedUrl && (
                 <a
-                  href={result.usedBook.detailUrl}
+                  href={result.usedBook.aladinUsedUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
@@ -230,7 +230,7 @@ export function SearchResultStep({ book, onNext, onBack }: Props) {
           )}
 
           {/* New books */}
-          {result.newBooks.length > 0 && (
+          {result.newBook && (
             <SectionCard
               icon={
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
@@ -242,19 +242,17 @@ export function SearchResultStep({ book, onNext, onBack }: Props) {
               title="신간 최저가"
             >
               <div className="space-y-1">
-                {result.newBooks.map((b, i) => (
-                  <div key={i} className="flex justify-between items-center py-1.5 border-b border-slate-50 last:border-0">
-                    <a
-                      href={b.productUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-slate-600 hover:text-primary hover:underline"
-                    >
-                      {b.mallName}
-                    </a>
-                    <span className="font-semibold text-slate-800 text-sm">{b.price.toLocaleString()}원</span>
-                  </div>
-                ))}
+                <div className="flex justify-between items-center py-1.5">
+                  <a
+                    href={result.newBook.productUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-slate-600 hover:text-primary hover:underline"
+                  >
+                    알라딘
+                  </a>
+                  <span className="font-semibold text-slate-800 text-sm">{result.newBook.price.toLocaleString()}원</span>
+                </div>
               </div>
             </SectionCard>
           )}
