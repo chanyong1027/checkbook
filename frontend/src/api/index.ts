@@ -5,8 +5,8 @@ import type {
   ELibrarySearchResponse,
 } from '../types'
 
-async function get<T>(url: string): Promise<T> {
-  const res = await fetch(url)
+async function get<T>(url: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(url, signal ? { signal } : undefined)
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`${res.status} ${text}`)
@@ -22,11 +22,12 @@ export function searchMain(
   q: string,
   lat?: number,
   lon?: number,
+  signal?: AbortSignal,
 ): Promise<SearchResponse> {
   const params = new URLSearchParams({ q })
   if (lat != null) params.set('lat', String(lat))
   if (lon != null) params.set('lon', String(lon))
-  return get(`/api/search?${params}`)
+  return get(`/api/search?${params}`, signal)
 }
 
 export function getELibraries(params?: {
@@ -46,8 +47,9 @@ export function searchELibraries(
   query: string,
   libraryIds: string,
   fallbackKeyword?: string,
+  signal?: AbortSignal,
 ): Promise<ELibrarySearchResponse> {
   const p = new URLSearchParams({ query, libraryIds })
   if (fallbackKeyword) p.set('fallbackKeyword', fallbackKeyword)
-  return get(`/api/elibraries/search?${p}`)
+  return get(`/api/elibraries/search?${p}`, signal)
 }

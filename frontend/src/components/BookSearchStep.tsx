@@ -56,6 +56,9 @@ function BookRowSkeleton() {
   )
 }
 
+const SEARCH_CACHE_KEY = 'cb_search_cache'
+const SEARCH_CACHE_MAX_ITEMS = 30
+
 export function BookSearchStep({ onSelect }: Props) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<BookCandidate[]>([])
@@ -69,8 +72,45 @@ export function BookSearchStep({ onSelect }: Props) {
   const currentQueryRef = useRef('')
   const sentinelRef = useRef<HTMLDivElement>(null)
 
+  // Restore cached search results on mount
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(SEARCH_CACHE_KEY)
+      if (!raw) return
+      const cache = JSON.parse(raw)
+      if (!cache || typeof cache.query !== 'string' || !Array.isArray(cache.results)) {
+        sessionStorage.removeItem(SEARCH_CACHE_KEY)
+        return
+      }
+      setResults(cache.results)
+      setQuery(cache.query)
+      currentQueryRef.current = cache.query
+      setPage(typeof cache.page === 'number' ? cache.page : 1)
+      setIsEnd(cache.isEnd === true)
+      setSearched(true)
+    } catch {
+      sessionStorage.removeItem(SEARCH_CACHE_KEY)
+    }
+  }, [])
+
+  // Save cache when search state changes
+  useEffect(() => {
+    if (!searched) return
+    try {
+      sessionStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify({
+        query,
+        results: results.slice(0, SEARCH_CACHE_MAX_ITEMS),
+        page: Math.min(page, Math.ceil(SEARCH_CACHE_MAX_ITEMS / PAGE_SIZE) + 1),
+        isEnd: results.length <= SEARCH_CACHE_MAX_ITEMS ? isEnd : false,
+      }))
+    } catch {
+      // quota exceeded — ignore
+    }
+  }, [results, query, page, isEnd, searched])
+
   async function doSearch(q: string) {
     if (!q.trim()) return
+    sessionStorage.removeItem(SEARCH_CACHE_KEY)
     currentQueryRef.current = q.trim()
     setLoading(true)
     setError(null)

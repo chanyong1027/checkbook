@@ -1,20 +1,20 @@
 import { useState, useEffect } from 'react'
 import type { BookCandidate } from './types'
 import { BookSearchStep } from './components/BookSearchStep'
-import { ELibraryStep } from './components/ELibraryStep'
-import { PricesStep } from './components/PricesStep'
+import { BookDetailPage } from './components/BookDetailPage'
 
-type Step = 'search' | 'elibrary' | 'prices'
+type Step = 'search' | 'detail'
 
-const STEP_ORDER: Step[] = ['search', 'elibrary', 'prices']
+const SEARCH_CACHE_KEY = 'cb_search_cache'
 
 function loadSession(): { step: Step; book: BookCandidate | null } {
   try {
-    const step = (sessionStorage.getItem('cb_step') as Step) || 'search'
-    const raw = sessionStorage.getItem('cb_book')
-    const book: BookCandidate | null = raw ? JSON.parse(raw) : null
-    // elibrary/prices 스텝인데 book이 없으면 search로 fallback
-    if (step !== 'search' && !book) return { step: 'search', book: null }
+    const raw = sessionStorage.getItem('cb_step')
+    // Unknown steps (legacy 'elibrary', 'prices') fallback to search
+    const step: Step = raw === 'detail' ? 'detail' : 'search'
+    const bookRaw = sessionStorage.getItem('cb_book')
+    const book: BookCandidate | null = bookRaw ? JSON.parse(bookRaw) : null
+    if (step === 'detail' && !book) return { step: 'search', book: null }
     return { step, book }
   } catch {
     return { step: 'search', book: null }
@@ -48,15 +48,27 @@ export default function App() {
 
   function handleReset() {
     setSelectedBook(null)
+    sessionStorage.removeItem(SEARCH_CACHE_KEY)
     goBack('search')
   }
-
-  const stepIdx = STEP_ORDER.indexOf(step)
 
   return (
     <div className="min-h-dvh bg-surface flex flex-col">
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm border-b border-orange-100 px-4 h-14 flex items-center">
+      <header className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm border-b border-orange-100 px-4 h-14 flex items-center gap-3">
+        {/* Back button — only on detail step */}
+        {step === 'detail' && (
+          <button
+            onClick={() => goBack('search')}
+            className="p-2 -ml-2 rounded-xl hover:bg-orange-50 transition cursor-pointer"
+            aria-label="뒤로"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
+        )}
+
         <button
           onClick={handleReset}
           className="flex items-center gap-2 cursor-pointer"
@@ -70,22 +82,6 @@ export default function App() {
           </div>
           <span className="font-bold text-slate-800 text-[15px] tracking-tight">CheckBook</span>
         </button>
-
-        {/* Step dots */}
-        <div className="ml-auto flex items-center gap-1.5">
-          {STEP_ORDER.map((s, i) => (
-            <div
-              key={s}
-              className={`rounded-full transition-all duration-300 ${
-                i === stepIdx
-                  ? 'w-5 h-2 bg-primary'
-                  : i < stepIdx
-                  ? 'w-2 h-2 bg-orange-300'
-                  : 'w-2 h-2 bg-slate-200'
-              }`}
-            />
-          ))}
-        </div>
       </header>
 
       {/* Main */}
@@ -99,24 +95,14 @@ export default function App() {
               <BookSearchStep
                 onSelect={book => {
                   setSelectedBook(book)
-                  goForward('elibrary')
+                  goForward('detail')
                 }}
               />
             )}
 
-            {step === 'elibrary' && selectedBook && (
-              <ELibraryStep
+            {step === 'detail' && selectedBook && (
+              <BookDetailPage
                 book={selectedBook}
-                onNext={() => goForward('prices')}
-                onBack={() => goBack('search')}
-                onReset={handleReset}
-              />
-            )}
-
-            {step === 'prices' && selectedBook && (
-              <PricesStep
-                book={selectedBook}
-                onBack={() => goBack('elibrary')}
                 onReset={handleReset}
               />
             )}
