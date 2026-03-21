@@ -15,12 +15,6 @@ aladin:
   identification-timeout: 500
   timeout: 2000
 
-naver:
-  client-id: test-id
-  client-secret: test-secret
-  base-url: https://openapi.naver.com/v1/search/shop.json
-  timeout: 2000
-
 datanaru:
   auth-key: test-key
   base-url: https://data4library.kr/api
