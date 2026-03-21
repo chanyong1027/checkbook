@@ -1,0 +1,25 @@
+# 빌드 결과물 (이미 빌드된 파일, Docker 빌드 시 불필요)
+build/
+.gradle/
+
+# 프론트엔드 (백엔드 이미지에 포함 안 함)
+frontend/
+
+# 개발 환경 파일
+.env
+*.env
+.idea/
+.vscode/
+*.iml
+
+# Git
+.git/
+.gitignore
+
+# 문서
+docs/
+notes/
+
+# OS
+.DS_Store
+Thumbs.db
