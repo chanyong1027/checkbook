@@ -290,6 +290,7 @@ export function BookDetailPage({ book, onReset }: Props) {
   const [elibResult, setElibResult] = useState<ELibrarySearchResponse | null>(null)
   const [elibLoading, setElibLoading] = useState(false)
   const [elibError, setElibError] = useState<string | null>(null)
+  const [savedElibIds, setSavedElibIds] = useState<number[]>(() => getSavedIds())
 
   // Location state
   const [useLocation, setUseLocation] = useState(false)
@@ -391,6 +392,7 @@ export function BookDetailPage({ book, onReset }: Props) {
   }
 
   function handleElibSheetConfirm(ids: number[]) {
+    setSavedElibIds(ids)
     saveIds(ids)
     setSheetOpen(false)
     runElibSearch(ids)
@@ -400,7 +402,7 @@ export function BookDetailPage({ book, onReset }: Props) {
   const libSectionStatus = searchResult?.metadata.sectionStatuses
     .find(s => s.section === 'PUBLIC_LIBRARY')?.status
 
-  const hasSavedElibs = getSavedIds().filter(id => typeof id === 'number' && id > 0).length > 0
+  const hasSavedElibs = savedElibIds.length > 0
 
   return (
     <div>
@@ -800,7 +802,7 @@ export function BookDetailPage({ book, onReset }: Props) {
         title="전자도서관 선택"
       >
         <ELibrarySelector
-          initialIds={new Set(getSavedIds())}
+          initialIds={new Set(savedElibIds)}
           onConfirm={handleElibSheetConfirm}
           onCancel={() => setSheetOpen(false)}
         />
