@@ -44,7 +44,11 @@ function getSavedIds(): number[] {
 }
 
 function saveIds(ids: number[]) {
-  localStorage.setItem(ELIB_SELECTION_KEY, JSON.stringify(ids))
+  try {
+    localStorage.setItem(ELIB_SELECTION_KEY, JSON.stringify(ids))
+  } catch {
+    // 저장소 접근 불가해도 현재 선택/재검색 흐름은 계속 진행
+  }
 }
 
 // --- Status helpers ---
@@ -366,6 +370,10 @@ export function BookDetailPage({ book, onReset }: Props) {
   // --- Helpers ---
 
   function handleGetLocation() {
+    if (!navigator.geolocation) {
+      setLocError('이 환경에서는 위치 검색을 지원하지 않습니다')
+      return
+    }
     setLocLoading(true)
     setLocError(null)
     navigator.geolocation.getCurrentPosition(
