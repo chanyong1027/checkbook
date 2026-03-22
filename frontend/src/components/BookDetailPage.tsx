@@ -140,7 +140,7 @@ function ELibrarySelector({
     setDraftIds(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
-      else next.add(id)
+      else if (next.size < MAX_SELECT) next.add(id)
       return next
     })
   }
@@ -238,21 +238,27 @@ function ELibrarySelector({
         {filteredLibs.length === 0 && (
           <p className="text-sm text-slate-300 text-center py-4">검색 결과 없음</p>
         )}
-        {filteredLibs.map(lib => (
-          <label
-            key={lib.libraryId}
-            className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-orange-50/50 cursor-pointer"
-          >
-            <input
-              type="checkbox"
-              checked={draftIds.has(lib.libraryId)}
-              onChange={() => toggle(lib.libraryId)}
-              className="w-4 h-4 accent-primary shrink-0"
-            />
-            <span className="text-sm text-slate-700 flex-1 truncate">{lib.name}</span>
-            <span className="text-xs text-slate-300 shrink-0">{lib.region}</span>
-          </label>
-        ))}
+        {filteredLibs.map(lib => {
+          const checked = draftIds.has(lib.libraryId)
+          const disabled = !checked && draftIds.size >= MAX_SELECT
+          return (
+            <label
+              key={lib.libraryId}
+              className={`flex items-center gap-3 px-3 py-2 rounded-xl transition
+                ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-orange-50/50 cursor-pointer'}`}
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                disabled={disabled}
+                onChange={() => toggle(lib.libraryId)}
+                className="w-4 h-4 accent-primary shrink-0"
+              />
+              <span className="text-sm text-slate-700 flex-1 truncate">{lib.name}</span>
+              <span className="text-xs text-slate-300 shrink-0">{lib.region}</span>
+            </label>
+          )
+        })}
       </div>
 
       {/* Action buttons */}
@@ -727,7 +733,7 @@ export function BookDetailPage({ book, onReset }: Props) {
             </div>
 
             <div className="space-y-2 max-h-72 overflow-y-auto scrollbar-thin pr-0.5">
-              {elibResult.results.map(result => (
+              {[...elibResult.results].sort((a, b) => a.libraryName.localeCompare(b.libraryName, 'ko')).map(result => (
                 <div key={result.libraryId} className="bg-slate-50/50 border border-slate-100 rounded-xl p-3">
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-semibold text-slate-800 text-sm">{result.libraryName}</span>
