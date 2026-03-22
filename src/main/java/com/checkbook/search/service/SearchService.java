@@ -76,7 +76,7 @@ public class SearchService {
 
         if (isbn13 == null) {
             log.info("isbn13 null - 키워드 입력 + 알라딘 실패: 모든 섹션 SKIPPED");
-            return buildSkippedResponse(identifiedBook.orElse(null));
+            return buildSkippedResponse(identifiedBook.orElse(null), false);
         }
 
         List<SearchResponse.FailureDetail> failures = Collections.synchronizedList(new ArrayList<>());
@@ -120,7 +120,7 @@ public class SearchService {
                 publicFuture.isDone() && !publicFuture.isCompletedExceptionally() ? publicFuture.join() : List.of();
 
         List<SearchResponse.SectionStatusDetail> statuses =
-                buildStatuses(usedFuture, publicFuture, lat, lon, failures);
+                buildStatuses(usedFuture, publicFuture, lat, lon, failures, identifiedBook.isPresent());
 
         SearchResponse.BookInfo bookInfo = identifiedBook
                 .map(book -> new SearchResponse.BookInfo(
@@ -218,7 +218,7 @@ public class SearchService {
         }
     }
 
-    private SearchResponse buildSkippedResponse(AladinSearchResult book) {
+    private SearchResponse buildSkippedResponse(AladinSearchResult book, boolean aladinIdentified) {
         SearchResponse.BookInfo bookInfo = book == null
                 ? new SearchResponse.BookInfo(null, null, null, null, null)
                 : new SearchResponse.BookInfo(
@@ -230,7 +230,9 @@ public class SearchService {
 
         List<SearchResponse.SectionStatusDetail> statuses = List.of(
                 new SearchResponse.SectionStatusDetail(SearchSection.PUBLIC_LIBRARY, SearchSectionStatus.SKIPPED),
-                new SearchResponse.SectionStatusDetail(SearchSection.USED_BOOK, SearchSectionStatus.SKIPPED)
+                new SearchResponse.SectionStatusDetail(SearchSection.USED_BOOK, SearchSectionStatus.SKIPPED),
+                new SearchResponse.SectionStatusDetail(SearchSection.NEW_BOOK,
+                        aladinIdentified ? SearchSectionStatus.SUCCESS : SearchSectionStatus.SKIPPED)
         );
 
         return new SearchResponse(
@@ -247,7 +249,8 @@ public class SearchService {
             CompletableFuture<?> publicFuture,
             Double lat,
             Double lon,
-            List<SearchResponse.FailureDetail> failures
+            List<SearchResponse.FailureDetail> failures,
+            boolean aladinIdentified
     ) {
         List<SearchResponse.SectionStatusDetail> statuses = new ArrayList<>();
 
@@ -275,6 +278,11 @@ public class SearchService {
             statuses.add(new SearchResponse.SectionStatusDetail(
                     SearchSection.USED_BOOK, SearchSectionStatus.SUCCESS));
         }
+
+        // NEW_BOOK: 알라딘 식별 성공 시 SUCCESS (newBook이 null이면 가격 미제공), 실패 시 FAILED
+        statuses.add(new SearchResponse.SectionStatusDetail(
+                SearchSection.NEW_BOOK,
+                aladinIdentified ? SearchSectionStatus.SUCCESS : SearchSectionStatus.FAILED));
 
         return statuses;
     }
