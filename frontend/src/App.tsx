@@ -40,6 +40,7 @@ export default function App() {
   const [step, setStep] = useState<Step>(initial.step)
   const [direction, setDirection] = useState<'forward' | 'back'>('forward')
   const [selectedBook, setSelectedBook] = useState<BookCandidate | null>(initial.book)
+  const [resetKey, setResetKey] = useState(0)
 
   useEffect(() => {
     sessionStorage.setItem('cb_step', step)
@@ -63,6 +64,7 @@ export default function App() {
   function handleReset() {
     setSelectedBook(null)
     sessionStorage.removeItem(SEARCH_CACHE_KEY)
+    setResetKey(k => k + 1)
     goBack('search')
   }
 
@@ -107,6 +109,7 @@ export default function App() {
           >
             {step === 'search' && (
               <BookSearchStep
+                key={resetKey}
                 onSelect={book => {
                   setSelectedBook(book)
                   goForward('detail')
