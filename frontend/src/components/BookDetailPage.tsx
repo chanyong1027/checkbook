@@ -717,8 +717,7 @@ export function BookDetailPage({ book, onReset }: Props) {
             title="전자도서관"
             source="실시간 검색"
           >
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs text-slate-300 font-mono">{elibResult.metadata.totalElapsedMs}ms</p>
+            <div className="flex items-center justify-end mb-2">
               <button
                 onClick={() => setSheetOpen(true)}
                 className="text-xs text-slate-300 hover:text-primary cursor-pointer"
@@ -733,7 +732,6 @@ export function BookDetailPage({ book, onReset }: Props) {
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-semibold text-slate-800 text-sm">{result.libraryName}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono text-slate-200">{result.elapsedMs}ms</span>
                       <span className={`text-xs font-medium ${elibStatusColor[result.status] ?? 'text-slate-400'}`}>
                         {elibStatusLabel[result.status] ?? result.status}
                       </span>
