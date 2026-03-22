@@ -76,7 +76,7 @@ public class SearchService {
 
         if (isbn13 == null) {
             log.info("isbn13 null - 키워드 입력 + 알라딘 실패: 모든 섹션 SKIPPED");
-            return buildSkippedResponse(identifiedBook.orElse(null), false);
+            return buildSkippedResponse(identifiedBook.orElse(null), identifiedBook.isPresent());
         }
 
         List<SearchResponse.FailureDetail> failures = Collections.synchronizedList(new ArrayList<>());
@@ -232,7 +232,7 @@ public class SearchService {
                 new SearchResponse.SectionStatusDetail(SearchSection.PUBLIC_LIBRARY, SearchSectionStatus.SKIPPED),
                 new SearchResponse.SectionStatusDetail(SearchSection.USED_BOOK, SearchSectionStatus.SKIPPED),
                 new SearchResponse.SectionStatusDetail(SearchSection.NEW_BOOK,
-                        aladinIdentified ? SearchSectionStatus.SUCCESS : SearchSectionStatus.SKIPPED)
+                        aladinIdentified ? SearchSectionStatus.SUCCESS : SearchSectionStatus.FAILED)
         );
 
         return new SearchResponse(
