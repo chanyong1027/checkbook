@@ -398,9 +398,11 @@ export function BookDetailPage({ book, onReset }: Props) {
     runElibSearch(ids)
   }
 
-  // Get public library section status from metadata
+  // Get section statuses from metadata
   const libSectionStatus = searchResult?.metadata.sectionStatuses
     .find(s => s.section === 'PUBLIC_LIBRARY')?.status
+  const newBookSectionStatus = searchResult?.metadata.sectionStatuses
+    .find(s => s.section === 'NEW_BOOK')?.status
 
   const hasSavedElibs = savedElibIds.length > 0
 
@@ -430,6 +432,7 @@ export function BookDetailPage({ book, onReset }: Props) {
                   </svg>
                 }
                 title="공공도서관"
+                source="정보나루 기준"
               >
                 <div className="text-center py-4">
                   <p className="text-sm text-slate-400 mb-3">
@@ -468,6 +471,7 @@ export function BookDetailPage({ book, onReset }: Props) {
                   </svg>
                 }
                 title="공공도서관"
+                source="정보나루 기준"
               >
                 <p className="text-sm text-slate-400 text-center py-2">검색에 실패했습니다</p>
               </SectionCard>
@@ -480,6 +484,7 @@ export function BookDetailPage({ book, onReset }: Props) {
                   </svg>
                 }
                 title="공공도서관"
+                source="정보나루 기준"
               >
                 <p className="text-sm text-slate-400 text-center py-2">소장 도서관이 없습니다</p>
               </SectionCard>
@@ -492,6 +497,7 @@ export function BookDetailPage({ book, onReset }: Props) {
                   </svg>
                 }
                 title={`공공도서관 ${searchResult.publicLibraries.length}개`}
+                source="정보나루 기준"
               >
                 {useLocation && (
                   <div className="mb-2 flex items-center gap-2 text-xs text-emerald-600 bg-emerald-50 rounded-xl px-2.5 py-1.5">
@@ -587,6 +593,7 @@ export function BookDetailPage({ book, onReset }: Props) {
                   </svg>
                 }
                 title="중고도서"
+                source="알라딘 기준"
               >
                 <div className="space-y-0">
                   {([
@@ -626,7 +633,7 @@ export function BookDetailPage({ book, onReset }: Props) {
             )}
 
             {/* ==================== NEW BOOK SECTION ==================== */}
-            {searchResult.newBook && (
+            {newBookSectionStatus === 'FAILED' ? (
               <SectionCard
                 icon={
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
@@ -636,6 +643,21 @@ export function BookDetailPage({ book, onReset }: Props) {
                   </svg>
                 }
                 title="새책"
+                source="알라딘 기준"
+              >
+                <p className="text-sm text-slate-400 text-center py-2">가격 정보를 가져올 수 없습니다</p>
+              </SectionCard>
+            ) : searchResult.newBook && (
+              <SectionCard
+                icon={
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
+                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                    <line x1="3" y1="6" x2="21" y2="6" />
+                    <path d="M16 10a4 4 0 0 1-8 0" />
+                  </svg>
+                }
+                title="새책"
+                source="알라딘 기준"
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-slate-600">알라딘</span>
@@ -674,6 +696,7 @@ export function BookDetailPage({ book, onReset }: Props) {
               </svg>
             }
             title="전자도서관"
+            source="실시간 검색"
           >
             <p className="text-sm text-red-400 text-center py-2">{elibError}</p>
             <button
@@ -692,6 +715,7 @@ export function BookDetailPage({ book, onReset }: Props) {
               </svg>
             }
             title="전자도서관"
+            source="실시간 검색"
           >
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs text-slate-300 font-mono">{elibResult.metadata.totalElapsedMs}ms</p>
@@ -768,6 +792,7 @@ export function BookDetailPage({ book, onReset }: Props) {
               </svg>
             }
             title="전자도서관"
+            source="실시간 검색"
           >
             <div className="text-center py-4">
               <p className="text-sm text-slate-400 mb-3">
