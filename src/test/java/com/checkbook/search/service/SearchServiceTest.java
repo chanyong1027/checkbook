@@ -74,8 +74,13 @@ class SearchServiceTest {
         assertThat(response.usedBook()).isNull();
         assertThat(response.newBook()).isNull();
         assertThat(response.metadata().sectionStatuses())
+                .filteredOn(s -> s.section() != SearchSection.NEW_BOOK)
                 .extracting(SearchResponse.SectionStatusDetail::status)
                 .containsOnly(SearchSectionStatus.SKIPPED);
+        assertThat(response.metadata().sectionStatuses())
+                .filteredOn(s -> s.section() == SearchSection.NEW_BOOK)
+                .extracting(SearchResponse.SectionStatusDetail::status)
+                .containsOnly(SearchSectionStatus.FAILED);
     }
 
     @Test
