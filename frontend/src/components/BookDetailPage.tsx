@@ -149,11 +149,12 @@ function ELibrarySelector({
     setDraftIds(new Set())
   }
 
-  const filteredLibs = keyword
+  const filteredLibs = [...(keyword
     ? libraries.filter(l =>
         l.name.includes(keyword) || l.region?.includes(keyword) || l.vendorType?.includes(keyword)
       )
     : libraries
+  )].sort((a, b) => a.name.localeCompare(b.name, 'ko'))
 
   const overLimit = draftIds.size > MAX_SELECT
   const selectedLibs = libraries.filter(l => draftIds.has(l.libraryId))
