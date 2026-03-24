@@ -391,9 +391,14 @@ export function BookDetailPage({ book, onReset }: Props) {
         setLocLoading(false)
         runSearch(latitude, longitude)
       },
-      () => {
+      (err) => {
         setLocLoading(false)
-        setLocError('위치 정보를 가져올 수 없습니다')
+        const msg =
+          err.code === 1 ? '위치 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요.' :
+          err.code === 2 ? '위치 정보를 사용할 수 없습니다. 기기의 위치 서비스가 켜져 있는지 확인해주세요.' :
+          err.code === 3 ? '위치 요청 시간이 초과되었습니다. 다시 시도해주세요.' :
+          '위치 정보를 가져올 수 없습니다'
+        setLocError(msg)
       },
     )
   }
