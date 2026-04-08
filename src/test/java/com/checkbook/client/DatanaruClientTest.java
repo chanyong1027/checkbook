@@ -10,10 +10,14 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import com.checkbook.client.datanaru.DatanaruResponseException;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class DatanaruClientTest {
+
+    private static final int SUCCESS_CASE_TIMEOUT_MS = 2000;
 
     private MockWebServer server;
 
@@ -41,7 +45,7 @@ class DatanaruClientTest {
                         """));
         server.start();
 
-        DatanaruClient client = new DatanaruClient(baseUrl("/api"), "test-key", 200);
+        DatanaruClient client = new DatanaruClient(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS);
 
         DatanaruBookExistResult result = client.bookExist("9788936439743", "111111");
 
@@ -87,7 +91,7 @@ class DatanaruClientTest {
                         """));
         server.start();
 
-        DatanaruClient client = new DatanaruClient(baseUrl("/api"), "test-key", 200);
+        DatanaruClient client = new DatanaruClient(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS);
 
         List<DatanaruLibSrchResult> result = client.libSrch(1, 100);
 
@@ -105,10 +109,11 @@ class DatanaruClientTest {
     }
 
     @Test
-    void libSrchReturnsEmptyOnNetworkFailure() {
+    void libSrchThrowsOnNetworkFailure() {
         DatanaruClient client = new DatanaruClient("http://127.0.0.1:1/api", "test-key", 50);
 
-        assertThat(client.libSrch(1, 100)).isEmpty();
+        assertThatThrownBy(() -> client.libSrch(1, 100))
+                .isInstanceOf(DatanaruResponseException.class);
     }
 
     private String baseUrl(String path) {

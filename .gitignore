@@ -37,6 +37,8 @@ out/
 .vscode/
 .worktrees/
 .claude/
+.codex
+.superpowers/
 frontend/node_modules/
 frontend/dist/
 

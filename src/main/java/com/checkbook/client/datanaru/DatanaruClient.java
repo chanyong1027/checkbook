@@ -85,8 +85,7 @@ public class DatanaruClient {
                     .filter(result -> result.lat() != null && result.lon() != null)
                     .toList();
         } catch (Exception e) {
-            log.error("정보나루 libSrch 실패: pageNo={}", pageNo, e);
-            return List.of();
+            throw new DatanaruResponseException("정보나루 libSrch 실패: pageNo=" + pageNo, e);
         }
     }
 
