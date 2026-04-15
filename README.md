@@ -6,50 +6,52 @@
 
 <br>
 
-## 기술 스택
-
-<div>
-  <img src="https://img.shields.io/badge/Java_17-007396?style=for-the-badge&logo=OpenJDK&logoColor=white"/>
-  <img src="https://img.shields.io/badge/Spring_Boot_3.5-6DB33F?style=for-the-badge&logo=Spring Boot&logoColor=white"/>
-  <img src="https://img.shields.io/badge/JPA-59666C?style=for-the-badge&logo=Hibernate&logoColor=white"/>
-  <img src="https://img.shields.io/badge/Flyway-CC0200?style=for-the-badge&logo=Flyway&logoColor=white"/>
-  <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=PostgreSQL&logoColor=white"/>
-</div>
-<div>
-  <img src="https://img.shields.io/badge/React_18-61DAFB?style=for-the-badge&logo=React&logoColor=black"/>
-  <img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=TypeScript&logoColor=white"/>
-  <img src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=for-the-badge&logo=Tailwind CSS&logoColor=white"/>
-  <img src="https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=Vite&logoColor=white"/>
-</div>
-<div>
-  <img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=Docker&logoColor=white"/>
-  <img src="https://img.shields.io/badge/GitHub_Actions-2088FF?style=for-the-badge&logo=GitHub Actions&logoColor=white"/>
-  <img src="https://img.shields.io/badge/AWS_EC2-FF9900?style=for-the-badge&logo=Amazon EC2&logoColor=white"/>
-  <img src="https://img.shields.io/badge/AWS_RDS-527FFF?style=for-the-badge&logo=Amazon RDS&logoColor=white"/>
-  <img src="https://img.shields.io/badge/AWS_S3-569A31?style=for-the-badge&logo=Amazon S3&logoColor=white"/>
-  <img src="https://img.shields.io/badge/CloudFront-8C4FFF?style=for-the-badge&logo=Amazon CloudFront&logoColor=white"/>
-</div>
-
-<br>
-
 ## 서비스 화면
 
 | 메인 | 검색 결과 |
 |:---:|:---:|
-| <!-- TODO: main_page.png URL --> | <!-- TODO: search_page.png URL --> |
+| <!-- TODO: main_page.png --> | <!-- TODO: search_page.png --> |
 
 | 상세 - 공공도서관 | 상세 - 중고/전자도서관 |
 |:---:|:---:|
-| <!-- TODO: detail_page1.png URL --> | <!-- TODO: detail_page2.png URL --> |
+| <!-- TODO: detail_page1.png --> | <!-- TODO: detail_page2.png --> |
 
 <br>
 
 ## 주요 기능
 
-- **도서 식별** - 제목, 저자, ISBN으로 검색하면 알라딘/카카오 API를 통해 정확한 도서를 식별
-- **공공도서관 소장/대출 현황** - 사용자 위치 기반으로 가까운 공공도서관 20곳의 소장 여부와 대출 가능 여부를 실시간 조회
-- **중고 도서 가격 비교** - 알라딘 중고 3개 채널(개인판매, 온라인, 매장)의 최저가를 한눈에 비교
-- **전자도서관 대출 가능 여부** - 선택한 전자도서관에서 해당 도서의 대출 가능 여부를 실시간 검색
+- **도서 식별** — 제목, 저자, ISBN으로 검색하면 알라딘/카카오 API를 통해 정확한 도서를 식별
+- **공공도서관 소장/대출 현황** — 사용자 위치 기반으로 가까운 공공도서관 20곳의 소장 여부와 대출 가능 여부를 실시간 조회
+- **중고 도서 가격 비교** — 알라딘 중고 3개 채널(개인판매, 온라인, 매장)의 최저가를 한눈에 비교
+- **전자도서관 대출 가능 여부** — 선택한 전자도서관에서 해당 도서의 대출 가능 여부를 실시간 검색
+
+<br>
+
+## Tech Stack
+
+### Frontend
+
+![TypeScript](https://img.shields.io/badge/typescript-%233178C6.svg?style=for-the-badge&logo=typescript&logoColor=white)
+![React](https://img.shields.io/badge/react-%23333333.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB)
+![Tailwind CSS](https://img.shields.io/badge/tailwind%20css-%2306B6D4.svg?style=for-the-badge&logo=tailwindcss&logoColor=white)
+![Vite](https://img.shields.io/badge/vite-%23646CFF.svg?style=for-the-badge&logo=vite&logoColor=white)
+
+### Backend
+
+![Java](https://img.shields.io/badge/java_17-%23ED8B00.svg?style=for-the-badge&logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/spring%20boot_3.5-%236DB33F.svg?style=for-the-badge&logo=springboot&logoColor=white)
+![JPA](https://img.shields.io/badge/jpa-%2359666C.svg?style=for-the-badge&logo=hibernate&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/postgresql-%234169E1.svg?style=for-the-badge&logo=postgresql&logoColor=white)
+![Flyway](https://img.shields.io/badge/flyway-%23CC0200.svg?style=for-the-badge&logo=flyway&logoColor=white)
+
+### Infra
+
+![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
+![GitHub Actions](https://img.shields.io/badge/github%20actions-%232088FF.svg?style=for-the-badge&logo=githubactions&logoColor=white)
+![AWS EC2](https://img.shields.io/badge/ec2-%23FF9900.svg?style=for-the-badge&logo=amazonec2&logoColor=white)
+![AWS RDS](https://img.shields.io/badge/rds-%23527FFF.svg?style=for-the-badge&logo=amazonrds&logoColor=white)
+![AWS S3](https://img.shields.io/badge/s3-%23569A31.svg?style=for-the-badge&logo=amazons3&logoColor=white)
+![CloudFront](https://img.shields.io/badge/cloudfront-%238C4FFF.svg?style=for-the-badge&logo=amazonaws&logoColor=white)
 
 <br>
 
@@ -57,71 +59,17 @@
 
 ### 시스템 구조
 
-```mermaid
-graph TB
-    subgraph Client
-        Browser["Browser"]
-    end
-
-    subgraph AWS
-        CF["CloudFront + S3<br/>(React SPA)"]
-        EC2["EC2<br/>(Spring Boot + Docker)"]
-        RDS["RDS<br/>(PostgreSQL)"]
-    end
-
-    subgraph 외부 API
-        Aladin["알라딘 API"]
-        Kakao["카카오 도서 API"]
-        Datanaru["도서관정보나루 API"]
-        ELib["전자도서관<br/>(교보문고, 북큐브 등)"]
-    end
-
-    Browser --> CF
-    Browser --> EC2
-    EC2 --> RDS
-    EC2 --> Aladin
-    EC2 --> Kakao
-    EC2 --> Datanaru
-    EC2 --> ELib
-```
+<!-- TODO: 시스템 아키텍처 이미지 -->
 
 ### 검색 처리 흐름
 
 하나의 검색 요청이 들어오면 여러 외부 소스를 **병렬로** 호출하여 2.8초 내에 응답합니다.
 
-```mermaid
-graph LR
-    A["검색 요청"] --> B["도서 식별<br/>(알라딘/카카오)"]
-    B --> C["ISBN 확보"]
-    C --> D["공공도서관 20곳<br/>병렬 조회"]
-    C --> E["알라딘 중고가격<br/>조회"]
-    C --> F["새책 가격<br/>조회"]
-    D --> G["결과 조합<br/>+ 응답"]
-    E --> G
-    F --> G
-
-    style D fill:#e8f5e9
-    style E fill:#fff3e0
-    style F fill:#e3f2fd
-```
+<!-- TODO: 검색 흐름 이미지 -->
 
 ### 배포 파이프라인
 
-```mermaid
-graph LR
-    Push["git push"] --> GA["GitHub Actions"]
-    GA --> Test["테스트 실행"]
-    
-    Test --> BE["백엔드 배포"]
-    Test --> FE["프론트엔드 배포"]
-    
-    BE --> Docker["Docker 빌드<br/>→ Docker Hub"]
-    Docker --> EC2["EC2 SSH 배포"]
-    
-    FE --> Build["npm build"]
-    Build --> S3["S3 업로드"]
-    S3 --> Invalidate["CloudFront<br/>캐시 무효화"]
-```
+<!-- TODO: 배포 파이프라인 이미지 -->
 
 <br>
 
@@ -132,9 +80,8 @@ graph LR
 | 공공도서관 조회 | 실시간 API 호출 | 대출 가능 여부는 실시간 상태이므로 캐싱 불가 |
 | 전자도서관 조회 | 실시간 크롤링 | 공식 API 미제공, 대출 상태도 실시간 확인 필요 |
 | 검색 타임아웃 | 2.8초 데드라인 | 응답 지연 시 도착한 결과까지만 반환 (graceful degradation) |
-| 위치 정보 | 브라우저 Geolocation | 공공도서관 거리순 정렬에 필요, 미허용 시 기능 제한 안내 |
-| DB 마이그레이션 | Flyway | JPA ddl-auto 대신 SQL 기반 버전 관리 |
 | 외부 API 장애 대응 | Resilience4j Circuit Breaker | 도서관정보나루 API 장애 시 연쇄 실패 방지 |
+| DB 마이그레이션 | Flyway | JPA ddl-auto 대신 SQL 기반 버전 관리 |
 | 프론트/백 분리 배포 | S3+CloudFront / EC2+Docker | 정적 자원과 API 서버의 스케일링 독립 |
 
 <br>
