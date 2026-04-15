@@ -1,8 +1,8 @@
 package com.checkbook.search.service;
 
-import com.checkbook.client.aladin.AladinClient;
 import com.checkbook.client.aladin.dto.AladinSearchResult;
 import com.checkbook.client.aladin.dto.AladinUsedBookResult;
+import com.checkbook.common.util.InputNormalizer;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
 import com.checkbook.publiclibrary.snapshot.domain.SnapshotSourceStatus;
@@ -20,6 +20,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.IntStream;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
@@ -38,7 +39,7 @@ class PublicLibraryParallelBenchmarkTest {
     private static final String TEST_ISBN = "9788936439743";
 
     @Mock
-    private AladinClient aladinClient;
+    private AladinBookService aladinBookService;
 
     @Mock
     private LibraryAvailabilitySnapshotService snapshotService;
@@ -97,7 +98,7 @@ class PublicLibraryParallelBenchmarkTest {
         ExecutorService searchExecutor = Executors.newFixedThreadPool(3);
         try {
             SearchService service = new SearchService(
-                    aladinClient,
+                    aladinBookService,
                     snapshotService,
                     publicLibraryRepository,
                     searchExecutor,
@@ -111,12 +112,12 @@ class PublicLibraryParallelBenchmarkTest {
 
     private void setupMocks() {
         // 알라딘 도서 식별
-        when(aladinClient.searchBook(anyString()))
+        when(aladinBookService.identify(any(InputNormalizer.NormalizedQuery.class)))
                 .thenReturn(Optional.of(new AladinSearchResult(
                         TEST_ISBN, "혼자가 혼자에게", "성해나", "창비", null, 16800)));
 
         // 중고가격
-        when(aladinClient.getUsedBooks(TEST_ISBN))
+        when(aladinBookService.getUsedBooks(TEST_ISBN))
                 .thenReturn(new AladinUsedBookResult(5000, 6000, 7000, "url1", "url2", "url3"));
 
         // 도서관 20곳 목록

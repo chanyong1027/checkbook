@@ -1,9 +1,9 @@
 package com.checkbook.search.service;
 
-import com.checkbook.client.aladin.AladinClient;
 import com.checkbook.client.aladin.dto.AladinSearchResult;
 import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
+import com.checkbook.common.util.InputNormalizer;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
 import com.checkbook.publiclibrary.snapshot.domain.SnapshotSourceStatus;
@@ -32,7 +32,7 @@ import static org.mockito.Mockito.when;
 class SearchServiceTest {
 
     @Mock
-    private AladinClient aladinClient;
+    private AladinBookService aladinBookService;
 
     @Mock
     private LibraryAvailabilitySnapshotService snapshotService;
@@ -49,7 +49,7 @@ class SearchServiceTest {
         searchExecutor = Executors.newFixedThreadPool(3);
         publicLibraryExecutor = Executors.newFixedThreadPool(20);
         searchService = new SearchService(
-                aladinClient,
+                aladinBookService,
                 snapshotService,
                 publicLibraryRepository,
                 searchExecutor,
@@ -65,7 +65,9 @@ class SearchServiceTest {
 
     @Test
     void searchKeywordAladinFailsIsbn13NullAllSkipped() {
-        when(aladinClient.searchBook("모르는책")).thenReturn(Optional.empty());
+        when(aladinBookService.identify(
+                new InputNormalizer.NormalizedQuery("모르는책", InputNormalizer.QueryType.KEYWORD)))
+                .thenReturn(Optional.empty());
 
         SearchResponse response = searchService.search("모르는책", null, null);
 
@@ -87,8 +89,10 @@ class SearchServiceTest {
     void searchKeywordAladinSuccessReturnsSections() {
         AladinSearchResult aladinResult = new AladinSearchResult(
                 "9788936439743", "혼자가 혼자에게", "성해나", "창비", null, 16800);
-        when(aladinClient.searchBook("혼모노")).thenReturn(Optional.of(aladinResult));
-        when(aladinClient.getUsedBooks("9788936439743")).thenReturn(null);
+        when(aladinBookService.identify(
+                new InputNormalizer.NormalizedQuery("혼모노", InputNormalizer.QueryType.KEYWORD)))
+                .thenReturn(Optional.of(aladinResult));
+        when(aladinBookService.getUsedBooks("9788936439743")).thenReturn(null);
 
         SearchResponse response = searchService.search("혼모노", null, null);
 
@@ -121,8 +125,10 @@ class SearchServiceTest {
                 .homepage("https://lib.example")
                 .build();
 
-        when(aladinClient.searchBook("혼모노")).thenReturn(Optional.of(aladinResult));
-        when(aladinClient.getUsedBooks("9788936439743")).thenReturn(null);
+        when(aladinBookService.identify(
+                new InputNormalizer.NormalizedQuery("혼모노", InputNormalizer.QueryType.KEYWORD)))
+                .thenReturn(Optional.of(aladinResult));
+        when(aladinBookService.getUsedBooks("9788936439743")).thenReturn(null);
         when(publicLibraryRepository.findNearest(37.5665, 126.9780, 20)).thenReturn(List.of(library));
         when(snapshotService.getAvailability("9788936439743", "111111"))
                 .thenReturn(new LibraryAvailabilityResult("111111", true, false, SnapshotSourceStatus.SUCCESS));
@@ -158,8 +164,10 @@ class SearchServiceTest {
     void searchUsedBookClientThrowsSectionIsFailed() {
         AladinSearchResult aladinResult = new AladinSearchResult(
                 "9788936439743", "혼자가 혼자에게", "성해나", "창비", null, 16800);
-        when(aladinClient.searchBook("혼모노")).thenReturn(Optional.of(aladinResult));
-        when(aladinClient.getUsedBooks("9788936439743")).thenThrow(new RuntimeException("timeout"));
+        when(aladinBookService.identify(
+                new InputNormalizer.NormalizedQuery("혼모노", InputNormalizer.QueryType.KEYWORD)))
+                .thenReturn(Optional.of(aladinResult));
+        when(aladinBookService.getUsedBooks("9788936439743")).thenThrow(new RuntimeException("timeout"));
 
         SearchResponse response = searchService.search("혼모노", null, null);
 
@@ -177,8 +185,10 @@ class SearchServiceTest {
     void searchBuildsNewBookFromAladinPriceSales() {
         AladinSearchResult aladinResult = new AladinSearchResult(
                 "9788936439743", "혼자가 혼자에게", "성해나", "창비", null, 16800);
-        when(aladinClient.searchBook("혼모노")).thenReturn(Optional.of(aladinResult));
-        when(aladinClient.getUsedBooks("9788936439743")).thenReturn(null);
+        when(aladinBookService.identify(
+                new InputNormalizer.NormalizedQuery("혼모노", InputNormalizer.QueryType.KEYWORD)))
+                .thenReturn(Optional.of(aladinResult));
+        when(aladinBookService.getUsedBooks("9788936439743")).thenReturn(null);
 
         SearchResponse response = searchService.search("혼모노", null, null);
 

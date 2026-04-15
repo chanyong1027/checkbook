@@ -1,6 +1,5 @@
 package com.checkbook.search.service;
 
-import com.checkbook.client.aladin.AladinClient;
 import com.checkbook.client.aladin.dto.AladinSearchResult;
 import com.checkbook.client.aladin.dto.AladinUsedBookResult;
 import com.checkbook.common.exception.BusinessException;
@@ -35,7 +34,7 @@ import java.util.concurrent.TimeoutException;
 @Service
 public class SearchService {
 
-    private final AladinClient aladinClient;
+    private final AladinBookService aladinBookService;
     private final LibraryAvailabilitySnapshotService snapshotService;
     private final PublicLibraryRepository publicLibraryRepository;
     private final ExecutorService searchExecutor;
@@ -51,13 +50,13 @@ public class SearchService {
     private long publicLibraryFanoutTimeoutMs = 2200;
 
     public SearchService(
-            AladinClient aladinClient,
+            AladinBookService aladinBookService,
             LibraryAvailabilitySnapshotService snapshotService,
             PublicLibraryRepository publicLibraryRepository,
             @Qualifier("searchExecutor") ExecutorService searchExecutor,
             @Qualifier("publicLibraryExecutor") ExecutorService publicLibraryExecutor
     ) {
-        this.aladinClient = aladinClient;
+        this.aladinBookService = aladinBookService;
         this.snapshotService = snapshotService;
         this.publicLibraryRepository = publicLibraryRepository;
         this.searchExecutor = searchExecutor;
@@ -70,7 +69,7 @@ public class SearchService {
         InputNormalizer.NormalizedQuery normalized = InputNormalizer.normalize(q);
         log.info("통합 검색: query={}, type={}", normalized.value(), normalized.type());
 
-        Optional<AladinSearchResult> identifiedBook = identify(normalized);
+        Optional<AladinSearchResult> identifiedBook = aladinBookService.identify(normalized);
         String isbn13 = identifiedBook.map(AladinSearchResult::isbn13)
                 .orElse(normalized.type() == InputNormalizer.QueryType.ISBN ? normalized.value() : null);
 
@@ -82,7 +81,7 @@ public class SearchService {
         List<SearchResponse.FailureDetail> failures = Collections.synchronizedList(new ArrayList<>());
 
         CompletableFuture<AladinUsedBookResult> usedFuture = CompletableFuture
-                .supplyAsync(() -> aladinClient.getUsedBooks(isbn13), searchExecutor)
+                .supplyAsync(() -> aladinBookService.getUsedBooks(isbn13), searchExecutor)
                 .exceptionally(exception -> {
                     failures.add(new SearchResponse.FailureDetail(
                             SearchSection.USED_BOOK,
@@ -151,13 +150,6 @@ public class SearchService {
                 newBookInfo,
                 new SearchResponse.SearchMetadata(LocalDateTime.now(), statuses, List.copyOf(failures))
         );
-    }
-
-    private Optional<AladinSearchResult> identify(InputNormalizer.NormalizedQuery normalized) {
-        if (normalized.type() == InputNormalizer.QueryType.ISBN) {
-            return aladinClient.lookupBook(normalized.value());
-        }
-        return aladinClient.searchBook(normalized.value());
     }
 
     private List<SearchResponse.PublicLibraryInfo> fetchPublicLibraries(String isbn13, double lat, double lon) {

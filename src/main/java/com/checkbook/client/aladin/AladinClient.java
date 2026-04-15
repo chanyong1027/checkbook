@@ -1,5 +1,6 @@
 package com.checkbook.client.aladin;
 
+import com.checkbook.client.aladin.dto.AladinOffStoreResponse;
 import com.checkbook.client.aladin.dto.AladinItemResponse;
 import com.checkbook.client.aladin.dto.AladinSearchResult;
 import com.checkbook.client.aladin.dto.AladinUsedBookResult;
@@ -10,6 +11,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.util.List;
 import java.util.Optional;
 
 @Slf4j
@@ -97,6 +99,25 @@ public class AladinClient {
         } catch (Exception e) {
             log.error("알라딘 중고 조회 실패: isbn13={}", isbn13, e);
             throw new IllegalStateException("알라딘 중고 조회 오류", e);
+        }
+    }
+
+    public List<AladinOffStoreResponse.OffStoreInfo> getOffStoreList(String isbn13) {
+        try {
+            AladinOffStoreResponse response = priceClient.get()
+                    .uri("/ItemOffStoreList.aspx?ttbkey={key}&ItemId={isbn13}&ItemIdType=ISBN13&output=js",
+                            ttbKey, isbn13)
+                    .retrieve()
+                    .body(AladinOffStoreResponse.class);
+
+            if (response == null || response.itemOffStoreList() == null) {
+                return List.of();
+            }
+
+            return response.itemOffStoreList();
+        } catch (Exception e) {
+            log.error("알라딘 매장 재고 조회 실패: isbn13={}", isbn13, e);
+            throw new IllegalStateException("알라딘 매장 재고 조회 오류", e);
         }
     }
 
