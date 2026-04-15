@@ -26,6 +26,8 @@ public class GlobalExceptionHandler {
         ErrorCode errorCode = switch (exception.getParameterName()) {
             case "q", "query" -> ErrorCode.INVALID_SEARCH_KEYWORD;
             case "libraryIds" -> ErrorCode.LIBRARY_IDS_REQUIRED;
+            case "isbn13" -> ErrorCode.ISBN_REQUIRED;
+            case "lat", "lon" -> ErrorCode.INVALID_LOCATION;
             default -> ErrorCode.INVALID_SEARCH_KEYWORD;
         };
 

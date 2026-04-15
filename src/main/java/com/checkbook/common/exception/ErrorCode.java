@@ -12,6 +12,7 @@ public enum ErrorCode {
     KEYWORD_TOO_LONG(HttpStatus.BAD_REQUEST, "검색어는 200자 이내로 입력해주세요."),
     INVALID_REGION_CODE(HttpStatus.BAD_REQUEST, "올바른 지역 코드를 입력해주세요."),
     INVALID_LOCATION(HttpStatus.BAD_REQUEST, "올바른 위치 정보를 입력해주세요."),
+    ISBN_REQUIRED(HttpStatus.BAD_REQUEST, "ISBN 정보가 필요합니다."),
 
     LIBRARY_IDS_REQUIRED(HttpStatus.BAD_REQUEST, "도서관을 선택해주세요."),
     LIBRARY_IDS_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "도서관은 최대 20개까지 선택할 수 있습니다."),
