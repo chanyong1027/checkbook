@@ -10,11 +10,11 @@
 
 | 메인 | 검색 결과 |
 |:---:|:---:|
-| <!-- TODO: main_page.png --> | <!-- TODO: search_page.png --> |
+| <img width="2878" height="1520" alt="Image" src="https://github.com/user-attachments/assets/c83f3002-2b63-47cd-9fe3-c382bb798584" /> | <img width="2879" height="1534" alt="Image" src="https://github.com/user-attachments/assets/3b26390d-d7f5-460d-b7f7-21f5f4fae2f0" /> |
 
 | 상세 - 공공도서관 | 상세 - 중고/전자도서관 |
 |:---:|:---:|
-| <!-- TODO: detail_page1.png --> | <!-- TODO: detail_page2.png --> |
+| <img width="2879" height="1534" alt="Image" src="https://github.com/user-attachments/assets/b4dcd2f9-2142-4635-8da7-a1e1a4f5cb2b" /> | <img width="2879" height="1539" alt="Image" src="https://github.com/user-attachments/assets/6e075828-5073-444f-9110-9bccff34d4c4" /> |
 
 <br>
 
@@ -59,17 +59,17 @@
 
 ### 시스템 구조
 
-<!-- TODO: 시스템 아키텍처 이미지 -->
+<img width="1568" height="498" alt="Image" src="https://github.com/user-attachments/assets/38d5f6b6-6d71-4bcc-bdc5-6d126414cef9" />
 
 ### 검색 처리 흐름
 
 하나의 검색 요청이 들어오면 여러 외부 소스를 **병렬로** 호출하여 2.8초 내에 응답합니다.
 
-<!-- TODO: 검색 흐름 이미지 -->
+<img width="1568" height="542" alt="Image" src="https://github.com/user-attachments/assets/2602a181-daa2-48da-bd2b-f2f0a9a629c9" />
 
 ### 배포 파이프라인
 
-<!-- TODO: 배포 파이프라인 이미지 -->
+<img width="1568" height="280" alt="Image" src="https://github.com/user-attachments/assets/749fdf63-4bd2-49b0-be40-5535ef8dd2f4" />
 
 <br>
 
