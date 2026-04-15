@@ -3,6 +3,7 @@ import type {
   SearchResponse,
   ELibraryInfo,
   ELibrarySearchResponse,
+  OffStoreResponse,
 } from '../types'
 
 async function get<T>(url: string, signal?: AbortSignal): Promise<T> {
@@ -52,4 +53,18 @@ export function searchELibraries(
   const p = new URLSearchParams({ query, libraryIds })
   if (fallbackKeyword) p.set('fallbackKeyword', fallbackKeyword)
   return get(`/api/elibraries/search?${p}`, signal)
+}
+
+export function getOffStores(
+  isbn13: string,
+  lat: number,
+  lon: number,
+  signal?: AbortSignal,
+): Promise<OffStoreResponse> {
+  const params = new URLSearchParams({
+    isbn13,
+    lat: String(lat),
+    lon: String(lon),
+  })
+  return get(`/api/off-stores?${params}`, signal)
 }

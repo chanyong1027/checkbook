@@ -99,6 +99,7 @@ class AladinBookServiceTest {
                 new AladinOffStoreResponse.OffStoreInfo("Geondae", "건대점", "https://link3")
         );
         when(aladinClient.getOffStoreList("9788936439743")).thenReturn(apiStores);
+        when(aladinClient.lookupItemId("9788936439743")).thenReturn(Optional.of(123L));
 
         AladinStore jongro = AladinStore.builder()
                 .offCode("Jongno").name("종로점").address("서울 종로구").lat(37.5700).lon(126.9920).build();
@@ -112,8 +113,12 @@ class AladinBookServiceTest {
         assertThat(result.stores()).hasSize(2);
         assertThat(result.stores().get(0).storeName()).isEqualTo("종로점");
         assertThat(result.stores().get(0).distance()).isEqualTo(1.3);
+        assertThat(result.stores().get(0).link())
+                .isEqualTo("https://www.aladin.co.kr/usedstore/wproduct.aspx?ItemId=123&OffCode=Jongno&partner=openAPI");
         assertThat(result.stores().get(1).storeName()).isEqualTo("건대점");
         assertThat(result.stores().get(1).distance()).isGreaterThan(result.stores().get(0).distance());
+        assertThat(result.stores().get(1).link())
+                .isEqualTo("https://www.aladin.co.kr/usedstore/wproduct.aspx?ItemId=123&OffCode=Geondae&partner=openAPI");
     }
 
     @Test
@@ -131,6 +136,7 @@ class AladinBookServiceTest {
                 new AladinOffStoreResponse.OffStoreInfo("NewStore", "신규점", "https://link-new")
         );
         when(aladinClient.getOffStoreList("9788936439743")).thenReturn(apiStores);
+        when(aladinClient.lookupItemId("9788936439743")).thenReturn(Optional.of(456L));
         when(aladinStoreRepository.findByOffCodeIn(List.of("NewStore"))).thenReturn(List.of());
 
         OffStoreResponse result = aladinBookService.getOffStoreList("9788936439743", 37.5665, 126.9780);
@@ -139,6 +145,23 @@ class AladinBookServiceTest {
         assertThat(result.stores().get(0).storeName()).isEqualTo("신규점");
         assertThat(result.stores().get(0).distance()).isNull();
         assertThat(result.stores().get(0).address()).isNull();
+        assertThat(result.stores().get(0).link())
+                .isEqualTo("https://www.aladin.co.kr/usedstore/wproduct.aspx?ItemId=456&OffCode=NewStore&partner=openAPI");
+    }
+
+    @Test
+    void getOffStoreListFallsBackToApiLinkWhenItemIdLookupFails() {
+        List<AladinOffStoreResponse.OffStoreInfo> apiStores = List.of(
+                new AladinOffStoreResponse.OffStoreInfo("Jongno", "종로점", "https://fallback-link")
+        );
+        when(aladinClient.getOffStoreList("9788936439743")).thenReturn(apiStores);
+        when(aladinClient.lookupItemId("9788936439743")).thenReturn(Optional.empty());
+        when(aladinStoreRepository.findByOffCodeIn(List.of("Jongno"))).thenReturn(List.of());
+
+        OffStoreResponse result = aladinBookService.getOffStoreList("9788936439743", 37.5665, 126.9780);
+
+        assertThat(result.stores()).hasSize(1);
+        assertThat(result.stores().get(0).link()).isEqualTo("https://fallback-link");
     }
 
     @Test

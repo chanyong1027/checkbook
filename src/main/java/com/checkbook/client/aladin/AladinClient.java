@@ -121,6 +121,25 @@ public class AladinClient {
         }
     }
 
+    public Optional<Long> lookupItemId(String isbn13) {
+        try {
+            AladinItemResponse response = identificationClient.get()
+                    .uri("/ItemLookUp.aspx?ttbkey={key}&ItemId={isbn13}&ItemIdType=ISBN13&output=js&Version=20131101",
+                            ttbKey, isbn13)
+                    .retrieve()
+                    .body(AladinItemResponse.class);
+
+            if (response == null || response.item() == null || response.item().isEmpty()) {
+                return Optional.empty();
+            }
+
+            return Optional.ofNullable(response.item().get(0).itemId());
+        } catch (Exception e) {
+            log.error("알라딘 ItemId 조회 실패: isbn13={}", isbn13, e);
+            return Optional.empty();
+        }
+    }
+
     private Optional<AladinSearchResult> extractFirst(AladinItemResponse response) {
         if (response == null || response.item() == null || response.item().isEmpty()) {
             return Optional.empty();

@@ -39,6 +39,8 @@ public class AladinBookService {
 
     public OffStoreResponse getOffStoreList(String isbn13, double lat, double lon) {
         List<AladinOffStoreResponse.OffStoreInfo> stores = aladinClient.getOffStoreList(isbn13);
+        Optional<Long> itemId = Optional.ofNullable(aladinClient.lookupItemId(isbn13))
+                .orElse(Optional.empty());
 
         if (stores.isEmpty()) {
             return new OffStoreResponse(List.of());
@@ -72,7 +74,7 @@ public class AladinBookService {
                             apiStore.offName(),
                             address,
                             distance,
-                            apiStore.link(),
+                            resolveStoreLink(itemId.orElse(null), apiStore),
                             storeLat,
                             storeLon
                     );
@@ -83,5 +85,16 @@ public class AladinBookService {
                 .toList();
 
         return new OffStoreResponse(storeInfos);
+    }
+
+    private String resolveStoreLink(Long itemId, AladinOffStoreResponse.OffStoreInfo apiStore) {
+        if (itemId != null && apiStore.offCode() != null && !apiStore.offCode().isBlank()) {
+            return "https://www.aladin.co.kr/usedstore/wproduct.aspx?ItemId="
+                    + itemId
+                    + "&OffCode="
+                    + apiStore.offCode()
+                    + "&partner=openAPI";
+        }
+        return apiStore.link();
     }
 }

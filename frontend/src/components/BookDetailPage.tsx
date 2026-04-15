@@ -6,6 +6,7 @@ import type {
   ELibraryInfo,
   ELibrarySearchResponse,
 } from '../types'
+import { OffStoreList } from './OffStoreList'
 import { BookDetailCard } from './shared/BookDetailCard'
 import { SectionCard } from './shared/SectionCard'
 import { Skeleton } from './shared/Skeleton'
@@ -303,6 +304,8 @@ export function BookDetailPage({ book, onReset }: Props) {
   const [useLocation, setUseLocation] = useState(false)
   const [locLoading, setLocLoading] = useState(false)
   const [locError, setLocError] = useState<string | null>(null)
+  const userLatRef = useRef<number | null>(null)
+  const userLonRef = useRef<number | null>(null)
 
   // Bottom sheet
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -387,6 +390,8 @@ export function BookDetailPage({ book, onReset }: Props) {
     navigator.geolocation.getCurrentPosition(
       pos => {
         const { latitude, longitude } = pos.coords
+        userLatRef.current = latitude
+        userLonRef.current = longitude
         setUseLocation(true)
         setLocLoading(false)
         runSearch(latitude, longitude)
@@ -611,7 +616,6 @@ export function BookDetailPage({ book, onReset }: Props) {
                   {([
                     { label: '개인 판매', price: searchResult.usedBook.userUsedPrice, url: searchResult.usedBook.userUsedUrl },
                     { label: '알라딘 온라인', price: searchResult.usedBook.aladinUsedPrice, url: searchResult.usedBook.aladinUsedUrl },
-                    { label: '알라딘 매장', price: searchResult.usedBook.spaceUsedPrice, url: searchResult.usedBook.spaceUsedUrl },
                   ] as const).map(({ label, price, url }) => (
                     <div key={label} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
                       <p className="text-sm text-slate-600">{label}</p>
@@ -640,6 +644,14 @@ export function BookDetailPage({ book, onReset }: Props) {
                       </div>
                     </div>
                   ))}
+                  <OffStoreList
+                    isbn13={searchResult.book.isbn13 ?? book.isbn13}
+                    lat={userLatRef.current}
+                    lon={userLonRef.current}
+                    spaceUsedPrice={searchResult.usedBook.spaceUsedPrice}
+                    spaceUsedUrl={searchResult.usedBook.spaceUsedUrl}
+                    onRequestLocation={handleGetLocation}
+                  />
                 </div>
               </SectionCard>
             )}

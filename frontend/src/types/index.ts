@@ -49,6 +49,19 @@ export interface UsedBookInfo {
   spaceUsedUrl: string | null
 }
 
+export interface OffStoreInfo {
+  storeName: string
+  address: string | null
+  distance: number | null
+  link: string
+  latitude: number | null
+  longitude: number | null
+}
+
+export interface OffStoreResponse {
+  stores: OffStoreInfo[]
+}
+
 export interface NewBookInfo {
   price: number
   productUrl: string

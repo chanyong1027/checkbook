@@ -55,6 +55,27 @@ class AladinClientTest {
     }
 
     @Test
+    void lookupItemIdParsesFirstItemId() throws Exception {
+        server = new MockWebServer();
+        server.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""
+                        {
+                          "item": [
+                            {
+                              "itemId": 123456
+                            }
+                          ]
+                        }
+                        """));
+        server.start();
+
+        AladinClient client = new AladinClient(baseUrl("/ttb/api"), "test-key", 2000, 2000);
+
+        assertThat(client.lookupItemId("9788936439743")).contains(123456L);
+    }
+
+    @Test
     void getUsedBooksParsesUsedList() throws Exception {
         server = new MockWebServer();
         server.enqueue(new MockResponse()
@@ -153,6 +174,7 @@ class AladinClientTest {
 
         assertThat(client.searchBook("자바")).isEmpty();
         assertThat(client.lookupBook("9788936439743")).isEmpty();
+        assertThat(client.lookupItemId("9788936439743")).isEmpty();
         assertThatThrownBy(() -> client.getUsedBooks("9788936439743"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("알라딘 중고 조회 오류");
