@@ -52,10 +52,10 @@ class ELibrarySearchControllerTest {
                 List.of(),
                 new ELibrarySearchResponse.ELibrarySearchMetadata(123L, LocalDateTime.now(), List.of())
         );
-        when(eLibrarySearchService.search("자바", "3", null)).thenReturn(response);
+        when(eLibrarySearchService.search("자바", null, "3")).thenReturn(response);
 
         mockMvc.perform(get("/api/elibraries/search")
-                        .param("query", "자바")
+                        .param("title", "자바")
                         .param("libraryIds", "3"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.metadata.totalElapsedMs").value(123));
@@ -64,18 +64,18 @@ class ELibrarySearchControllerTest {
     @Test
     void searchWithoutLibraryIdsReturns400() throws Exception {
         mockMvc.perform(get("/api/elibraries/search")
-                        .param("query", "자바"))
+                        .param("title", "자바"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("LIBRARY_IDS_REQUIRED"));
     }
 
     @Test
     void searchInvalidLibraryIdReturns400() throws Exception {
-        when(eLibrarySearchService.search(eq("자바"), eq("abc"), any()))
+        when(eLibrarySearchService.search(eq("자바"), any(), eq("abc")))
                 .thenThrow(new BusinessException(ErrorCode.INVALID_LIBRARY_ID));
 
         mockMvc.perform(get("/api/elibraries/search")
-                        .param("query", "자바")
+                        .param("title", "자바")
                         .param("libraryIds", "abc"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_LIBRARY_ID"));

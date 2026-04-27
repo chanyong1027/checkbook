@@ -25,8 +25,6 @@ import java.util.concurrent.Executors;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -47,7 +45,8 @@ class ELibrarySearchServiceTest {
     @BeforeEach
     void setUp() {
         eLibraryExecutor = Executors.newFixedThreadPool(5);
-        service = new ELibrarySearchService(eLibraryRepository, clientResolver, eLibraryExecutor);
+        service = new ELibrarySearchService(eLibraryRepository, clientResolver, eLibraryExecutor,
+                new ELibraryBookMatcher());
     }
 
     @AfterEach
@@ -57,7 +56,7 @@ class ELibrarySearchServiceTest {
 
     @Test
     void searchMissingLibraryIdsThrowsException() {
-        assertThatThrownBy(() -> service.search("자바", "", null))
+        assertThatThrownBy(() -> service.search("자바의 정석", "남궁성", ""))
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.LIBRARY_IDS_REQUIRED);
@@ -67,7 +66,7 @@ class ELibrarySearchServiceTest {
     void searchTooManyIdsThrowsException() {
         String ids = "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21";
 
-        assertThatThrownBy(() -> service.search("자바", ids, null))
+        assertThatThrownBy(() -> service.search("자바의 정석", "남궁성", ids))
                 .isInstanceOf(BusinessException.class)
                 .extracting(exception -> ((BusinessException) exception).getErrorCode())
                 .isEqualTo(ErrorCode.LIBRARY_IDS_LIMIT_EXCEEDED);
@@ -82,9 +81,9 @@ class ELibrarySearchServiceTest {
         when(mockClient.search(anyString(), anyString())).thenReturn(List.of());
 
         ELibrarySearchResponse response = service.search(
-                "자바",
-                "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1",
-                null
+                "자바의 정석",
+                "남궁성",
+                "1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1"
         );
 
         assertThat(response.results()).hasSize(1);
@@ -95,7 +94,7 @@ class ELibrarySearchServiceTest {
     void searchStaleIdRecordedAsFailure() {
         when(eLibraryRepository.findAllById(List.of(999L))).thenReturn(List.of());
 
-        ELibrarySearchResponse response = service.search("자바", "999", null);
+        ELibrarySearchResponse response = service.search("자바의 정석", "남궁성", "999");
 
         assertThat(response.results()).isEmpty();
         assertThat(response.metadata().failures()).hasSize(1);
@@ -113,7 +112,7 @@ class ELibrarySearchServiceTest {
                         "자바의 정석", "남궁성", "도우출판", null, true, null
                 )));
 
-        ELibrarySearchResponse response = service.search("자바", "3", null);
+        ELibrarySearchResponse response = service.search("자바의 정석", "남궁성", "3");
 
         assertThat(response.results()).hasSize(1);
         assertThat(response.results().get(0).status()).isEqualTo(ELibrarySearchStatus.SUCCESS);
@@ -129,7 +128,7 @@ class ELibrarySearchServiceTest {
 
         when(eLibraryRepository.findAllById(List.of(3L, 5L))).thenReturn(List.of(inactive, loginRequired));
 
-        ELibrarySearchResponse response = service.search("자바", "3,5", null);
+        ELibrarySearchResponse response = service.search("자바의 정석", "남궁성", "3,5");
 
         assertThat(response.results()).isEmpty();
         assertThat(response.metadata().failures()).hasSize(2);
@@ -139,53 +138,17 @@ class ELibrarySearchServiceTest {
     }
 
     @Test
-    void searchFallbackRunsOnlyForIsbnQuery() {
-        ELibrary library = activeLibrary(3L);
-
-        when(eLibraryRepository.findAllById(List.of(3L))).thenReturn(List.of(library));
-        when(clientResolver.resolve(VendorType.KYOBO)).thenReturn(mockClient);
-        when(mockClient.search(library.getBaseUrl(), "9788936439743")).thenReturn(List.of());
-        when(mockClient.search(library.getBaseUrl(), "혼자가 혼자에게"))
-                .thenReturn(List.of(new ELibrarySearchResponse.ELibraryBook(
-                        "혼자가 혼자에게", "성해나", "창비", null, true, null
-                )));
-
-        ELibrarySearchResponse response = service.search("9788936439743", "3", "혼자가 혼자에게");
-
-        assertThat(response.results()).hasSize(1);
-        assertThat(response.results().get(0).books()).hasSize(1);
-        verify(mockClient).search(library.getBaseUrl(), "9788936439743");
-        verify(mockClient).search(library.getBaseUrl(), "혼자가 혼자에게");
-    }
-
-    @Test
-    void searchFallbackDoesNotRunForKeywordQuery() {
-        ELibrary library = activeLibrary(3L);
-
-        when(eLibraryRepository.findAllById(List.of(3L))).thenReturn(List.of(library));
-        when(clientResolver.resolve(VendorType.KYOBO)).thenReturn(mockClient);
-        when(mockClient.search(library.getBaseUrl(), "혼모노")).thenReturn(List.of());
-
-        ELibrarySearchResponse response = service.search("혼모노", "3", "혼자가 혼자에게");
-
-        assertThat(response.results()).hasSize(1);
-        assertThat(response.results().get(0).books()).isEmpty();
-        verify(mockClient).search(library.getBaseUrl(), "혼모노");
-        verify(mockClient, never()).search(library.getBaseUrl(), "혼자가 혼자에게");
-    }
-
-    @Test
     void searchClientThrowsMarksLibraryAsFailed() {
         ELibrary library = activeLibrary(3L);
 
         when(eLibraryRepository.findAllById(List.of(3L))).thenReturn(List.of(library));
         when(clientResolver.resolve(VendorType.KYOBO)).thenReturn(mockClient);
-        when(mockClient.search(library.getBaseUrl(), "자바")).thenAnswer(invocation -> {
+        when(mockClient.search(library.getBaseUrl(), "자바의 정석")).thenAnswer(invocation -> {
             Thread.sleep(25);
             throw new RuntimeException("parse error");
         });
 
-        ELibrarySearchResponse response = service.search("자바", "3", null);
+        ELibrarySearchResponse response = service.search("자바의 정석", "남궁성", "3");
 
         assertThat(response.results()).hasSize(1);
         assertThat(response.results().get(0).status()).isEqualTo(ELibrarySearchStatus.FAILED);
@@ -201,16 +164,55 @@ class ELibrarySearchServiceTest {
 
         when(eLibraryRepository.findAllById(List.of(3L))).thenReturn(List.of(library));
         when(clientResolver.resolve(VendorType.KYOBO)).thenReturn(mockClient);
-        when(mockClient.search(library.getBaseUrl(), "자바")).thenAnswer(invocation -> {
+        when(mockClient.search(library.getBaseUrl(), "자바의 정석")).thenAnswer(invocation -> {
             Thread.sleep(80);
             return List.of();
         });
 
-        ELibrarySearchResponse response = service.search("자바", "3", null);
+        ELibrarySearchResponse response = service.search("자바의 정석", "남궁성", "3");
 
         assertThat(response.results()).hasSize(1);
         assertThat(response.results().get(0).status()).isEqualTo(ELibrarySearchStatus.TIMEOUT);
         assertThat(response.results().get(0).elapsedMs()).isGreaterThanOrEqualTo(20L);
+    }
+
+    @Test
+    void unrelatedBooksAreFilteredOut() {
+        ELibrary library = activeLibrary(1L);
+        when(eLibraryRepository.findAllById(List.of(1L))).thenReturn(List.of(library));
+        when(clientResolver.resolve(library.getVendorType())).thenReturn(mockClient);
+        when(mockClient.search(anyString(), anyString())).thenReturn(List.of(
+                new ELibrarySearchResponse.ELibraryBook("인간실격", "다자이 오사무", null, null, true, null),
+                new ELibrarySearchResponse.ELibraryBook("인간실격 따라쓰기", "정리남", null, null, true, null)
+        ));
+
+        ELibrarySearchResponse res = service.search("인간실격", "다자이 오사무", "1");
+
+        assertThat(res.results()).hasSize(1);
+        assertThat(res.results().get(0).books()).hasSize(1);
+        assertThat(res.results().get(0).books().get(0).title()).isEqualTo("인간실격");
+    }
+
+    @Test
+    void emptyAuthorOnVendor_passesViaTitleOnly() {
+        ELibrary library = activeLibrary(1L);
+        when(eLibraryRepository.findAllById(List.of(1L))).thenReturn(List.of(library));
+        when(clientResolver.resolve(library.getVendorType())).thenReturn(mockClient);
+        when(mockClient.search(anyString(), anyString())).thenReturn(List.of(
+                new ELibrarySearchResponse.ELibraryBook("인간실격", null, null, null, true, null)
+        ));
+
+        ELibrarySearchResponse res = service.search("인간실격", "다자이 오사무", "1");
+
+        assertThat(res.results().get(0).books()).hasSize(1);
+    }
+
+    @Test
+    void titleMissing_throws() {
+        assertThatThrownBy(() -> service.search("", "다자이 오사무", "1"))
+                .isInstanceOf(BusinessException.class)
+                .extracting(e -> ((BusinessException) e).getErrorCode())
+                .isEqualTo(ErrorCode.INVALID_SEARCH_KEYWORD);
     }
 
     private ELibrary activeLibrary(Long id) {

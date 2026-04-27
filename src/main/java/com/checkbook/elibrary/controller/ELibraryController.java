@@ -38,12 +38,12 @@ public class ELibraryController {
 
     @GetMapping("/search")
     public ResponseEntity<ELibrarySearchResponse> searchLibraries(
-            @RequestParam("query") @NotBlank @Size(max = 200) String query,
-            @RequestParam("libraryIds") @NotBlank String libraryIds,
-            @RequestParam(required = false) @Size(max = 200) String fallbackKeyword
+            @RequestParam("title") @NotBlank @Size(max = 200) String title,
+            @RequestParam(value = "author", required = false) @Size(max = 200) String author,
+            @RequestParam("libraryIds") @NotBlank String libraryIds
     ) {
         return ResponseEntity.ok(
-                eLibrarySearchService.search(query, libraryIds, fallbackKeyword)
+                eLibrarySearchService.search(title, author, libraryIds)
         );
     }
 }

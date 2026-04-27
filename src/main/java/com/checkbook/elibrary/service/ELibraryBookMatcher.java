@@ -100,6 +100,10 @@ public class ELibraryBookMatcher {
         return new MatchResult(false, MatchPath.NONE);
     }
 
+    public String debugNormTitle(String raw) { return normalizeTitle(raw); }
+    public String debugNormTitlePrefix(String raw) { return normalizeTitlePrefix(raw); }
+    public Set<String> debugAuthorTokens(String raw) { return normalizeAuthorTokens(raw); }
+
     private String normalizeTitle(String raw) {
         if (raw == null) return "";
         String s = raw;

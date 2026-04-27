@@ -2,7 +2,6 @@ package com.checkbook.elibrary.service;
 
 import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
-import com.checkbook.common.util.InputNormalizer;
 import com.checkbook.elibrary.client.ELibClient;
 import com.checkbook.elibrary.client.ELibClientResolver;
 import com.checkbook.elibrary.domain.ELibrary;
@@ -17,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -35,6 +35,7 @@ public class ELibrarySearchService {
     private final ELibraryRepository eLibraryRepository;
     private final ELibClientResolver eLibClientResolver;
     private final ExecutorService eLibraryExecutor;
+    private final ELibraryBookMatcher matcher;
 
     @Value("${elibrary.per-library-timeout:15000}")
     private long perLibraryTimeoutMs = 15_000;
@@ -45,16 +46,21 @@ public class ELibrarySearchService {
     public ELibrarySearchService(
             ELibraryRepository eLibraryRepository,
             ELibClientResolver eLibClientResolver,
-            @Qualifier("eLibraryExecutor") ExecutorService eLibraryExecutor
+            @Qualifier("eLibraryExecutor") ExecutorService eLibraryExecutor,
+            ELibraryBookMatcher matcher
     ) {
         this.eLibraryRepository = eLibraryRepository;
         this.eLibClientResolver = eLibClientResolver;
         this.eLibraryExecutor = eLibraryExecutor;
+        this.matcher = matcher;
     }
 
-    public ELibrarySearchResponse search(String query, String libraryIds, String fallbackKeyword) {
+    public ELibrarySearchResponse search(String title, String author, String libraryIds) {
+        if (title == null || title.isBlank()) {
+            throw new BusinessException(ErrorCode.INVALID_SEARCH_KEYWORD);
+        }
         List<Long> ids = parseLibraryIds(libraryIds);
-        InputNormalizer.NormalizedQuery normalizedQuery = InputNormalizer.normalize(query);
+        ELibraryBookMatcher.Selected selected = new ELibraryBookMatcher.Selected(title, author);
 
         long startAll = System.currentTimeMillis();
 
@@ -84,7 +90,7 @@ public class ELibrarySearchService {
             long startedAt = System.currentTimeMillis();
             futureMap.put(id, new ScrapeTask(
                     CompletableFuture
-                            .supplyAsync(() -> searchBooks(library, normalizedQuery, fallbackKeyword), eLibraryExecutor)
+                            .supplyAsync(() -> searchBooks(library, selected), eLibraryExecutor)
                             .orTimeout(perLibraryTimeoutMs, TimeUnit.MILLISECONDS),
                     startedAt
             ));
@@ -122,30 +128,68 @@ public class ELibrarySearchService {
         );
     }
 
-    private ScrapeOutcome searchBooks(
-            ELibrary library,
-            InputNormalizer.NormalizedQuery normalizedQuery,
-            String fallbackKeyword
-    ) {
+    private ScrapeOutcome searchBooks(ELibrary library, ELibraryBookMatcher.Selected selected) {
         long start = System.currentTimeMillis();
         ELibClient client = eLibClientResolver.resolve(library.getVendorType());
-        List<ELibrarySearchResponse.ELibraryBook> books = client.search(
+        List<ELibrarySearchResponse.ELibraryBook> raw = client.search(
                 library.getBaseUrl(),
-                normalizedQuery.value()
+                selected.title()
         );
 
-        boolean shouldFallback = normalizedQuery.type() == InputNormalizer.QueryType.ISBN
-                && books.isEmpty()
-                && fallbackKeyword != null
-                && !fallbackKeyword.isBlank();
-
-        if (shouldFallback) {
-            log.info("전자도서관 fallback 검색: library={}, isbnQuery={}, fallbackKeyword={}",
-                    library.getName(), normalizedQuery.value(), fallbackKeyword);
-            books = client.search(library.getBaseUrl(), fallbackKeyword);
+        List<ELibrarySearchResponse.ELibraryBook> kept = new ArrayList<>();
+        Map<ELibraryBookMatcher.MatchPath, Integer> pathCounts = new EnumMap<>(ELibraryBookMatcher.MatchPath.class);
+        for (ELibrarySearchResponse.ELibraryBook book : raw) {
+            ELibraryBookMatcher.MatchResult r = matcher.match(book, selected);
+            if (r.matched()) {
+                kept.add(book);
+                pathCounts.merge(r.path(), 1, Integer::sum);
+            }
         }
 
-        return new ScrapeOutcome(books, System.currentTimeMillis() - start);
+        logFilterSignal(library, selected, raw, kept, pathCounts);
+
+        return new ScrapeOutcome(kept, System.currentTimeMillis() - start);
+    }
+
+    private void logFilterSignal(
+            ELibrary library,
+            ELibraryBookMatcher.Selected selected,
+            List<ELibrarySearchResponse.ELibraryBook> raw,
+            List<ELibrarySearchResponse.ELibraryBook> kept,
+            Map<ELibraryBookMatcher.MatchPath, Integer> pathCounts
+    ) {
+        String caseType;
+        if (!raw.isEmpty() && kept.isEmpty()) {
+            caseType = "filtered_to_zero";
+        } else if (kept.size() >= 2) {
+            caseType = "multiple_kept";
+        } else if (kept.size() == 1
+                && pathCounts.getOrDefault(ELibraryBookMatcher.MatchPath.TITLE_ONLY, 0) > 0) {
+            caseType = "title_only_pass";
+        } else {
+            return; // normal single-pass — don't log
+        }
+
+        List<String> rawTitles = caseType.equals("filtered_to_zero")
+                ? raw.stream().map(ELibrarySearchResponse.ELibraryBook::title).limit(10).toList()
+                : List.of();
+        List<String> keptTitles = kept.stream()
+                .map(ELibrarySearchResponse.ELibraryBook::title).limit(10).toList();
+
+        String pathCountsStr = pathCounts.entrySet().stream()
+                .map(e -> e.getKey().name() + ":" + e.getValue())
+                .collect(Collectors.joining(","));
+
+        log.info("elibraryFilterSignal case={} libraryId={} libraryName={} vendor={} "
+                        + "selectedTitle={} selectedAuthor={} vendorQuery={} "
+                        + "rawCount={} keptCount={} rawTitles={} keptTitles={} matchPathCounts={} "
+                        + "normSelectedTitle={} normSelectedPrefix={} selAuthorTokens={}",
+                caseType, library.getId(), library.getName(), library.getVendorType(),
+                selected.title(), selected.author(), selected.title(),
+                raw.size(), kept.size(), rawTitles, keptTitles, pathCountsStr,
+                matcher.debugNormTitle(selected.title()),
+                matcher.debugNormTitlePrefix(selected.title()),
+                matcher.debugAuthorTokens(selected.author()));
     }
 
     private ELibrarySearchResponse.ELibraryResult toResult(
