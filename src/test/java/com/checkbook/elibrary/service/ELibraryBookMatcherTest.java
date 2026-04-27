@@ -129,6 +129,14 @@ class ELibraryBookMatcherTest {
             assertThat(r.matched()).isTrue();
             assertThat(r.path()).isEqualTo(MatchPath.TITLE_ONLY);
         }
+
+        @Test
+        void emptyAuthorWithAuthorEmbeddedInTitle_passesViaTitleOnly() {
+            Selected sel = new Selected("인간실격", "다자이 오사무");
+            MatchResult r = matcher.match(book("인간실격, 다자이 오사무", null), sel);
+            assertThat(r.matched()).isTrue();
+            assertThat(r.path()).isEqualTo(MatchPath.TITLE_ONLY);
+        }
     }
 
     @Nested

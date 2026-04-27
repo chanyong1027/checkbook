@@ -90,8 +90,11 @@ public class ELibraryBookMatcher {
 
         if (!candStripped.isEmpty()
                 && (selNorm.equals(candStripped) || selPrefix.equals(candStripped))) {
-            return new MatchResult(candAuthorTokens.isEmpty() ? false : true,
-                    MatchPath.AUTHOR_STRIPPED);
+            // 벤더가 저자 파싱에 실패(빈 저자)했고 제목에 저자명이 섞여있는 케이스도
+            // 동일하게 통과시킨다. 이때 path는 TITLE_ONLY로 — 파서 drift 신호가 더 우선.
+            return new MatchResult(true, candAuthorTokens.isEmpty()
+                    ? MatchPath.TITLE_ONLY
+                    : MatchPath.AUTHOR_STRIPPED);
         }
 
         return new MatchResult(false, MatchPath.NONE);
