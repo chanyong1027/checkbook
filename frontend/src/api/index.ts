@@ -45,13 +45,13 @@ export function getELibraries(params?: {
 }
 
 export function searchELibraries(
-  query: string,
+  title: string,
+  author: string | null | undefined,
   libraryIds: string,
-  fallbackKeyword?: string,
   signal?: AbortSignal,
 ): Promise<ELibrarySearchResponse> {
-  const p = new URLSearchParams({ query, libraryIds })
-  if (fallbackKeyword) p.set('fallbackKeyword', fallbackKeyword)
+  const p = new URLSearchParams({ title, libraryIds })
+  if (author) p.set('author', author)
   return get(`/api/elibraries/search?${p}`, signal)
 }
 

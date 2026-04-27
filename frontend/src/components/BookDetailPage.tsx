@@ -348,7 +348,7 @@ export function BookDetailPage({ book, onReset }: Props) {
     elibAbort.current = controller
     setElibLoading(true)
     setElibError(null)
-    searchELibraries(book.isbn13, ids.join(','), book.title, controller.signal)
+    searchELibraries(book.title, book.author, ids.join(','), controller.signal)
       .then(res => {
         if (elibAbort.current === controller) setElibResult(res)
       })
