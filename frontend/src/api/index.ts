@@ -5,12 +5,12 @@ import type {
   ELibrarySearchResponse,
   OffStoreResponse,
 } from '../types'
+import { toApiError } from './errors.ts'
 
 async function get<T>(url: string, signal?: AbortSignal): Promise<T> {
   const res = await fetch(url, signal ? { signal } : undefined)
   if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`${res.status} ${text}`)
+    throw await toApiError(res)
   }
   return res.json() as Promise<T>
 }

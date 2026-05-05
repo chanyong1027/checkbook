@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { searchBooks } from '../api'
+import { toUserMessage } from '../api/errors.ts'
 import type { BookCandidate } from '../types'
 
 interface Props {
@@ -136,7 +137,7 @@ export function BookSearchStep({ onSelect }: Props) {
       saveHistory(q.trim())
       setHistory(getHistory())
     } catch (err) {
-      setError(err instanceof Error ? err.message : '검색 실패')
+      setError(toUserMessage(err, '도서 검색 중 오류가 발생했습니다.'))
     } finally {
       setLoading(false)
     }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { searchMain, searchELibraries, getELibraries } from '../api'
+import { toUserMessage } from '../api/errors.ts'
 import type {
   BookCandidate,
   SearchResponse,
@@ -133,7 +134,7 @@ function ELibrarySelector({
   useEffect(() => {
     getELibraries()
       .then(setLibraries)
-      .catch(e => setError(e instanceof Error ? e.message : '목록 로드 실패'))
+      .catch(e => setError(toUserMessage(e, '전자도서관 목록을 불러오지 못했습니다.')))
       .finally(() => setLoading(false))
   }, [])
 
@@ -328,7 +329,7 @@ export function BookDetailPage({ book, onReset }: Props) {
       })
       .catch(err => {
         if (err.name !== 'AbortError' && searchAbort.current === controller) {
-          setSearchError(err instanceof Error ? err.message : '검색 실패')
+          setSearchError(toUserMessage(err, '통합 검색 중 오류가 발생했습니다.'))
         }
       })
       .finally(() => {
@@ -354,7 +355,7 @@ export function BookDetailPage({ book, onReset }: Props) {
       })
       .catch(err => {
         if (err.name !== 'AbortError' && elibAbort.current === controller) {
-          setElibError(err instanceof Error ? err.message : '검색 실패')
+          setElibError(toUserMessage(err, '전자도서관 검색 중 오류가 발생했습니다.'))
         }
       })
       .finally(() => {
