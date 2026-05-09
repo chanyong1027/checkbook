@@ -46,7 +46,7 @@ echo "컨테이너 시작 중..."
 docker run -d \
   --name checkbook \
   --env-file "$ENV_FILE" \
-  -p 80:8080 \
+  -p 127.0.0.1:8080:8080 \
   --restart unless-stopped \
   "$DOCKERHUB_IMAGE"
 
@@ -56,10 +56,18 @@ rm "$ENV_FILE"
 # 헬스 체크 (10초 대기 후 확인)
 echo "헬스 체크 대기 중..."
 sleep 30
-if curl -sf http://localhost/actuator/health > /dev/null; then
+if curl -sf http://127.0.0.1:8080/actuator/health > /dev/null; then
+  echo "localhost 헬스 체크 통과"
+else
+  echo "=== 경고: localhost 헬스 체크 실패. 로그 확인 필요 ==="
+  docker logs --tail 50 checkbook
+  exit 1
+fi
+
+# 외부 HTTPS 헬스 체크 (Nginx + Let's Encrypt 경로 검증)
+if curl -sf https://api.checkbook.site/actuator/health > /dev/null; then
   echo "=== 배포 완료: $(date) ==="
 else
-  echo "=== 경고: 헬스 체크 실패. 로그 확인 필요 ==="
-  docker logs --tail 50 checkbook
+  echo "=== 경고: 외부 HTTPS 헬스 체크 실패. Nginx/인증서/DNS 확인 필요 ==="
   exit 1
 fi

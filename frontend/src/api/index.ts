@@ -7,8 +7,14 @@ import type {
 } from '../types'
 import { toApiError } from './errors.ts'
 
-async function get<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(url, signal ? { signal } : undefined)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
+
+function apiUrl(path: string): string {
+  return `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
+}
+
+async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(apiUrl(path), signal ? { signal } : undefined)
   if (!res.ok) {
     throw await toApiError(res)
   }
