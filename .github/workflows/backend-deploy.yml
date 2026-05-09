@@ -64,10 +64,23 @@ jobs:
           cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/checkbook:buildcache
           cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/checkbook:buildcache,mode=max
 
+      - name: deploy.sh를 EC2로 복사
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: scripts/deploy.sh
+          target: /home/ubuntu/
+          strip_components: 1
+          overwrite: true
+
       - name: EC2에 배포
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          script: /home/ubuntu/deploy.sh
+          script: |
+            chmod +x /home/ubuntu/deploy.sh
+            /home/ubuntu/deploy.sh
