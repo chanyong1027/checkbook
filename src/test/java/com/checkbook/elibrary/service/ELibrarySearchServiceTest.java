@@ -2,6 +2,8 @@ package com.checkbook.elibrary.service;
 
 import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
+import com.checkbook.common.matcher.BookMatcher;
+import com.checkbook.common.matcher.BookMetadataNormalizer;
 import com.checkbook.elibrary.client.ELibClient;
 import com.checkbook.elibrary.client.ELibClientResolver;
 import com.checkbook.elibrary.domain.ELibrary;
@@ -45,8 +47,9 @@ class ELibrarySearchServiceTest {
     @BeforeEach
     void setUp() {
         eLibraryExecutor = Executors.newFixedThreadPool(5);
+        BookMetadataNormalizer normalizer = new BookMetadataNormalizer();
         service = new ELibrarySearchService(eLibraryRepository, clientResolver, eLibraryExecutor,
-                new ELibraryBookMatcher());
+                new BookMatcher(normalizer), normalizer);
     }
 
     @AfterEach

@@ -2,6 +2,8 @@ package com.checkbook.elibrary.service;
 
 import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
+import com.checkbook.common.matcher.BookMatcher;
+import com.checkbook.common.matcher.BookMetadataNormalizer;
 import com.checkbook.elibrary.client.ELibClient;
 import com.checkbook.elibrary.client.ELibClientResolver;
 import com.checkbook.elibrary.domain.ELibrary;
@@ -35,7 +37,8 @@ public class ELibrarySearchService {
     private final ELibraryRepository eLibraryRepository;
     private final ELibClientResolver eLibClientResolver;
     private final ExecutorService eLibraryExecutor;
-    private final ELibraryBookMatcher matcher;
+    private final BookMatcher matcher;
+    private final BookMetadataNormalizer normalizer;
 
     @Value("${elibrary.per-library-timeout:15000}")
     private long perLibraryTimeoutMs = 15_000;
@@ -47,12 +50,14 @@ public class ELibrarySearchService {
             ELibraryRepository eLibraryRepository,
             ELibClientResolver eLibClientResolver,
             @Qualifier("eLibraryExecutor") ExecutorService eLibraryExecutor,
-            ELibraryBookMatcher matcher
+            BookMatcher matcher,
+            BookMetadataNormalizer normalizer
     ) {
         this.eLibraryRepository = eLibraryRepository;
         this.eLibClientResolver = eLibClientResolver;
         this.eLibraryExecutor = eLibraryExecutor;
         this.matcher = matcher;
+        this.normalizer = normalizer;
     }
 
     public ELibrarySearchResponse search(String title, String author, String libraryIds) {
@@ -60,7 +65,7 @@ public class ELibrarySearchService {
             throw new BusinessException(ErrorCode.INVALID_SEARCH_KEYWORD);
         }
         List<Long> ids = parseLibraryIds(libraryIds);
-        ELibraryBookMatcher.Selected selected = new ELibraryBookMatcher.Selected(title, author);
+        BookMatcher.Selected selected = new BookMatcher.Selected(title, author);
 
         long startAll = System.currentTimeMillis();
 
@@ -128,7 +133,7 @@ public class ELibrarySearchService {
         );
     }
 
-    private ScrapeOutcome searchBooks(ELibrary library, ELibraryBookMatcher.Selected selected) {
+    private ScrapeOutcome searchBooks(ELibrary library, BookMatcher.Selected selected) {
         long start = System.currentTimeMillis();
         ELibClient client = eLibClientResolver.resolve(library.getVendorType());
         List<ELibrarySearchResponse.ELibraryBook> raw = client.search(
@@ -137,9 +142,9 @@ public class ELibrarySearchService {
         );
 
         List<ELibrarySearchResponse.ELibraryBook> kept = new ArrayList<>();
-        Map<ELibraryBookMatcher.MatchPath, Integer> pathCounts = new EnumMap<>(ELibraryBookMatcher.MatchPath.class);
+        Map<BookMatcher.MatchPath, Integer> pathCounts = new EnumMap<>(BookMatcher.MatchPath.class);
         for (ELibrarySearchResponse.ELibraryBook book : raw) {
-            ELibraryBookMatcher.MatchResult r = matcher.match(book, selected);
+            BookMatcher.MatchResult r = matcher.match(book.title(), book.author(), selected);
             if (r.matched()) {
                 kept.add(book);
                 pathCounts.merge(r.path(), 1, Integer::sum);
@@ -153,10 +158,10 @@ public class ELibrarySearchService {
 
     private void logFilterSignal(
             ELibrary library,
-            ELibraryBookMatcher.Selected selected,
+            BookMatcher.Selected selected,
             List<ELibrarySearchResponse.ELibraryBook> raw,
             List<ELibrarySearchResponse.ELibraryBook> kept,
-            Map<ELibraryBookMatcher.MatchPath, Integer> pathCounts
+            Map<BookMatcher.MatchPath, Integer> pathCounts
     ) {
         String caseType;
         if (!raw.isEmpty() && kept.isEmpty()) {
@@ -164,7 +169,7 @@ public class ELibrarySearchService {
         } else if (kept.size() >= 2) {
             caseType = "multiple_kept";
         } else if (kept.size() == 1
-                && pathCounts.getOrDefault(ELibraryBookMatcher.MatchPath.TITLE_ONLY, 0) > 0) {
+                && pathCounts.getOrDefault(BookMatcher.MatchPath.TITLE_ONLY, 0) > 0) {
             caseType = "title_only_pass";
         } else {
             return; // normal single-pass — don't log
@@ -187,9 +192,9 @@ public class ELibrarySearchService {
                 caseType, library.getId(), library.getName(), library.getVendorType(),
                 selected.title(), selected.author(), selected.title(),
                 raw.size(), kept.size(), rawTitles, keptTitles, pathCountsStr,
-                matcher.debugNormTitle(selected.title()),
-                matcher.debugNormTitlePrefix(selected.title()),
-                matcher.debugAuthorTokens(selected.author()));
+                normalizer.debugNormTitle(selected.title()),
+                normalizer.debugNormTitlePrefix(selected.title()),
+                normalizer.debugAuthorTokens(selected.author()));
     }
 
     private ELibrarySearchResponse.ELibraryResult toResult(
