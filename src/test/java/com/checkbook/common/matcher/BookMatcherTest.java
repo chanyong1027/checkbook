@@ -143,4 +143,14 @@ class BookMatcherTest {
             assertThat(r.matched()).isFalse();
         }
     }
+
+    @Nested
+    class EmptyNormalizationGuard {
+        @Test
+        void bothTitlesNormalizeToEmpty_doesNotMatch() {
+            Selected sel = new Selected("(개정판)", "다자이 오사무");
+            MatchResult r = matcher.match("(개정판)", "다자이 오사무", sel);
+            assertThat(r.matched()).isFalse();
+        }
+    }
 }

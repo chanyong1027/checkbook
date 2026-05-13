@@ -127,8 +127,10 @@ public class BookMetadataNormalizer {
     }
 
     public String stripAuthorTokensFromTitle(String normTitle, Set<String> authorTokens) {
+        List<String> sorted = new ArrayList<>(authorTokens);
+        sorted.sort((a, b) -> Integer.compare(b.length(), a.length()));
         String s = normTitle;
-        for (String t : authorTokens) {
+        for (String t : sorted) {
             if (t.length() < 2) continue;
             s = s.replace(t, "");
         }
