@@ -35,12 +35,15 @@ public class BookMatcher {
             return new MatchResult(false, MatchPath.NONE);
         }
 
-        if (selNorm.equals(candNorm) || selPrefix.equals(candNorm)
-                || selNorm.equals(candPrefix) || selPrefix.equals(candPrefix)) {
-            boolean isPrefixHit = !selNorm.equals(candNorm);
+        boolean candHasContent = !candNorm.isEmpty() || !candPrefix.isEmpty();
+        boolean selHasContent = !selNorm.isEmpty() || !selPrefix.isEmpty();
+        if (candHasContent && selHasContent
+                && (selNorm.equals(candNorm) || selPrefix.equals(candNorm)
+                    || selNorm.equals(candPrefix) || selPrefix.equals(candPrefix))) {
+            boolean trueNormHit = !candNorm.isEmpty() && selNorm.equals(candNorm);
             boolean titleOnly = candAuthorTokens.isEmpty();
             if (titleOnly) return new MatchResult(true, MatchPath.TITLE_ONLY);
-            return new MatchResult(true, isPrefixHit ? MatchPath.PREFIX : MatchPath.NORM_TITLE);
+            return new MatchResult(true, trueNormHit ? MatchPath.NORM_TITLE : MatchPath.PREFIX);
         }
 
         if (!candStripped.isEmpty()
