@@ -39,6 +39,10 @@ datanaru:
   base-url: https://data4library.kr/api
   timeout: 2000
 
+millie:
+  base-url: https://live-api.millie.co.kr
+  timeout: 2000
+
 search:
   total-deadline: 2800
   public-library-top-n: 20
