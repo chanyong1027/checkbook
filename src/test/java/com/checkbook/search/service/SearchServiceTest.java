@@ -1,6 +1,7 @@
 package com.checkbook.search.service;
 
 import com.checkbook.client.aladin.dto.AladinSearchResult;
+import com.checkbook.client.aladin.dto.AladinUsedBookResult;
 import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
 import com.checkbook.common.util.InputNormalizer;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
@@ -29,6 +31,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -207,5 +211,122 @@ class SearchServiceTest {
                 16800,
                 "https://www.aladin.co.kr/shop/wproduct.aspx?ISBN=9788936439743"
         ));
+    }
+
+    // ===== 밀리 fan-out 케이스 =====
+
+    @Test
+    void millieAvailable_returnsSubscriptionWithMillieAvailable() {
+        AladinSearchResult aladinResult = new AladinSearchResult(
+                "9788936439743", "테스트책", "테스트저자", "민음사", null, 15000);
+        when(aladinBookService.identify(any())).thenReturn(Optional.of(aladinResult));
+        when(aladinBookService.getUsedBooks("9788936439743"))
+                .thenReturn(new AladinUsedBookResult(null, null, null, null, null, null));
+        when(millieBookService.findAvailability(aladinResult))
+                .thenReturn(new MillieAvailability(
+                        true, "ABC123",
+                        "https://www.millie.co.kr/v3/book/ABC123",
+                        MillieAvailability.Format.EBOOK));
+
+        SearchResponse response = searchService.search("9788936439743", null, null);
+
+        assertThat(response.subscription()).isNotNull();
+        assertThat(response.subscription().millie()).isNotNull();
+        assertThat(response.subscription().millie().available()).isTrue();
+        assertThat(response.subscription().millie().bookSeq()).isEqualTo("ABC123");
+        assertThat(response.subscription().millie().format()).isEqualTo(MillieAvailability.Format.EBOOK);
+        assertThat(response.metadata().sectionStatuses())
+                .filteredOn(s -> s.section() == SearchSection.SUBSCRIPTION)
+                .extracting(SearchResponse.SectionStatusDetail::status)
+                .containsExactly(SearchSectionStatus.SUCCESS);
+    }
+
+    @Test
+    void millieUnavailable_returnsSubscriptionWithMillieUnavailable_statusSuccess() {
+        AladinSearchResult aladinResult = new AladinSearchResult(
+                "9788936439743", "테스트책", "테스트저자", "민음사", null, 15000);
+        when(aladinBookService.identify(any())).thenReturn(Optional.of(aladinResult));
+        when(aladinBookService.getUsedBooks("9788936439743"))
+                .thenReturn(new AladinUsedBookResult(null, null, null, null, null, null));
+        when(millieBookService.findAvailability(aladinResult))
+                .thenReturn(MillieAvailability.unavailable());
+
+        SearchResponse response = searchService.search("9788936439743", null, null);
+
+        assertThat(response.subscription().millie().available()).isFalse();
+        assertThat(response.subscription().millie().bookSeq()).isNull();
+        assertThat(response.metadata().sectionStatuses())
+                .filteredOn(s -> s.section() == SearchSection.SUBSCRIPTION)
+                .extracting(SearchResponse.SectionStatusDetail::status)
+                .containsExactly(SearchSectionStatus.SUCCESS);
+    }
+
+    @Test
+    void millieThrows_returnsSubscriptionFailed_withFailureDetail() {
+        AladinSearchResult aladinResult = new AladinSearchResult(
+                "9788936439743", "테스트책", "테스트저자", "민음사", null, 15000);
+        when(aladinBookService.identify(any())).thenReturn(Optional.of(aladinResult));
+        when(aladinBookService.getUsedBooks("9788936439743"))
+                .thenReturn(new AladinUsedBookResult(null, null, null, null, null, null));
+        when(millieBookService.findAvailability(aladinResult))
+                .thenThrow(new RuntimeException("밀리 서버 오류"));
+
+        SearchResponse response = searchService.search("9788936439743", null, null);
+
+        assertThat(response.subscription().millie().available()).isFalse();
+        assertThat(response.metadata().sectionStatuses())
+                .filteredOn(s -> s.section() == SearchSection.SUBSCRIPTION)
+                .extracting(SearchResponse.SectionStatusDetail::status)
+                .containsExactly(SearchSectionStatus.FAILED);
+        assertThat(response.metadata().failures())
+                .filteredOn(f -> f.section() == SearchSection.SUBSCRIPTION)
+                .hasSize(1);
+    }
+
+    @Test
+    void aladinFailsIsbn13Null_subscriptionSkipped_wrapperPresent() {
+        when(aladinBookService.identify(any())).thenReturn(Optional.empty());
+
+        SearchResponse response = searchService.search("모르는책", null, null);
+
+        assertThat(response.subscription()).isNotNull();
+        assertThat(response.subscription().millie()).isNotNull();
+        assertThat(response.subscription().millie().available()).isFalse();
+        assertThat(response.metadata().sectionStatuses())
+                .filteredOn(s -> s.section() == SearchSection.SUBSCRIPTION)
+                .extracting(SearchResponse.SectionStatusDetail::status)
+                .containsExactly(SearchSectionStatus.SKIPPED);
+    }
+
+    @Test
+    void aladinFailsIsbn13Null_doesNotCallMillieBookService() {
+        when(aladinBookService.identify(any())).thenReturn(Optional.empty());
+
+        searchService.search("모르는책", null, null);
+
+        verify(millieBookService, never()).findAvailability(any());
+    }
+
+    @Test
+    void millieSlowExceedsTotalDeadline_subscriptionFailed() {
+        ReflectionTestUtils.setField(searchService, "totalDeadlineMs", 200L);
+
+        AladinSearchResult aladinResult = new AladinSearchResult(
+                "9788936439743", "테스트책", "테스트저자", "민음사", null, 15000);
+        when(aladinBookService.identify(any())).thenReturn(Optional.of(aladinResult));
+        when(aladinBookService.getUsedBooks("9788936439743"))
+                .thenReturn(new AladinUsedBookResult(null, null, null, null, null, null));
+        when(millieBookService.findAvailability(aladinResult)).thenAnswer(invocation -> {
+            Thread.sleep(1000);
+            return MillieAvailability.unavailable();
+        });
+
+        SearchResponse response = searchService.search("9788936439743", null, null);
+
+        assertThat(response.subscription().millie().available()).isFalse();
+        assertThat(response.metadata().sectionStatuses())
+                .filteredOn(s -> s.section() == SearchSection.SUBSCRIPTION)
+                .extracting(SearchResponse.SectionStatusDetail::status)
+                .containsExactly(SearchSectionStatus.FAILED);
     }
 }
