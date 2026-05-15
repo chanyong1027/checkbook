@@ -3,6 +3,7 @@ package com.checkbook.search.controller;
 import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
 import com.checkbook.common.exception.GlobalExceptionHandler;
+import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.OffStoreResponse;
 import com.checkbook.search.dto.SearchResponse;
 import com.checkbook.search.service.AladinBookService;
@@ -55,6 +56,7 @@ class SearchControllerTest {
                         List.of(),
                         null,
                         new SearchResponse.NewBookInfo(32000, "https://www.aladin.co.kr/shop/wproduct.aspx?ISBN=9788994492032"),
+                        new SearchResponse.SubscriptionInfo(MillieAvailability.unavailable()),
                         new SearchResponse.SearchMetadata(LocalDateTime.now(), List.of(), List.of())
                 ));
 

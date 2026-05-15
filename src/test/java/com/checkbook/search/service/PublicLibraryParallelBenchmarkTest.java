@@ -8,10 +8,12 @@ import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
 import com.checkbook.publiclibrary.snapshot.domain.SnapshotSourceStatus;
 import com.checkbook.publiclibrary.snapshot.dto.LibraryAvailabilityResult;
 import com.checkbook.publiclibrary.snapshot.service.LibraryAvailabilitySnapshotService;
+import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.SearchResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
@@ -97,10 +99,15 @@ class PublicLibraryParallelBenchmarkTest {
     private void runSearch(ExecutorService publicLibraryExecutor) {
         ExecutorService searchExecutor = Executors.newFixedThreadPool(3);
         try {
+            MillieBookService millieBookService = Mockito.mock(MillieBookService.class);
+            when(millieBookService.findAvailability(any()))
+                    .thenReturn(MillieAvailability.unavailable());
+
             SearchService service = new SearchService(
                     aladinBookService,
                     snapshotService,
                     publicLibraryRepository,
+                    millieBookService,
                     searchExecutor,
                     publicLibraryExecutor
             );

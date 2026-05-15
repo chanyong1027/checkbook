@@ -8,6 +8,7 @@ public record SearchResponse(
         List<PublicLibraryInfo> publicLibraries,
         UsedBookInfo usedBook,
         NewBookInfo newBook,
+        SubscriptionInfo subscription,
         SearchMetadata metadata
 ) {
 
@@ -45,6 +46,12 @@ public record SearchResponse(
     public record NewBookInfo(
             int price,
             String productUrl
+    ) {
+    }
+
+    public record SubscriptionInfo(
+            MillieAvailability millie
+            // 추후 RidiAvailability ridi, NaverAvailability naver 추가
     ) {
     }
 

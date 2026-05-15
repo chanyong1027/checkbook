@@ -10,6 +10,7 @@ import com.checkbook.common.util.DistanceCalculator;
 import com.checkbook.common.util.InputNormalizer;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
+import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.SearchResponse;
 import com.checkbook.search.dto.SearchSection;
 import com.checkbook.search.dto.SearchSectionStatus;
@@ -37,6 +38,7 @@ public class SearchService {
     private final AladinBookService aladinBookService;
     private final LibraryAvailabilitySnapshotService snapshotService;
     private final PublicLibraryRepository publicLibraryRepository;
+    private final MillieBookService millieBookService;
     private final ExecutorService searchExecutor;
     private final ExecutorService publicLibraryExecutor;
 
@@ -53,12 +55,14 @@ public class SearchService {
             AladinBookService aladinBookService,
             LibraryAvailabilitySnapshotService snapshotService,
             PublicLibraryRepository publicLibraryRepository,
+            MillieBookService millieBookService,
             @Qualifier("searchExecutor") ExecutorService searchExecutor,
             @Qualifier("publicLibraryExecutor") ExecutorService publicLibraryExecutor
     ) {
         this.aladinBookService = aladinBookService;
         this.snapshotService = snapshotService;
         this.publicLibraryRepository = publicLibraryRepository;
+        this.millieBookService = millieBookService;
         this.searchExecutor = searchExecutor;
         this.publicLibraryExecutor = publicLibraryExecutor;
     }
@@ -104,7 +108,18 @@ public class SearchService {
             publicFuture = CompletableFuture.completedFuture(List.of());
         }
 
-        CompletableFuture<Void> allFutures = CompletableFuture.allOf(usedFuture, publicFuture);
+        CompletableFuture<MillieAvailability> millieFuture = identifiedBook
+                .map(book -> CompletableFuture
+                        .supplyAsync(() -> millieBookService.findAvailability(book), searchExecutor)
+                        .exceptionally(exception -> {
+                            failures.add(new SearchResponse.FailureDetail(
+                                    SearchSection.SUBSCRIPTION,
+                                    failureReason(exception)));
+                            return MillieAvailability.unavailable();
+                        }))
+                .orElseGet(() -> CompletableFuture.completedFuture(MillieAvailability.unavailable()));
+
+        CompletableFuture<Void> allFutures = CompletableFuture.allOf(usedFuture, publicFuture, millieFuture);
         try {
             allFutures.get(totalDeadlineMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
@@ -117,9 +132,11 @@ public class SearchService {
                 usedFuture.isDone() && !usedFuture.isCompletedExceptionally() ? usedFuture.join() : null;
         List<SearchResponse.PublicLibraryInfo> publicResults =
                 publicFuture.isDone() && !publicFuture.isCompletedExceptionally() ? publicFuture.join() : List.of();
+        MillieAvailability millieResult =
+                millieFuture.isDone() && !millieFuture.isCompletedExceptionally() ? millieFuture.join() : MillieAvailability.unavailable();
 
         List<SearchResponse.SectionStatusDetail> statuses =
-                buildStatuses(usedFuture, publicFuture, lat, lon, failures, identifiedBook.isPresent());
+                buildStatuses(usedFuture, publicFuture, millieFuture, lat, lon, failures, identifiedBook.isPresent());
 
         SearchResponse.BookInfo bookInfo = identifiedBook
                 .map(book -> new SearchResponse.BookInfo(
@@ -148,6 +165,7 @@ public class SearchService {
                 publicResults,
                 usedBookInfo,
                 newBookInfo,
+                new SearchResponse.SubscriptionInfo(millieResult),
                 new SearchResponse.SearchMetadata(LocalDateTime.now(), statuses, List.copyOf(failures))
         );
     }
@@ -224,7 +242,8 @@ public class SearchService {
                 new SearchResponse.SectionStatusDetail(SearchSection.PUBLIC_LIBRARY, SearchSectionStatus.SKIPPED),
                 new SearchResponse.SectionStatusDetail(SearchSection.USED_BOOK, SearchSectionStatus.SKIPPED),
                 new SearchResponse.SectionStatusDetail(SearchSection.NEW_BOOK,
-                        aladinIdentified ? SearchSectionStatus.SUCCESS : SearchSectionStatus.FAILED)
+                        aladinIdentified ? SearchSectionStatus.SUCCESS : SearchSectionStatus.FAILED),
+                new SearchResponse.SectionStatusDetail(SearchSection.SUBSCRIPTION, SearchSectionStatus.SKIPPED)
         );
 
         return new SearchResponse(
@@ -232,6 +251,7 @@ public class SearchService {
                 List.of(),
                 null,
                 null,
+                new SearchResponse.SubscriptionInfo(MillieAvailability.unavailable()),
                 new SearchResponse.SearchMetadata(LocalDateTime.now(), statuses, List.of())
         );
     }
@@ -239,6 +259,7 @@ public class SearchService {
     private List<SearchResponse.SectionStatusDetail> buildStatuses(
             CompletableFuture<?> usedFuture,
             CompletableFuture<?> publicFuture,
+            CompletableFuture<?> millieFuture,
             Double lat,
             Double lon,
             List<SearchResponse.FailureDetail> failures,
@@ -275,6 +296,23 @@ public class SearchService {
         statuses.add(new SearchResponse.SectionStatusDetail(
                 SearchSection.NEW_BOOK,
                 aladinIdentified ? SearchSectionStatus.SUCCESS : SearchSectionStatus.FAILED));
+
+        // SUBSCRIPTION: 알라딘 도서 메타데이터 없음(`identifiedBook.isEmpty()`) → SKIPPED.
+        // 호출 실패/타임아웃 시 FAILED.
+        // 정상 완료 시 (available true 또는 false 모두) SUCCESS.
+        if (!aladinIdentified) {
+            statuses.add(new SearchResponse.SectionStatusDetail(
+                    SearchSection.SUBSCRIPTION, SearchSectionStatus.SKIPPED));
+        } else if (!millieFuture.isDone()
+                || millieFuture.isCompletedExceptionally()
+                || hasFailure(failures, SearchSection.SUBSCRIPTION)) {
+            addTimeoutFailureIfAbsent(failures, SearchSection.SUBSCRIPTION);
+            statuses.add(new SearchResponse.SectionStatusDetail(
+                    SearchSection.SUBSCRIPTION, SearchSectionStatus.FAILED));
+        } else {
+            statuses.add(new SearchResponse.SectionStatusDetail(
+                    SearchSection.SUBSCRIPTION, SearchSectionStatus.SUCCESS));
+        }
 
         return statuses;
     }
