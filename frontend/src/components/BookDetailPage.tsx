@@ -3,6 +3,7 @@ import { searchMain, searchELibraries, getELibraries } from '../api'
 import { toUserMessage } from '../api/errors.ts'
 import type {
   BookCandidate,
+  MillieAvailability,
   SearchResponse,
   ELibraryInfo,
   ELibrarySearchResponse,
@@ -65,6 +66,15 @@ const elibStatusLabel: Record<string, string> = {
   SUCCESS: '완료',
   FAILED: '실패',
   TIMEOUT: '타임아웃',
+}
+
+function formatLabel(format: MillieAvailability['format']): string {
+  switch (format) {
+    case 'EBOOK': return '전자책'
+    case 'AUDIOBOOK': return '오디오북'
+    case 'EBOOK_AND_AUDIOBOOK': return '전자책+오디오북'
+    default: return '구독 가능'
+  }
 }
 
 // --- Loading skeletons ---
@@ -597,6 +607,64 @@ export function BookDetailPage({ book, onReset }: Props) {
             {/* ==================== E-LIBRARY SECTION ==================== */}
 
             {/* ... rendered below outside the searchResult block */}
+
+            {/* ==================== SUBSCRIPTION SECTION ==================== */}
+            {(() => {
+              const subscriptionStatus = searchResult.metadata.sectionStatuses
+                .find(s => s.section === 'SUBSCRIPTION')?.status
+
+              if (!subscriptionStatus || subscriptionStatus === 'SKIPPED') {
+                return null
+              }
+
+              const sectionIcon = (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="5" y="2" width="14" height="20" rx="2" />
+                  <line x1="12" y1="18" x2="12" y2="18" />
+                </svg>
+              )
+
+              if (subscriptionStatus === 'FAILED') {
+                return (
+                  <SectionCard icon={sectionIcon} title="구독 서비스">
+                    <p className="text-sm text-slate-400 text-center py-2">
+                      구독 정보 조회 실패. 잠시 후 다시 시도해주세요
+                    </p>
+                  </SectionCard>
+                )
+              }
+
+              // SUCCESS — millie.available에 따라 분기
+              const millie = searchResult.subscription.millie
+              return (
+                <SectionCard icon={sectionIcon} title="구독 서비스">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-600">밀리</span>
+                    {millie.available ? (
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-800 text-sm">{formatLabel(millie.format)}</span>
+                        {isSafeUrl(millie.detailUrl) && (
+                          <a
+                            href={millie.detailUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#e8400c]/10
+                              text-xs text-[#e8400c] font-medium hover:bg-[#e8400c]/20 transition"
+                          >
+                            밀리
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
+                            </svg>
+                          </a>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-slate-400">구독 정보 없음</span>
+                    )}
+                  </div>
+                </SectionCard>
+              )
+            })()}
 
             {/* ==================== USED BOOK SECTION ==================== */}
             {searchResult.usedBook && (
