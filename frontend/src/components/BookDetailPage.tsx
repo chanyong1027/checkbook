@@ -450,7 +450,6 @@ export function BookDetailPage({ book, onReset }: Props) {
                   </svg>
                 }
                 title="공공도서관"
-                source="정보나루 기준"
               >
                 <div className="text-center py-4">
                   <p className="text-sm text-slate-400 mb-3">
@@ -489,7 +488,6 @@ export function BookDetailPage({ book, onReset }: Props) {
                   </svg>
                 }
                 title="공공도서관"
-                source="정보나루 기준"
               >
                 <p className="text-sm text-slate-400 text-center py-2">검색에 실패했습니다</p>
               </SectionCard>
@@ -502,7 +500,6 @@ export function BookDetailPage({ book, onReset }: Props) {
                   </svg>
                 }
                 title="공공도서관"
-                source="정보나루 기준"
               >
                 <p className="text-sm text-slate-400 text-center py-2">소장 도서관이 없습니다</p>
               </SectionCard>
@@ -515,7 +512,6 @@ export function BookDetailPage({ book, onReset }: Props) {
                   </svg>
                 }
                 title={`공공도서관 ${searchResult.publicLibraries.length}개`}
-                source="정보나루 기준"
               >
                 {useLocation && (
                   <div className="mb-2 flex items-center gap-2 text-xs text-emerald-600 bg-emerald-50 rounded-xl px-2.5 py-1.5">
@@ -611,7 +607,6 @@ export function BookDetailPage({ book, onReset }: Props) {
                   </svg>
                 }
                 title="중고도서"
-                source="알라딘 기준"
               >
                 <div className="space-y-0">
                   {([
@@ -668,7 +663,6 @@ export function BookDetailPage({ book, onReset }: Props) {
                   </svg>
                 }
                 title="새책"
-                source="알라딘 기준"
               >
                 <p className="text-sm text-slate-400 text-center py-2">가격 정보를 가져올 수 없습니다</p>
               </SectionCard>
@@ -682,7 +676,6 @@ export function BookDetailPage({ book, onReset }: Props) {
                   </svg>
                 }
                 title="새책"
-                source="알라딘 기준"
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-slate-600">알라딘</span>
@@ -721,7 +714,6 @@ export function BookDetailPage({ book, onReset }: Props) {
               </svg>
             }
             title="전자도서관"
-            source="실시간 검색"
           >
             <p className="text-sm text-red-400 text-center py-2">{elibError}</p>
             <button
@@ -740,7 +732,6 @@ export function BookDetailPage({ book, onReset }: Props) {
               </svg>
             }
             title="전자도서관"
-            source="실시간 검색"
           >
             <div className="flex items-center justify-end mb-2">
               <button
@@ -815,7 +806,6 @@ export function BookDetailPage({ book, onReset }: Props) {
               </svg>
             }
             title="전자도서관"
-            source="실시간 검색"
           >
             <div className="text-center py-4">
               <p className="text-sm text-slate-400 mb-3">
