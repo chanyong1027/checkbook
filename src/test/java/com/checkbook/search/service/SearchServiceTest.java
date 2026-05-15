@@ -9,6 +9,7 @@ import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
 import com.checkbook.publiclibrary.snapshot.domain.SnapshotSourceStatus;
 import com.checkbook.publiclibrary.snapshot.dto.LibraryAvailabilityResult;
 import com.checkbook.publiclibrary.snapshot.service.LibraryAvailabilitySnapshotService;
+import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.SearchResponse;
 import com.checkbook.search.dto.SearchSection;
 import com.checkbook.search.dto.SearchSectionStatus;
@@ -26,6 +27,8 @@ import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -40,6 +43,9 @@ class SearchServiceTest {
     @Mock
     private PublicLibraryRepository publicLibraryRepository;
 
+    @Mock
+    private MillieBookService millieBookService;
+
     private ExecutorService searchExecutor;
     private ExecutorService publicLibraryExecutor;
     private SearchService searchService;
@@ -48,10 +54,15 @@ class SearchServiceTest {
     void setUp() {
         searchExecutor = Executors.newFixedThreadPool(3);
         publicLibraryExecutor = Executors.newFixedThreadPool(20);
+        // 기존 테스트가 밀리 호출 경로를 거치는 경우 NPE 회피용 lenient default stub.
+        // 신규 케이스는 각자 명시적 stub으로 덮어씀.
+        lenient().when(millieBookService.findAvailability(any()))
+                .thenReturn(MillieAvailability.unavailable());
         searchService = new SearchService(
                 aladinBookService,
                 snapshotService,
                 publicLibraryRepository,
+                millieBookService,
                 searchExecutor,
                 publicLibraryExecutor
         );
