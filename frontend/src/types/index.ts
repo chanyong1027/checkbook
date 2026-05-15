@@ -67,15 +67,29 @@ export interface NewBookInfo {
   productUrl: string
 }
 
+export interface MillieAvailability {
+  available: boolean
+  bookSeq: string | null
+  detailUrl: string | null
+  format: 'EBOOK' | 'AUDIOBOOK' | 'EBOOK_AND_AUDIOBOOK' | null
+}
+
+export interface SubscriptionInfo {
+  millie: MillieAvailability
+  // 추후 RidiAvailability ridi, NaverAvailability naver 추가
+}
+
+export type SearchSection = 'PUBLIC_LIBRARY' | 'USED_BOOK' | 'NEW_BOOK' | 'SUBSCRIPTION'
+
 export type SearchSectionStatus = 'SUCCESS' | 'FAILED' | 'SKIPPED'
 
 export interface SectionStatusDetail {
-  section: string
+  section: SearchSection
   status: SearchSectionStatus
 }
 
 export interface FailureDetail {
-  section: string
+  section: SearchSection
   reason: string
 }
 
@@ -90,6 +104,7 @@ export interface SearchResponse {
   publicLibraries: PublicLibraryInfo[]
   usedBook: UsedBookInfo | null
   newBook: NewBookInfo | null
+  subscription: SubscriptionInfo
   metadata: SearchMetadata
 }
 
