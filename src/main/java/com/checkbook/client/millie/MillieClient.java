@@ -30,6 +30,7 @@ public class MillieClient {
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader("User-Agent", USER_AGENT)
+                .defaultHeader("Accept", "application/json")
                 .requestFactory(factory)
                 .build();
     }

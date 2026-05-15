@@ -3,6 +3,7 @@ package com.checkbook.search.service;
 import com.checkbook.client.aladin.dto.AladinSearchResult;
 import com.checkbook.client.millie.MillieClient;
 import com.checkbook.client.millie.dto.MillieBookItem;
+import com.checkbook.common.matcher.BookMetadataNormalizer;
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.MillieAvailability.Format;
 import com.checkbook.search.service.MillieBookMatcher.MatchedMillie;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
@@ -30,6 +32,9 @@ class MillieBookServiceTest {
 
     @Mock
     private MillieBookMatcher matcher;
+
+    @Spy
+    private BookMetadataNormalizer normalizer = new BookMetadataNormalizer();
 
     @InjectMocks
     private MillieBookService service;
@@ -128,5 +133,22 @@ class MillieBookServiceTest {
         MillieAvailability result = service.findAvailability(sel);
 
         assertThat(result.available()).isFalse();
+    }
+
+    @Test
+    void titleWithSubtitle_searchesWithPrefixOnly() {
+        AladinSearchResult sel = aladin(
+                "사피엔스 - 유인원에서 사이보그까지, 인간 역사의 대담하고 위대한 질문",
+                "유발 하라리"
+        );
+        MillieBookItem primary = item(true, true);
+        when(millieClient.searchByTitle("사피엔스")).thenReturn(List.of(primary));
+        when(matcher.findMatch(sel, List.of(primary)))
+                .thenReturn(Optional.of(new MatchedMillie(primary, Format.EBOOK)));
+
+        MillieAvailability result = service.findAvailability(sel);
+
+        assertThat(result.available()).isTrue();
+        verify(millieClient).searchByTitle("사피엔스");
     }
 }

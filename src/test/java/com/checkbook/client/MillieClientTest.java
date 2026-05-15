@@ -82,6 +82,7 @@ class MillieClientTest {
         assertThat(request).isNotNull();
         assertThat(request.getMethod()).isEqualTo("GET");
         assertThat(request.getHeader("User-Agent")).startsWith("CheckBook/");
+        assertThat(request.getHeader("Accept")).isEqualTo("application/json");
 
         HttpUrl url = request.getRequestUrl();
         assertThat(url).isNotNull();

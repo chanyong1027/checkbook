@@ -96,6 +96,12 @@ public class BookMetadataNormalizer {
         return normalizeTitle(parts[0]);
     }
 
+    public String searchKeyword(String raw) {
+        if (raw == null || raw.isBlank()) return "";
+        String[] parts = SUBTITLE_SPLIT.split(raw, 2);
+        return parts[0].trim();
+    }
+
     public Set<String> normalizeAuthorTokens(String raw) {
         if (raw == null || raw.isBlank()) return Set.of();
 
