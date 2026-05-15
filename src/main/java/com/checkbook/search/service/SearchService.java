@@ -22,11 +22,11 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -82,7 +82,7 @@ public class SearchService {
             return buildSkippedResponse(identifiedBook.orElse(null), identifiedBook.isPresent());
         }
 
-        List<SearchResponse.FailureDetail> failures = Collections.synchronizedList(new ArrayList<>());
+        List<SearchResponse.FailureDetail> failures = new CopyOnWriteArrayList<>();
 
         CompletableFuture<AladinUsedBookResult> usedFuture = CompletableFuture
                 .supplyAsync(() -> aladinBookService.getUsedBooks(isbn13), searchExecutor)
