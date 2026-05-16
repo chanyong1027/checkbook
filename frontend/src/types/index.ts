@@ -20,6 +20,18 @@ export interface BookCandidateResponse {
   pagination: Pagination
 }
 
+// /api/featured
+export type FeaturedSectionType = 'BESTSELLER' | 'NEW' | 'LOAN'
+export type FeaturedSource = 'ALADIN' | 'DATANARU'
+
+export interface FeaturedBooksResponse {
+  type: FeaturedSectionType
+  source: FeaturedSource
+  items: BookCandidate[]
+  lastFetchedAt: string | null
+  stale: boolean
+}
+
 // /api/search
 export interface BookInfo {
   title: string | null
