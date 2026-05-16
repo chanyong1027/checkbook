@@ -24,8 +24,9 @@ public class FeaturedBooksWarmupRunner {
     public void warmupNeverFetchedSections() {
         for (FeaturedSectionType type : FeaturedSectionType.values()) {
             snapshotRepository.findById(type).ifPresent(snapshot -> {
-                if (snapshot.getStatus() == SnapshotStatus.NEVER_FETCHED) {
-                    log.info("featured 워밍업 시작: type={}", type);
+                SnapshotStatus status = snapshot.getStatus();
+                if (status == SnapshotStatus.NEVER_FETCHED || status == SnapshotStatus.FAILED) {
+                    log.info("featured 워밍업 시작: type={}, prevStatus={}", type, status);
                     refresher.refreshSection(type);
                 }
             });
