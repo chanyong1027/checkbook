@@ -19,26 +19,33 @@ import java.util.Objects;
 @Component
 public class DatanaruClient {
 
-    private final RestClient restClient;
+    private final RestClient defaultClient;
+    private final RestClient listClient;
     private final String authKey;
 
     public DatanaruClient(
             @Value("${datanaru.base-url}") String baseUrl,
             @Value("${datanaru.auth-key}") String authKey,
-            @Value("${datanaru.timeout:2000}") int timeout
+            @Value("${datanaru.timeout:2000}") int timeout,
+            @Value("${datanaru.list-timeout:10000}") int listTimeout
     ) {
         this.authKey = authKey;
+        this.defaultClient = buildClient(baseUrl, timeout);
+        this.listClient = buildClient(baseUrl, listTimeout);
+    }
+
+    private static RestClient buildClient(String baseUrl, int timeoutMs) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(timeout);
-        factory.setReadTimeout(timeout);
-        this.restClient = RestClient.builder()
+        factory.setConnectTimeout(timeoutMs);
+        factory.setReadTimeout(timeoutMs);
+        return RestClient.builder()
                 .baseUrl(baseUrl)
                 .requestFactory(factory)
                 .build();
     }
 
     public DatanaruBookExistResult bookExist(String isbn13, String libCode) {
-        DatanaruBookExistResponse response = restClient.get()
+        DatanaruBookExistResponse response = defaultClient.get()
                 .uri("/bookExist?authKey={key}&libCode={code}&isbn13={isbn}&format=json",
                         authKey, libCode, isbn13)
                 .retrieve()
@@ -59,7 +66,7 @@ public class DatanaruClient {
 
     public List<DatanaruLibSrchResult> libSrch(int pageNo, int pageSize) {
         try {
-            DatanaruLibSrchResponse response = restClient.get()
+            DatanaruLibSrchResponse response = defaultClient.get()
                     .uri("/libSrch?authKey={key}&pageNo={page}&pageSize={size}&format=json",
                             authKey, pageNo, pageSize)
                     .retrieve()
@@ -93,7 +100,7 @@ public class DatanaruClient {
 
     public List<DatanaruLoanBookResult> loanItemSrch(int pageSize) {
         try {
-            DatanaruLoanItemResponse response = restClient.get()
+            DatanaruLoanItemResponse response = listClient.get()
                     .uri("/loanItemSrch?authKey={key}&pageNo=1&pageSize={size}&format=json",
                             authKey, pageSize)
                     .retrieve()

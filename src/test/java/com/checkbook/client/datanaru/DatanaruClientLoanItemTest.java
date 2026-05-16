@@ -22,7 +22,7 @@ class DatanaruClientLoanItemTest {
     void setUp() throws Exception {
         server = new MockWebServer();
         server.start();
-        client = new DatanaruClient(server.url("/").toString(), "AUTHKEY", 2000);
+        client = new DatanaruClient(server.url("/").toString(), "AUTHKEY", 2000, 10000);
     }
 
     @AfterEach

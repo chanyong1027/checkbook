@@ -58,7 +58,7 @@ public class FeaturedBooksRefresher {
         } catch (Exception e) {
             String reason = e.getClass().getSimpleName() + ": "
                     + truncate(e.getMessage(), 480);
-            log.warn("featured 섹션 갱신 실패: type={}, reason={}", type, reason);
+            log.warn("featured 섹션 갱신 실패: type={}, reason={}", type, reason, e);
             try {
                 writer.markFailed(type, reason);
             } catch (Exception inner) {

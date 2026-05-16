@@ -38,6 +38,7 @@ datanaru:
   auth-key: ${DATANARU_AUTH_KEY:}
   base-url: https://data4library.kr/api
   timeout: 2000
+  list-timeout: 10000
 
 millie:
   base-url: https://live-api.millie.co.kr
