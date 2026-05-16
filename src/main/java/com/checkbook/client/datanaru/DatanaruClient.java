@@ -4,6 +4,8 @@ import com.checkbook.client.datanaru.dto.DatanaruBookExistResponse;
 import com.checkbook.client.datanaru.dto.DatanaruBookExistResult;
 import com.checkbook.client.datanaru.dto.DatanaruLibSrchResponse;
 import com.checkbook.client.datanaru.dto.DatanaruLibSrchResult;
+import com.checkbook.client.datanaru.dto.DatanaruLoanBookResult;
+import com.checkbook.client.datanaru.dto.DatanaruLoanItemResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -87,6 +89,47 @@ public class DatanaruClient {
         } catch (Exception e) {
             throw new DatanaruResponseException("정보나루 libSrch 실패: pageNo=" + pageNo, e);
         }
+    }
+
+    public List<DatanaruLoanBookResult> loanItemSrch(int pageSize) {
+        try {
+            DatanaruLoanItemResponse response = restClient.get()
+                    .uri("/loanItemSrch?authKey={key}&pageNo=1&pageSize={size}&format=json",
+                            authKey, pageSize)
+                    .retrieve()
+                    .body(DatanaruLoanItemResponse.class);
+
+            if (response == null || response.response() == null || response.response().docs() == null) {
+                return List.of();
+            }
+
+            return response.response().docs().stream()
+                    .map(DatanaruLoanItemResponse.DocEntry::doc)
+                    .filter(Objects::nonNull)
+                    .map(this::toLoanResult)
+                    .filter(r -> r.isbn13() != null && !r.isbn13().isBlank())
+                    .toList();
+        } catch (Exception e) {
+            throw new DatanaruResponseException("정보나루 loanItemSrch 실패: pageSize=" + pageSize, e);
+        }
+    }
+
+    private DatanaruLoanBookResult toLoanResult(DatanaruLoanItemResponse.Doc doc) {
+        int rank = 0;
+        try {
+            if (doc.ranking() != null) rank = Integer.parseInt(doc.ranking().trim());
+        } catch (NumberFormatException ignored) {
+            // 순위 파싱 실패는 0으로 두고 후속 service에서 입력 순서로 처리
+        }
+        return new DatanaruLoanBookResult(
+                rank,
+                doc.isbn13(),
+                doc.bookname(),
+                doc.authors(),
+                doc.publisher(),
+                doc.bookImageUrl(),
+                doc.publicationYear()
+        );
     }
 
     private Double parseDouble(String value) {
