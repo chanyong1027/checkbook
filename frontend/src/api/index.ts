@@ -4,6 +4,8 @@ import type {
   ELibraryInfo,
   ELibrarySearchResponse,
   OffStoreResponse,
+  FeaturedBooksResponse,
+  FeaturedSectionType,
 } from '../types'
 import { toApiError } from './errors.ts'
 
@@ -73,4 +75,11 @@ export function getOffStores(
     lon: String(lon),
   })
   return get(`/api/off-stores?${params}`, signal)
+}
+
+export function getFeatured(
+  type: FeaturedSectionType,
+  signal?: AbortSignal,
+): Promise<FeaturedBooksResponse> {
+  return get(`/api/featured?type=${encodeURIComponent(type)}`, signal)
 }
