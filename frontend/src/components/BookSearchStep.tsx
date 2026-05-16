@@ -283,8 +283,8 @@ export function BookSearchStep({ onSelect }: Props) {
         </div>
       )}
 
-      {/* Featured (검색 전 또는 결과 없음) */}
-      {(!searched || results.length === 0) && !loading && !error && (
+      {/* Featured (검색 전에만 노출) */}
+      {!searched && !loading && !error && (
         <FeaturedBooksSection onSelect={onSelect} />
       )}
 

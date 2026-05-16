@@ -19,6 +19,8 @@ import java.time.Instant;
 @Table(name = "featured_section_snapshot")
 public class FeaturedSectionSnapshot {
 
+    private static final int MAX_FAILURE_REASON_LEN = 500;
+
     @Id
     @Enumerated(EnumType.STRING)
     @Column(name = "section_type", length = 20)
@@ -67,7 +69,14 @@ public class FeaturedSectionSnapshot {
 
     public void markFailed(String reason) {
         this.status = SnapshotStatus.FAILED;
-        this.failureReason = reason;
+        this.failureReason = truncate(reason);
         // lastFetchedAt, expiresAt 보존
+    }
+
+    private static String truncate(String value) {
+        if (value == null || value.length() <= MAX_FAILURE_REASON_LEN) {
+            return value;
+        }
+        return value.substring(0, MAX_FAILURE_REASON_LEN);
     }
 }

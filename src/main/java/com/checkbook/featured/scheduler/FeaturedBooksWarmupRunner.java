@@ -1,6 +1,7 @@
 package com.checkbook.featured.scheduler;
 
 import com.checkbook.featured.service.FeaturedBooksRefresher;
+import com.checkbook.featured.snapshot.domain.FeaturedSectionSnapshot;
 import com.checkbook.featured.snapshot.domain.FeaturedSectionType;
 import com.checkbook.featured.snapshot.domain.SnapshotStatus;
 import com.checkbook.featured.snapshot.repository.FeaturedSectionSnapshotRepository;
@@ -23,13 +24,14 @@ public class FeaturedBooksWarmupRunner {
     @EventListener(ApplicationReadyEvent.class)
     public void warmupNeverFetchedSections() {
         for (FeaturedSectionType type : FeaturedSectionType.values()) {
-            snapshotRepository.findById(type).ifPresent(snapshot -> {
-                SnapshotStatus status = snapshot.getStatus();
-                if (status == SnapshotStatus.NEVER_FETCHED || status == SnapshotStatus.FAILED) {
-                    log.info("featured 워밍업 시작: type={}, prevStatus={}", type, status);
-                    refresher.refreshSection(type);
-                }
-            });
+            FeaturedSectionSnapshot snapshot = snapshotRepository.findById(type)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "featured_section_snapshot 시드 행 없음: " + type));
+            SnapshotStatus status = snapshot.getStatus();
+            if (status == SnapshotStatus.NEVER_FETCHED || status == SnapshotStatus.FAILED) {
+                log.info("featured 워밍업 시작: type={}, prevStatus={}", type, status);
+                refresher.refreshSection(type);
+            }
         }
     }
 }
