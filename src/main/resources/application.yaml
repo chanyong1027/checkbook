@@ -58,6 +58,18 @@ elibrary:
   per-library-timeout: 15000
   total-timeout: 20000
 
+featured:
+  page-size: 15
+  bestseller:
+    cron: "0 0 4 * * MON"
+    ttl-hours: 168
+  new:
+    cron: "0 0 4 * * MON,THU"
+    ttl-hours: 84
+  loan:
+    cron: "0 0 4 * * MON"
+    ttl-hours: 168
+
 rate-limit:
   requests-per-minute: 30
 
