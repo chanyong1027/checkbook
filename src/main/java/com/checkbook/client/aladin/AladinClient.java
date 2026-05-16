@@ -2,6 +2,7 @@ package com.checkbook.client.aladin;
 
 import com.checkbook.client.aladin.dto.AladinOffStoreResponse;
 import com.checkbook.client.aladin.dto.AladinItemResponse;
+import com.checkbook.client.aladin.dto.AladinItemResponse.Item;
 import com.checkbook.client.aladin.dto.AladinSearchResult;
 import com.checkbook.client.aladin.dto.AladinUsedBookResult;
 import com.checkbook.client.aladin.dto.AladinUsedListResponse;
@@ -137,6 +138,24 @@ public class AladinClient {
         } catch (Exception e) {
             log.error("알라딘 ItemId 조회 실패: isbn13={}", isbn13, e);
             return Optional.empty();
+        }
+    }
+
+    public List<Item> itemList(AladinListQueryType queryType, int maxResults) {
+        try {
+            AladinItemResponse response = priceClient.get()
+                    .uri("/ItemList.aspx?ttbkey={key}&QueryType={qt}&MaxResults={max}&start=1&SearchTarget=Book&output=js&Version=20131101&Cover=Big",
+                            ttbKey, queryType.value(), maxResults)
+                    .retrieve()
+                    .body(AladinItemResponse.class);
+
+            if (response == null || response.item() == null) {
+                return List.of();
+            }
+            return response.item();
+        } catch (Exception e) {
+            log.error("알라딘 ItemList 실패: queryType={}, maxResults={}", queryType, maxResults, e);
+            throw new IllegalStateException("알라딘 ItemList 오류", e);
         }
     }
 

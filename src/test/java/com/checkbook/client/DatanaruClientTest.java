@@ -45,7 +45,7 @@ class DatanaruClientTest {
                         """));
         server.start();
 
-        DatanaruClient client = new DatanaruClient(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS);
+        DatanaruClient client = new DatanaruClient(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000);
 
         DatanaruBookExistResult result = client.bookExist("9788936439743", "111111");
 
@@ -91,7 +91,7 @@ class DatanaruClientTest {
                         """));
         server.start();
 
-        DatanaruClient client = new DatanaruClient(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS);
+        DatanaruClient client = new DatanaruClient(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000);
 
         List<DatanaruLibSrchResult> result = client.libSrch(1, 100);
 
@@ -102,7 +102,7 @@ class DatanaruClientTest {
 
     @Test
     void bookExistThrowsOnNetworkFailure() {
-        DatanaruClient client = new DatanaruClient("http://127.0.0.1:1/api", "test-key", 50);
+        DatanaruClient client = new DatanaruClient("http://127.0.0.1:1/api", "test-key", 50, 50);
 
         assertThatThrownBy(() -> client.bookExist("9788936439743", "111111"))
                 .isInstanceOf(Exception.class);
@@ -110,7 +110,7 @@ class DatanaruClientTest {
 
     @Test
     void libSrchThrowsOnNetworkFailure() {
-        DatanaruClient client = new DatanaruClient("http://127.0.0.1:1/api", "test-key", 50);
+        DatanaruClient client = new DatanaruClient("http://127.0.0.1:1/api", "test-key", 50, 50);
 
         assertThatThrownBy(() -> client.libSrch(1, 100))
                 .isInstanceOf(DatanaruResponseException.class);

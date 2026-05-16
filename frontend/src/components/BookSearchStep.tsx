@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { searchBooks } from '../api'
 import { toUserMessage } from '../api/errors.ts'
 import type { BookCandidate } from '../types'
+import { FeaturedBooksSection } from './FeaturedBooksSection'
 
 interface Props {
   onSelect: (book: BookCandidate) => void
@@ -280,6 +281,11 @@ export function BookSearchStep({ onSelect }: Props) {
         <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm mb-4">
           {error}
         </div>
+      )}
+
+      {/* Featured (검색 전에만 노출) */}
+      {!searched && !loading && !error && (
+        <FeaturedBooksSection onSelect={onSelect} />
       )}
 
       {/* Empty */}

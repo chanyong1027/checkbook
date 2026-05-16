@@ -38,6 +38,7 @@ datanaru:
   auth-key: ${DATANARU_AUTH_KEY:}
   base-url: https://data4library.kr/api
   timeout: 2000
+  list-timeout: 10000
 
 millie:
   base-url: https://live-api.millie.co.kr
@@ -57,6 +58,18 @@ elibrary:
   thread-pool-size: 5
   per-library-timeout: 15000
   total-timeout: 20000
+
+featured:
+  page-size: 15
+  bestseller:
+    cron: "0 0 4 * * MON"
+    ttl-hours: 168
+  new:
+    cron: "0 0 4 * * MON,THU"
+    ttl-hours: 84
+  loan:
+    cron: "0 0 4 * * MON"
+    ttl-hours: 168
 
 rate-limit:
   requests-per-minute: 30
