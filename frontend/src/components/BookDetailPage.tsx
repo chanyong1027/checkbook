@@ -343,6 +343,9 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
 
   // Cold-entry book metadata (Kakao) — initialBook이 없을 때 채워짐
   const [coldBook, setColdBook] = useState<BookCandidate | null>(null)
+  // Cold-fetch 완료 플래그 — warm 진입은 처음부터 true, cold 진입은 fetch 종료(성공/실패) 후 true
+  // e-lib 검색이 Aladin 메타로 락되는 race condition 방지용
+  const [coldFetchDone, setColdFetchDone] = useState<boolean>(Boolean(initialBook))
 
   // AbortControllers
   const searchAbort = useRef<AbortController | null>(null)
@@ -427,11 +430,15 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
     searchBooks(isbn13, 1, 1, controller.signal)
       .then(res => {
         if (controller.signal.aborted) return
-        const found = res.items.find(b => b.isbn13 === isbn13) ?? res.items[0]
+        // exact ISBN match만 채택 — Kakao 가 다른 판본을 첫 결과로 줄 수 있음
+        const found = res.items.find(b => b.isbn13 === isbn13)
         if (found) setColdBook(found)
       })
       .catch(() => {
         // Kakao 실패 → searchResult.book(알라딘) 폴백
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setColdFetchDone(true)
       })
     return () => controller.abort()
   }, [initialBook, isbn13])
@@ -449,16 +456,18 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
 
   // --- Initial e-lib trigger: displayBook 가 처음 준비된 시점에 1회만 실행 ---
 
-  const elibInitialRef = useRef(false)
   useEffect(() => {
-    if (elibInitialRef.current) return
     if (!displayBook) return
-    elibInitialRef.current = true
-    if (savedElibIds.length > 0) {
-      runElibSearch(savedElibIds, displayBook.title, displayBook.author)
-    }
+    // cold 진입 시 Kakao(coldBook) 가 settle 될 때까지 대기
+    // — Aladin 이 먼저 응답해서 displayBook 이 Aladin 으로 채워지는 race condition 방지
+    if (!coldFetchDone) return
+    if (savedElibIds.length === 0) return
+    // 가드는 일부러 두지 않음:
+    // displayBook(null→truthy)·coldFetchDone(false→true) 가 단방향 전이라 production 에선 1회만 fire,
+    // Strict Mode dev 더블마운트에선 2회 fire 되지만 runElibSearch 내부 abort+재요청으로 안전.
+    runElibSearch(savedElibIds, displayBook.title, displayBook.author)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displayBook])
+  }, [displayBook, coldFetchDone])
 
   // --- Helpers ---
 

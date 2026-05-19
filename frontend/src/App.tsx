@@ -70,7 +70,10 @@ export default function App() {
     function onPop() {
       const next = parseRoute(window.location.pathname)
       const stateBook = (window.history.state as { book?: unknown } | null)?.book
-      const restored = isBookCandidate(stateBook) ? stateBook : null
+      const restored =
+        next.step === 'detail' && isBookCandidate(stateBook) && stateBook.isbn13 === next.isbn
+          ? stateBook
+          : null
       setDirection('back')
       setRoute(next)
       setSelectedBook(
@@ -83,10 +86,14 @@ export default function App() {
 
   // selectedBook → sessionStorage 동기화 (history.state가 비어 있을 때 fallback)
   useEffect(() => {
-    if (selectedBook) {
-      sessionStorage.setItem(BOOK_FALLBACK_KEY, JSON.stringify(selectedBook))
-    } else {
-      sessionStorage.removeItem(BOOK_FALLBACK_KEY)
+    try {
+      if (selectedBook) {
+        sessionStorage.setItem(BOOK_FALLBACK_KEY, JSON.stringify(selectedBook))
+      } else {
+        sessionStorage.removeItem(BOOK_FALLBACK_KEY)
+      }
+    } catch {
+      // Safari private mode·quota 초과·storage 차단 등 → 무시 (history.state 가 1차 소스)
     }
   }, [selectedBook])
 
