@@ -3,9 +3,12 @@ import type { BookCandidate } from './types'
 import { BookSearchStep } from './components/BookSearchStep'
 import { BookDetailPage } from './components/BookDetailPage'
 
-type Step = 'search' | 'detail'
-
 const SEARCH_CACHE_KEY = 'cb_search_cache'
+const BOOK_FALLBACK_KEY = 'cb_book'
+
+type Route =
+  | { step: 'search'; isbn: null }
+  | { step: 'detail'; isbn: string }
 
 function isBookCandidate(value: unknown): value is BookCandidate {
   if (!value || typeof value !== 'object') return false
@@ -20,52 +23,91 @@ function isBookCandidate(value: unknown): value is BookCandidate {
   )
 }
 
-function loadSession(): { step: Step; book: BookCandidate | null } {
+function parseRoute(pathname: string): Route {
+  const m = pathname.match(/^\/book\/(\d{13})$/)
+  if (m) return { step: 'detail', isbn: m[1] }
+  return { step: 'search', isbn: null }
+}
+
+function loadBookFromState(isbn: string): BookCandidate | null {
+  const stateBook = (window.history.state as { book?: unknown } | null)?.book
+  if (isBookCandidate(stateBook) && stateBook.isbn13 === isbn) return stateBook
+
+  // sessionStorage fallback (refresh-resilience)
   try {
-    const raw = sessionStorage.getItem('cb_step')
-    // Unknown steps (legacy 'elibrary', 'prices') fallback to search
-    const step: Step = raw === 'detail' ? 'detail' : 'search'
-    const bookRaw = sessionStorage.getItem('cb_book')
-    const parsed = bookRaw ? JSON.parse(bookRaw) : null
-    const book: BookCandidate | null = isBookCandidate(parsed) ? parsed : null
-    if (step === 'detail' && !book) return { step: 'search', book: null }
-    return { step, book }
+    const raw = sessionStorage.getItem(BOOK_FALLBACK_KEY)
+    const parsed = raw ? JSON.parse(raw) : null
+    if (isBookCandidate(parsed) && parsed.isbn13 === isbn) return parsed
   } catch {
-    return { step: 'search', book: null }
+    /* ignore */
   }
+  return null
 }
 
 export default function App() {
-  const initial = loadSession()
-  const [step, setStep] = useState<Step>(initial.step)
+  const initialRoute = parseRoute(window.location.pathname)
+  const [route, setRoute] = useState<Route>(initialRoute)
   const [direction, setDirection] = useState<'forward' | 'back'>('forward')
-  const [selectedBook, setSelectedBook] = useState<BookCandidate | null>(initial.book)
+  const [selectedBook, setSelectedBook] = useState<BookCandidate | null>(
+    initialRoute.step === 'detail' ? loadBookFromState(initialRoute.isbn) : null,
+  )
   const [resetKey, setResetKey] = useState(0)
 
+  // Seed back stack on cold detail entry so the browser back button returns to search
   useEffect(() => {
-    sessionStorage.setItem('cb_step', step)
-  }, [step])
+    if (initialRoute.step !== 'detail') return
+    const seeded = (window.history.state as { seeded?: boolean } | null)?.seeded === true
+    if (seeded) return
 
+    const currentUrl = window.location.pathname + window.location.search
+    window.history.replaceState({ seeded: true }, '', '/')
+    window.history.pushState({ seeded: true, book: selectedBook }, '', currentUrl)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // popstate: URL 변경 시 React state 재동기화
   useEffect(() => {
-    if (selectedBook) sessionStorage.setItem('cb_book', JSON.stringify(selectedBook))
-    else sessionStorage.removeItem('cb_book')
+    function onPop() {
+      const next = parseRoute(window.location.pathname)
+      const stateBook = (window.history.state as { book?: unknown } | null)?.book
+      const restored = isBookCandidate(stateBook) ? stateBook : null
+      setDirection('back')
+      setRoute(next)
+      setSelectedBook(
+        next.step === 'detail' ? (restored ?? loadBookFromState(next.isbn)) : null,
+      )
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
+  // selectedBook → sessionStorage 동기화 (history.state가 비어 있을 때 fallback)
+  useEffect(() => {
+    if (selectedBook) {
+      sessionStorage.setItem(BOOK_FALLBACK_KEY, JSON.stringify(selectedBook))
+    } else {
+      sessionStorage.removeItem(BOOK_FALLBACK_KEY)
+    }
   }, [selectedBook])
 
-  function goForward(newStep: Step) {
+  function goToDetail(book: BookCandidate) {
+    window.history.pushState(
+      { seeded: true, book },
+      '',
+      `/book/${encodeURIComponent(book.isbn13)}`,
+    )
     setDirection('forward')
-    setStep(newStep)
-  }
-
-  function goBack(newStep: Step) {
-    setDirection('back')
-    setStep(newStep)
+    setSelectedBook(book)
+    setRoute({ step: 'detail', isbn: book.isbn13 })
   }
 
   function handleReset() {
-    setSelectedBook(null)
     sessionStorage.removeItem(SEARCH_CACHE_KEY)
     setResetKey(k => k + 1)
-    goBack('search')
+    window.history.pushState({ seeded: true }, '', '/')
+    setDirection('back')
+    setSelectedBook(null)
+    setRoute({ step: 'search', isbn: null })
   }
 
   return (
@@ -73,9 +115,9 @@ export default function App() {
       {/* Header */}
       <header className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm border-b border-orange-100 px-4 h-14 flex items-center gap-3">
         {/* Back button — only on detail step */}
-        {step === 'detail' && (
+        {route.step === 'detail' && (
           <button
-            onClick={() => goBack('search')}
+            onClick={() => window.history.back()}
             className="p-2 -ml-2 rounded-xl hover:bg-orange-50 transition cursor-pointer"
             aria-label="뒤로"
           >
@@ -104,23 +146,21 @@ export default function App() {
       <main className="flex-1 flex justify-center px-4 py-5 overflow-x-hidden">
         <div className="w-full max-w-sm">
           <div
-            key={step}
+            key={route.step}
             className={direction === 'forward' ? 'slide-in-right' : 'slide-in-left'}
           >
-            {step === 'search' && (
+            {route.step === 'search' && (
               <BookSearchStep
                 key={resetKey}
-                onSelect={book => {
-                  setSelectedBook(book)
-                  goForward('detail')
-                }}
+                onSelect={goToDetail}
               />
             )}
 
-            {step === 'detail' && selectedBook && (
+            {route.step === 'detail' && (
               <BookDetailPage
-                key={selectedBook.isbn13}
-                book={selectedBook}
+                key={route.isbn}
+                isbn13={route.isbn}
+                initialBook={selectedBook}
                 onReset={handleReset}
               />
             )}

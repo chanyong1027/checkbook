@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { searchMain, searchELibraries, getELibraries } from '../api'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { searchBooks, searchMain, searchELibraries, getELibraries } from '../api'
 import { toUserMessage } from '../api/errors.ts'
 import type {
   BookCandidate,
@@ -25,7 +25,8 @@ function isSafeUrl(url: string | null | undefined): url is string {
 }
 
 interface Props {
-  book: BookCandidate
+  isbn13: string
+  initialBook?: BookCandidate | null
   onReset: () => void
 }
 
@@ -298,9 +299,27 @@ function ELibrarySelector({
   )
 }
 
+// --- Header skeleton (cold-entry: book metadata not yet loaded) ---
+
+function BookDetailCardSkeleton() {
+  return (
+    <div className="bg-white rounded-2xl border border-orange-50 p-4 mb-5 shadow-sm shadow-orange-50 animate-pulse">
+      <div className="flex gap-4">
+        <div className="w-[72px] h-[100px] bg-orange-50 rounded-xl shrink-0" />
+        <div className="flex-1 min-w-0 space-y-2 self-center">
+          <div className="h-4 bg-slate-100 rounded w-4/5" />
+          <div className="h-3 bg-slate-100 rounded w-1/2" />
+          <div className="h-3 bg-slate-100 rounded w-2/5" />
+          <div className="h-5 bg-orange-50 rounded-lg w-32 mt-2" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // --- Main component ---
 
-export function BookDetailPage({ book, onReset }: Props) {
+export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   // Search API state
   const [searchResult, setSearchResult] = useState<SearchResponse | null>(null)
   const [searchLoading, setSearchLoading] = useState(true)
@@ -322,9 +341,13 @@ export function BookDetailPage({ book, onReset }: Props) {
   // Bottom sheet
   const [sheetOpen, setSheetOpen] = useState(false)
 
+  // Cold-entry book metadata (Kakao) — initialBook이 없을 때 채워짐
+  const [coldBook, setColdBook] = useState<BookCandidate | null>(null)
+
   // AbortControllers
   const searchAbort = useRef<AbortController | null>(null)
   const elibAbort = useRef<AbortController | null>(null)
+  const coldBookAbort = useRef<AbortController | null>(null)
 
   // --- API calls with race guard ---
 
@@ -334,7 +357,7 @@ export function BookDetailPage({ book, onReset }: Props) {
     searchAbort.current = controller
     setSearchLoading(true)
     setSearchError(null)
-    searchMain(book.isbn13, lat, lon, controller.signal)
+    searchMain(isbn13, lat, lon, controller.signal)
       .then(res => {
         if (searchAbort.current === controller) setSearchResult(res)
       })
@@ -348,7 +371,7 @@ export function BookDetailPage({ book, onReset }: Props) {
       })
   }
 
-  function runElibSearch(ids: number[]) {
+  function runElibSearch(ids: number[], title: string, author: string) {
     elibAbort.current?.abort()
     if (ids.length === 0) {
       setElibResult(null)
@@ -360,7 +383,7 @@ export function BookDetailPage({ book, onReset }: Props) {
     elibAbort.current = controller
     setElibLoading(true)
     setElibError(null)
-    searchELibraries(book.title, book.author, ids.join(','), controller.signal)
+    searchELibraries(title, author, ids.join(','), controller.signal)
       .then(res => {
         if (elibAbort.current === controller) setElibResult(res)
       })
@@ -374,21 +397,68 @@ export function BookDetailPage({ book, onReset }: Props) {
       })
   }
 
-  // --- Mount ---
+  // --- Display book: initialBook 우선, 콜드 진입 시 Kakao(coldBook), 그래도 없으면 searchResult.book(알라딘) ---
+  // Kakao 우선 이유: 검색 리스트(warm)와 동일한 소스로 통일해 카드 표기 불일치 방지
+
+  const displayBook: BookCandidate | null = useMemo(() => {
+    if (initialBook) return initialBook
+    if (coldBook) return coldBook
+    const fetched = searchResult?.book
+    if (fetched && fetched.title) {
+      return {
+        title: fetched.title,
+        author: fetched.author ?? '',
+        isbn13: fetched.isbn13 ?? isbn13,
+        publisher: fetched.publisher ?? '',
+        coverUrl: fetched.coverUrl ?? '',
+        publishedAt: '',
+      }
+    }
+    return null
+  }, [initialBook, coldBook, searchResult, isbn13])
+
+  // --- Cold entry: initialBook이 없으면 Kakao에서 책 메타데이터 fetch ---
+
+  useEffect(() => {
+    if (initialBook) return
+    coldBookAbort.current?.abort()
+    const controller = new AbortController()
+    coldBookAbort.current = controller
+    searchBooks(isbn13, 1, 1, controller.signal)
+      .then(res => {
+        if (controller.signal.aborted) return
+        const found = res.items.find(b => b.isbn13 === isbn13) ?? res.items[0]
+        if (found) setColdBook(found)
+      })
+      .catch(() => {
+        // Kakao 실패 → searchResult.book(알라딘) 폴백
+      })
+    return () => controller.abort()
+  }, [initialBook, isbn13])
+
+  // --- Mount: 통합 검색 ---
 
   useEffect(() => {
     runSearch()
-
-    // E-library: getSavedIds() already validates (Array.isArray, integer > 0, max 20)
-    const savedIds = getSavedIds()
-    if (savedIds.length > 0) runElibSearch(savedIds)
-
     return () => {
       searchAbort.current?.abort()
       elibAbort.current?.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // --- Initial e-lib trigger: displayBook 가 처음 준비된 시점에 1회만 실행 ---
+
+  const elibInitialRef = useRef(false)
+  useEffect(() => {
+    if (elibInitialRef.current) return
+    if (!displayBook) return
+    elibInitialRef.current = true
+    if (savedElibIds.length > 0) {
+      runElibSearch(savedElibIds, displayBook.title, displayBook.author)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayBook])
 
   // --- Helpers ---
 
@@ -424,7 +494,9 @@ export function BookDetailPage({ book, onReset }: Props) {
     setSavedElibIds(ids)
     saveIds(ids)
     setSheetOpen(false)
-    runElibSearch(ids)
+    if (displayBook) {
+      runElibSearch(ids, displayBook.title, displayBook.author)
+    }
   }
 
   // Get section statuses from metadata
@@ -438,7 +510,11 @@ export function BookDetailPage({ book, onReset }: Props) {
   return (
     <div>
       {/* Book detail card */}
-      <BookDetailCard book={book} />
+      {displayBook ? (
+        <BookDetailCard book={displayBook} />
+      ) : (
+        <BookDetailCardSkeleton />
+      )}
 
       <div className="space-y-3">
         {/* ==================== PUBLIC LIBRARY SECTION ==================== */}
@@ -713,7 +789,7 @@ export function BookDetailPage({ book, onReset }: Props) {
                     </div>
                   ))}
                   <OffStoreList
-                    isbn13={searchResult.book.isbn13 ?? book.isbn13}
+                    isbn13={searchResult.book.isbn13 ?? isbn13}
                     lat={userLatRef.current}
                     lon={userLonRef.current}
                     spaceUsedPrice={searchResult.usedBook.spaceUsedPrice}
