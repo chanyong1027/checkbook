@@ -226,6 +226,7 @@ export function BookSearchStep({ onSelect }: Props) {
               <button
                 type="button"
                 onClick={() => setQuery('')}
+                aria-label="검색어 지우기"
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">

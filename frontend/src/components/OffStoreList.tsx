@@ -102,19 +102,7 @@ export function OffStoreList({
 
   return (
     <div className="border-b border-slate-50 last:border-0">
-      <div
-        role="button"
-        tabIndex={0}
-        aria-expanded={expanded}
-        className="flex items-center justify-between py-2.5 cursor-pointer rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-        onClick={handleToggle}
-        onKeyDown={e => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            handleToggle()
-          }
-        }}
-      >
+      <div className="relative flex items-center justify-between py-2.5">
         <p className="text-sm text-slate-600">알라딘 매장</p>
         <div className="flex items-center gap-2">
           <div className="flex flex-col items-end">
@@ -128,8 +116,7 @@ export function OffStoreList({
                   href={spaceUsedUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  onClick={e => e.stopPropagation()}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#e8400c]/10
+                  className="relative z-10 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#e8400c]/10
                     text-xs text-[#e8400c] font-medium hover:bg-[#e8400c]/20 transition"
                 >
                   알라딘
@@ -161,6 +148,13 @@ export function OffStoreList({
             <path d="M6 9l6 6 6-6" />
           </svg>
         </div>
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-label={`알라딘 매장 목록 ${expanded ? '접기' : '펼치기'}`}
+          onClick={handleToggle}
+          className="absolute inset-0 rounded-lg cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        />
       </div>
 
       {expanded && (
