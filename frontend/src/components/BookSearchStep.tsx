@@ -198,8 +198,12 @@ export function BookSearchStep({ onSelect }: Props) {
     <div>
       {/* Title */}
       <div className="mb-5">
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">책 검색</h1>
-        <p className="text-sm text-slate-400 mt-0.5">제목, 저자, ISBN으로 찾아보세요</p>
+        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">책, 어디 있을까?</h1>
+        <p className="text-sm text-slate-600 mt-1 leading-relaxed">
+          알라딘 가격 · 우리 동네 도서관 · 전자도서관 · 밀리,
+          <br />
+          <span className="text-slate-800 font-medium">한 번에 확인</span>하세요.
+        </p>
       </div>
 
       {/* Search form */}
@@ -211,9 +215,10 @@ export function BookSearchStep({ onSelect }: Props) {
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="예) 채식주의자"
+              aria-label="책 검색"
               className="w-full pl-4 pr-10 py-3 rounded-2xl border border-orange-100 bg-white text-slate-900
-                placeholder:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/30
-                focus:border-primary transition text-[15px] shadow-sm"
+                placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30
+                focus:border-primary transition text-base shadow-sm"
               maxLength={200}
               autoFocus
             />
@@ -221,7 +226,7 @@ export function BookSearchStep({ onSelect }: Props) {
               <button
                 type="button"
                 onClick={() => setQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-400 cursor-pointer"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                   <path d="M18 6L6 18M6 6l12 12" />
@@ -253,10 +258,10 @@ export function BookSearchStep({ onSelect }: Props) {
       {!searched && history.length > 0 && (
         <div className="mb-5">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-slate-400">최근 검색</span>
+            <span className="text-xs font-medium text-slate-600">최근 검색</span>
             <button
               onClick={clearHistory}
-              className="text-xs text-slate-300 hover:text-slate-400 cursor-pointer"
+              className="px-2 py-1 -mr-1 text-xs text-slate-500 hover:text-slate-700 cursor-pointer"
             >
               전체 삭제
             </button>
@@ -266,7 +271,7 @@ export function BookSearchStep({ onSelect }: Props) {
               <button
                 key={q}
                 onClick={() => handleHistoryClick(q)}
-                className="px-3 py-1.5 rounded-full bg-white border border-orange-100 text-sm text-slate-600
+                className="px-3 py-2 rounded-full bg-white border border-orange-100 text-sm text-slate-700
                   hover:border-primary hover:text-primary transition cursor-pointer"
               >
                 {q}
@@ -296,7 +301,7 @@ export function BookSearchStep({ onSelect }: Props) {
               <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
             </svg>
           </div>
-          <p className="text-slate-400 text-sm">검색 결과가 없습니다</p>
+          <p className="text-slate-600 text-sm">검색 결과가 없습니다</p>
         </div>
       )}
 
@@ -316,8 +321,8 @@ export function BookSearchStep({ onSelect }: Props) {
                 <p className="font-semibold text-slate-800 truncate text-[14px] group-hover:text-primary transition leading-snug">
                   {book.title}
                 </p>
-                <p className="text-xs text-slate-400 mt-0.5 truncate">{book.author}</p>
-                <p className="text-xs text-slate-300 truncate">{book.publisher}</p>
+                <p className="text-xs text-slate-600 mt-0.5 truncate">{book.author}</p>
+                <p className="text-xs text-slate-500 truncate">{book.publisher}</p>
               </div>
               <div className="self-center text-slate-200 group-hover:text-primary/50 transition shrink-0">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -347,7 +352,7 @@ export function BookSearchStep({ onSelect }: Props) {
           )}
 
           {isEnd && results.length > PAGE_SIZE && (
-            <p className="text-center text-xs text-slate-300 py-3">모든 결과를 불러왔습니다</p>
+            <p className="text-center text-xs text-slate-500 py-3">모든 결과를 불러왔습니다</p>
           )}
         </div>
       )}

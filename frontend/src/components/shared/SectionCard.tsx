@@ -4,7 +4,7 @@ export function SectionCard({ icon, title, source, children }: { icon: React.Rea
       <h3 className="text-[13px] font-semibold text-slate-500 flex items-center gap-1.5 mb-3">
         {icon}
         {title}
-        {source && <span className="text-xs text-slate-300 font-normal ml-auto">{source}</span>}
+        {source && <span className="text-xs text-slate-500 font-normal ml-auto">{source}</span>}
       </h3>
       {children}
     </div>

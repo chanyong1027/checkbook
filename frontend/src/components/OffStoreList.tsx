@@ -103,13 +103,22 @@ export function OffStoreList({
   return (
     <div className="border-b border-slate-50 last:border-0">
       <div
-        className="flex items-center justify-between py-2.5 cursor-pointer"
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        className="flex items-center justify-between py-2.5 cursor-pointer rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         onClick={handleToggle}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            handleToggle()
+          }
+        }}
       >
         <p className="text-sm text-slate-600">알라딘 매장</p>
         <div className="flex items-center gap-2">
           <div className="flex flex-col items-end">
-            <p className="text-[11px] leading-none text-slate-400 mb-1">최저가</p>
+            <p className="text-[11px] leading-none text-slate-500 mb-1">최저가</p>
             <div className="flex items-center gap-2">
               <span className="font-semibold text-slate-800 text-sm">
                 {spaceUsedPrice.toLocaleString()}원
@@ -120,7 +129,7 @@ export function OffStoreList({
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={e => e.stopPropagation()}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#e8400c]/10
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#e8400c]/10
                     text-xs text-[#e8400c] font-medium hover:bg-[#e8400c]/20 transition"
                 >
                   알라딘
@@ -147,7 +156,7 @@ export function OffStoreList({
             stroke="currentColor"
             strokeWidth="2.5"
             strokeLinecap="round"
-            className={`text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`}
+            className={`text-slate-500 transition-transform ${expanded ? 'rotate-180' : ''}`}
           >
             <path d="M6 9l6 6 6-6" />
           </svg>
@@ -158,7 +167,7 @@ export function OffStoreList({
         <div className="pb-3">
           {lat == null || lon == null ? (
             <div className="text-center py-3 bg-slate-50 rounded-xl">
-              <p className="text-sm text-slate-400 mb-2">
+              <p className="text-sm text-slate-600 mb-2">
                 위치를 허용하면 근처 매장 재고를
                 <br />
                 확인할 수 있어요
@@ -179,14 +188,14 @@ export function OffStoreList({
               <div className="w-5 h-5 border-2 border-slate-200 border-t-slate-500 rounded-full animate-spin" />
             </div>
           ) : error ? (
-            <p className="text-sm text-red-400 text-center py-2">{error}</p>
+            <p className="text-sm text-red-500 text-center py-2">{error}</p>
           ) : stores != null && stores.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-2">
+            <p className="text-sm text-slate-600 text-center py-2">
               근처 매장에 재고가 없습니다
             </p>
           ) : visibleStores != null ? (
             <div className="space-y-1">
-              <p className="px-1 pb-1 text-xs text-slate-400">
+              <p className="px-1 pb-1 text-xs text-slate-500">
                 내 위치 기준 가까운 순 · 매장별 가격은 알라딘에서 확인
               </p>
               {visibleStores.map(store => (
@@ -202,11 +211,11 @@ export function OffStoreList({
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-slate-700">{store.storeName}</span>
                       {store.distance != null && (
-                        <span className="text-xs text-slate-400">{store.distance}km</span>
+                        <span className="text-xs text-slate-500">{store.distance}km</span>
                       )}
                     </div>
                     {store.address && (
-                      <p className="text-xs text-slate-400 truncate mt-0.5">{store.address}</p>
+                      <p className="text-xs text-slate-500 truncate mt-0.5">{store.address}</p>
                     )}
                   </div>
                   <svg
@@ -217,7 +226,7 @@ export function OffStoreList({
                     stroke="currentColor"
                     strokeWidth="2.5"
                     strokeLinecap="round"
-                    className="text-slate-400 shrink-0"
+                    className="text-slate-500 shrink-0"
                   >
                     <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
                   </svg>
@@ -229,8 +238,8 @@ export function OffStoreList({
                     e.stopPropagation()
                     setVisibleCount(current => current + LOAD_MORE_COUNT)
                   }}
-                  className="w-full text-center py-2 text-xs text-slate-400
-                    hover:text-slate-600 transition cursor-pointer"
+                  className="w-full text-center py-2 text-xs text-slate-600
+                    hover:text-slate-800 transition cursor-pointer"
                 >
                   + {Math.min(LOAD_MORE_COUNT, remainingCount)}곳 더 보기
                 </button>
