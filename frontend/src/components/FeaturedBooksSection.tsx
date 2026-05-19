@@ -60,7 +60,7 @@ export function FeaturedBooksSection({ onSelect }: Props) {
       <div className="flex items-end justify-between mb-3 gap-3">
         <div>
           <h2 className="text-base font-bold text-slate-800">요즘 많이 찾는 책</h2>
-          <p className="text-xs text-slate-400 mt-0.5">사고 빌리는 책을 한눈에</p>
+          <p className="text-xs text-slate-600 mt-0.5">사고 빌리는 책을 한눈에</p>
         </div>
         <div className="flex p-0.5 rounded-full bg-white border border-orange-100 shrink-0">
           {TABS.map(tab => (
@@ -68,10 +68,10 @@ export function FeaturedBooksSection({ onSelect }: Props) {
               key={tab.type}
               onClick={() => setActiveTab(tab.type)}
               className={
-                'px-3 py-1.5 rounded-full text-xs font-semibold transition cursor-pointer ' +
+                'px-3 py-2 rounded-full text-xs font-semibold transition cursor-pointer ' +
                 (activeTab === tab.type
                   ? 'bg-primary text-white'
-                  : 'text-slate-500 hover:text-primary')
+                  : 'text-slate-600 hover:text-primary')
               }
             >
               {tab.label}
@@ -82,7 +82,7 @@ export function FeaturedBooksSection({ onSelect }: Props) {
 
       {/* 콘텐츠 */}
       {error && (
-        <p className="text-xs text-slate-400 py-6 text-center">{error}</p>
+        <p className="text-xs text-slate-600 py-6 text-center">{error}</p>
       )}
 
       {!error && loading && (
@@ -94,7 +94,7 @@ export function FeaturedBooksSection({ onSelect }: Props) {
       )}
 
       {!error && !loading && items.length === 0 && (
-        <p className="text-xs text-slate-400 py-6 text-center">
+        <p className="text-xs text-slate-600 py-6 text-center">
           잠시 후 다시 시도해주세요
         </p>
       )}
@@ -131,8 +131,8 @@ export function FeaturedBooksSection({ onSelect }: Props) {
                 <p className="font-semibold text-slate-800 truncate text-[14px] group-hover:text-primary transition leading-snug">
                   {book.title}
                 </p>
-                <p className="text-xs text-slate-400 mt-0.5 truncate">{book.author}</p>
-                <p className="text-xs text-slate-300 truncate">{book.publisher}</p>
+                <p className="text-xs text-slate-600 mt-0.5 truncate">{book.author}</p>
+                <p className="text-xs text-slate-500 truncate">{book.publisher}</p>
               </div>
             </button>
           ))}

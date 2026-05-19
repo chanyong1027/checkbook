@@ -23,11 +23,11 @@ export function BookDetailCard({ book }: { book: BookCandidate }) {
             {book.title}
           </h2>
           <p className="text-sm text-slate-500 truncate">{book.author}</p>
-          <p className="text-xs text-slate-400 truncate mt-0.5">{book.publisher}</p>
+          <p className="text-xs text-slate-600 truncate mt-0.5">{book.publisher}</p>
           {book.publishedAt && (
-            <p className="text-xs text-slate-300 mt-0.5">{book.publishedAt}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{book.publishedAt}</p>
           )}
-          <span className="mt-2 inline-block text-xs font-mono bg-orange-50 text-orange-400 px-2 py-0.5 rounded-lg">
+          <span className="mt-2 inline-block text-xs font-mono bg-orange-50 text-orange-700 px-2 py-0.5 rounded-lg">
             {book.isbn13}
           </span>
         </div>

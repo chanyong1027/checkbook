@@ -58,8 +58,8 @@ function saveIds(ids: number[]) {
 
 const elibStatusColor: Record<string, string> = {
   SUCCESS: 'text-emerald-600',
-  FAILED: 'text-red-400',
-  TIMEOUT: 'text-orange-400',
+  FAILED: 'text-red-500',
+  TIMEOUT: 'text-orange-500',
 }
 
 const elibStatusLabel: Record<string, string> = {
@@ -191,12 +191,12 @@ function ELibrarySelector({
       <div className="flex items-center justify-between mb-2">
         <p className="text-[13px] font-medium text-slate-600">
           도서관 선택
-          <span className={`ml-1.5 ${overLimit ? 'text-red-400' : 'text-slate-300'}`}>
+          <span className={`ml-1.5 ${overLimit ? 'text-red-500' : 'text-slate-500'}`}>
             {draftIds.size}/{MAX_SELECT}
           </span>
         </p>
         {draftIds.size > 0 && (
-          <button onClick={clearAll} className="text-xs text-primary hover:underline cursor-pointer">
+          <button onClick={clearAll} className="px-2 py-1 -mr-1 text-xs text-primary hover:underline cursor-pointer">
             전체 해제
           </button>
         )}
@@ -208,16 +208,16 @@ function ELibrarySelector({
           {selectedLibs.map(lib => (
             <span
               key={lib.libraryId}
-              className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full
+              className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full
                 bg-orange-50 border border-orange-200 text-xs text-orange-700 font-medium"
             >
               {lib.name}
               <button
                 onClick={() => toggle(lib.libraryId)}
-                className="w-4 h-4 rounded-full hover:bg-orange-200 flex items-center justify-center transition cursor-pointer shrink-0"
+                className="w-6 h-6 rounded-full hover:bg-orange-200 flex items-center justify-center transition cursor-pointer shrink-0"
                 aria-label={`${lib.name} 선택 해제`}
               >
-                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                   <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
               </button>
@@ -227,29 +227,30 @@ function ELibrarySelector({
       )}
 
       {overLimit && (
-        <p className="text-xs text-red-400 mb-2">최대 {MAX_SELECT}개까지 선택 가능합니다</p>
+        <p className="text-xs text-red-500 mb-2">최대 {MAX_SELECT}개까지 선택 가능합니다</p>
       )}
 
       {/* Filter input */}
       <div className="relative mb-2">
-        <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+        <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
           <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
         </svg>
         <input
           type="text"
           placeholder="이름, 지역으로 필터"
+          aria-label="전자도서관 이름·지역 필터"
           value={keyword}
           onChange={e => setKeyword(e.target.value)}
-          className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-orange-100 bg-white text-sm
+          className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-orange-100 bg-white text-base
             focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition
-            placeholder:text-slate-300"
+            placeholder:text-slate-400"
         />
       </div>
 
       {/* Library list */}
       <div className="max-h-48 overflow-y-auto scrollbar-thin space-y-0.5 bg-white rounded-2xl border border-orange-50 p-1 mb-4">
         {filteredLibs.length === 0 && (
-          <p className="text-sm text-slate-300 text-center py-4">검색 결과 없음</p>
+          <p className="text-sm text-slate-500 text-center py-4">검색 결과 없음</p>
         )}
         {filteredLibs.map(lib => {
           const checked = draftIds.has(lib.libraryId)
@@ -268,7 +269,7 @@ function ELibrarySelector({
                 className="w-4 h-4 accent-primary shrink-0"
               />
               <span className="text-sm text-slate-700 flex-1 truncate">{lib.name}</span>
-              <span className="text-xs text-slate-300 shrink-0">{lib.region}</span>
+              <span className="text-xs text-slate-500 shrink-0">{lib.region}</span>
             </label>
           )
         })}
@@ -278,7 +279,7 @@ function ELibrarySelector({
       <div className="flex gap-2">
         <button
           onClick={onCancel}
-          className="flex-1 py-3 border border-orange-100 rounded-2xl text-sm text-slate-400
+          className="flex-1 py-3 border border-orange-100 rounded-2xl text-sm text-slate-600
             hover:border-primary hover:text-primary transition cursor-pointer bg-white"
         >
           취소
@@ -462,11 +463,11 @@ export function BookDetailPage({ book, onReset }: Props) {
                 title="공공도서관"
               >
                 <div className="text-center py-4">
-                  <p className="text-sm text-slate-400 mb-3">
+                  <p className="text-sm text-slate-600 mb-3">
                     위치를 허용하면 근처 도서관의<br />소장 여부를 확인할 수 있어요
                   </p>
                   {locError && (
-                    <p className="text-xs text-red-400 mb-2">{locError}</p>
+                    <p className="text-xs text-red-500 mb-2">{locError}</p>
                   )}
                   <button
                     onClick={handleGetLocation}
@@ -499,7 +500,7 @@ export function BookDetailPage({ book, onReset }: Props) {
                 }
                 title="공공도서관"
               >
-                <p className="text-sm text-slate-400 text-center py-2">검색에 실패했습니다</p>
+                <p className="text-sm text-slate-600 text-center py-2">검색에 실패했습니다</p>
               </SectionCard>
             ) : searchResult.publicLibraries.length === 0 ? (
               <SectionCard
@@ -511,7 +512,7 @@ export function BookDetailPage({ book, onReset }: Props) {
                 }
                 title="공공도서관"
               >
-                <p className="text-sm text-slate-400 text-center py-2">소장 도서관이 없습니다</p>
+                <p className="text-sm text-slate-600 text-center py-2">소장 도서관이 없습니다</p>
               </SectionCard>
             ) : (
               <SectionCard
@@ -537,10 +538,10 @@ export function BookDetailPage({ book, onReset }: Props) {
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="text-sm font-medium text-slate-700 truncate">{lib.libraryName}</p>
-                          <p className="text-xs text-slate-300 mt-0.5">{lib.distance}km · {lib.address}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">{lib.distance}km · {lib.address}</p>
                         </div>
                         <div className="shrink-0 flex flex-col items-end gap-1">
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${lib.hasBook ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${lib.hasBook ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-600'}`}>
                             {lib.hasBook ? '보유' : '미보유'}
                           </span>
                           {lib.hasBook && (
@@ -557,8 +558,9 @@ export function BookDetailPage({ book, onReset }: Props) {
                             href={lib.homepage}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-50
-                              border border-slate-100 text-xs text-slate-500 hover:border-primary
+                            aria-label={`${lib.libraryName} 홈페이지 열기`}
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-50
+                              border border-slate-100 text-xs text-slate-600 hover:border-primary
                               hover:text-primary transition"
                           >
                             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -574,7 +576,8 @@ export function BookDetailPage({ book, onReset }: Props) {
                               href={`https://map.kakao.com/link/search/${encodeURIComponent(lib.libraryName)}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs
+                              aria-label={`${lib.libraryName} 카카오맵에서 보기`}
+                              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs
                                 text-[#3A1D1D] bg-[#FEE500] hover:bg-[#FDD835] transition font-medium"
                             >
                               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -587,7 +590,8 @@ export function BookDetailPage({ book, onReset }: Props) {
                               href={`https://map.kakao.com/link/to/${encodeURIComponent(lib.libraryName)},${lib.latitude},${lib.longitude}`}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs
+                              aria-label={`${lib.libraryName} 길찾기`}
+                              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs
                                 text-white bg-[#3A1D1D] hover:bg-black transition font-medium"
                             >
                               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -627,7 +631,7 @@ export function BookDetailPage({ book, onReset }: Props) {
               if (subscriptionStatus === 'FAILED') {
                 return (
                   <SectionCard icon={sectionIcon} title="구독 서비스">
-                    <p className="text-sm text-slate-400 text-center py-2">
+                    <p className="text-sm text-slate-600 text-center py-2">
                       구독 정보 조회 실패. 잠시 후 다시 시도해주세요
                     </p>
                   </SectionCard>
@@ -648,7 +652,7 @@ export function BookDetailPage({ book, onReset }: Props) {
                             href={millie.detailUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#e8400c]/10
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#e8400c]/10
                               text-xs text-[#e8400c] font-medium hover:bg-[#e8400c]/20 transition"
                           >
                             밀리
@@ -659,7 +663,7 @@ export function BookDetailPage({ book, onReset }: Props) {
                         )}
                       </div>
                     ) : (
-                      <span className="text-sm text-slate-400">구독 정보 없음</span>
+                      <span className="text-sm text-slate-500">구독 정보 없음</span>
                     )}
                   </div>
                 </SectionCard>
@@ -692,7 +696,7 @@ export function BookDetailPage({ book, onReset }: Props) {
                                 href={url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#e8400c]/10
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#e8400c]/10
                                   text-xs text-[#e8400c] font-medium hover:bg-[#e8400c]/20 transition"
                               >
                                 알라딘
@@ -703,7 +707,7 @@ export function BookDetailPage({ book, onReset }: Props) {
                             )}
                           </>
                         ) : (
-                          <span className="text-sm text-slate-400">재고 없음</span>
+                          <span className="text-sm text-slate-500">재고 없음</span>
                         )}
                       </div>
                     </div>
@@ -732,7 +736,7 @@ export function BookDetailPage({ book, onReset }: Props) {
                 }
                 title="새책"
               >
-                <p className="text-sm text-slate-400 text-center py-2">가격 정보를 가져올 수 없습니다</p>
+                <p className="text-sm text-slate-600 text-center py-2">가격 정보를 가져올 수 없습니다</p>
               </SectionCard>
             ) : searchResult.newBook && (
               <SectionCard
@@ -754,7 +758,7 @@ export function BookDetailPage({ book, onReset }: Props) {
                       href={searchResult.newBook.productUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#e8400c]/10
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#e8400c]/10
                         text-xs text-[#e8400c] font-medium hover:bg-[#e8400c]/20 transition"
                     >
                       알라딘
@@ -783,7 +787,7 @@ export function BookDetailPage({ book, onReset }: Props) {
             }
             title="전자도서관"
           >
-            <p className="text-sm text-red-400 text-center py-2">{elibError}</p>
+            <p className="text-sm text-red-500 text-center py-2">{elibError}</p>
             <button
               onClick={() => setSheetOpen(true)}
               className="w-full mt-2 py-2 text-xs text-primary hover:underline cursor-pointer"
@@ -804,7 +808,7 @@ export function BookDetailPage({ book, onReset }: Props) {
             <div className="flex items-center justify-end mb-2">
               <button
                 onClick={() => setSheetOpen(true)}
-                className="text-xs text-slate-300 hover:text-primary cursor-pointer"
+                className="px-2 py-1 -mr-1 text-xs text-slate-500 hover:text-primary cursor-pointer"
               >
                 설정 변경
               </button>
@@ -816,14 +820,14 @@ export function BookDetailPage({ book, onReset }: Props) {
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-semibold text-slate-800 text-sm">{result.libraryName}</span>
                     <div className="flex items-center gap-2">
-                      <span className={`text-xs font-medium ${elibStatusColor[result.status] ?? 'text-slate-400'}`}>
+                      <span className={`text-xs font-medium ${elibStatusColor[result.status] ?? 'text-slate-600'}`}>
                         {elibStatusLabel[result.status] ?? result.status}
                       </span>
                     </div>
                   </div>
 
                   {result.status === 'SUCCESS' && result.books.length === 0 && (
-                    <p className="text-xs text-slate-300">소장 도서 없음</p>
+                    <p className="text-xs text-slate-500">소장 도서 없음</p>
                   )}
 
                   {result.books.map((b, i) => (
@@ -844,9 +848,9 @@ export function BookDetailPage({ book, onReset }: Props) {
                         ) : (
                           <span className="text-sm font-medium text-slate-700 truncate block">{b.title}</span>
                         )}
-                        <p className="text-xs text-slate-300 truncate">{b.author}</p>
+                        <p className="text-xs text-slate-500 truncate">{b.author}</p>
                       </div>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${b.available ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${b.available ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-600'}`}>
                         {b.available ? '대출가능' : '대출중'}
                       </span>
                     </div>
@@ -857,9 +861,9 @@ export function BookDetailPage({ book, onReset }: Props) {
 
             {elibResult.metadata.failures.length > 0 && (
               <div className="mt-2 p-3 bg-slate-50 rounded-xl">
-                <p className="text-xs font-medium text-slate-400 mb-1">접속 실패</p>
+                <p className="text-xs font-medium text-slate-600 mb-1">접속 실패</p>
                 {elibResult.metadata.failures.map((f, i) => (
-                  <p key={i} className="text-xs text-slate-300">{f.libraryName ?? `#${f.libraryId}`} — {f.reason}</p>
+                  <p key={i} className="text-xs text-slate-500">{f.libraryName ?? `#${f.libraryId}`} — {f.reason}</p>
                 ))}
               </div>
             )}
@@ -876,7 +880,7 @@ export function BookDetailPage({ book, onReset }: Props) {
             title="전자도서관"
           >
             <div className="text-center py-4">
-              <p className="text-sm text-slate-400 mb-3">
+              <p className="text-sm text-slate-600 mb-3">
                 자주 이용하는 전자도서관을 설정하면<br />대출 가능 여부를 자동 확인해드려요
               </p>
               <button
@@ -894,7 +898,7 @@ export function BookDetailPage({ book, onReset }: Props) {
         {/* ==================== RESET BUTTON ==================== */}
         <button
           onClick={onReset}
-          className="w-full py-3 border border-orange-100 rounded-2xl text-sm text-slate-400
+          className="w-full py-3 border border-orange-100 rounded-2xl text-sm text-slate-600
             hover:border-primary hover:text-primary transition cursor-pointer bg-white"
         >
           처음부터 다시 검색

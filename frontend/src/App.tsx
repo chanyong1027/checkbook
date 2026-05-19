@@ -79,7 +79,7 @@ export default function App() {
             className="p-2 -ml-2 rounded-xl hover:bg-orange-50 transition cursor-pointer"
             aria-label="뒤로"
           >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2.5" strokeLinecap="round">
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </button>
