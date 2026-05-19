@@ -23,8 +23,16 @@ async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
   return res.json() as Promise<T>
 }
 
-export function searchBooks(q: string, page = 1, size = 10): Promise<BookCandidateResponse> {
-  return get(`/api/books/search?q=${encodeURIComponent(q)}&page=${page}&size=${size}`)
+export function searchBooks(
+  q: string,
+  page = 1,
+  size = 10,
+  signal?: AbortSignal,
+): Promise<BookCandidateResponse> {
+  return get(
+    `/api/books/search?q=${encodeURIComponent(q)}&page=${page}&size=${size}`,
+    signal,
+  )
 }
 
 export function searchMain(
