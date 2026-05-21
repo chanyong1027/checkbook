@@ -299,6 +299,32 @@ function ELibrarySelector({
   )
 }
 
+// --- 책 정보 없음 (Kakao·Aladin 모두 식별 실패) ---
+
+function BookNotFoundView({ isbn13, onReset }: { isbn13: string; onReset: () => void }) {
+  return (
+    <div className="text-center py-12">
+      <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fdba74" strokeWidth="1.5" strokeLinecap="round">
+          <circle cx="11" cy="11" r="8" />
+          <path d="m21 21-4.35-4.35" />
+        </svg>
+      </div>
+      <h2 className="text-base font-semibold text-slate-800 mb-1">책 정보를 찾을 수 없습니다</h2>
+      <p className="text-sm text-slate-500 mb-1">입력하신 ISBN으로 등록된 책이 없어요</p>
+      <p className="text-xs font-mono text-slate-400 mb-6">{isbn13}</p>
+      <button
+        onClick={onReset}
+        className="px-5 py-2.5 bg-primary text-white rounded-2xl text-sm font-semibold
+          hover:bg-primary-dark active:scale-[0.98] transition cursor-pointer
+          shadow-sm shadow-orange-200"
+      >
+        검색으로 돌아가기
+      </button>
+    </div>
+  )
+}
+
 // --- Header skeleton (cold-entry: book metadata not yet loaded) ---
 
 function BookDetailCardSkeleton() {
@@ -515,6 +541,13 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
     .find(s => s.section === 'NEW_BOOK')?.status
 
   const hasSavedElibs = savedElibIds.length > 0
+
+  // 통합검색·Kakao cold-fetch 모두 settle 되었는데도 책 메타가 없으면 = 존재하지 않는 ISBN
+  const bookNotFound = !searchLoading && coldFetchDone && !displayBook
+
+  if (bookNotFound) {
+    return <BookNotFoundView isbn13={isbn13} onReset={onReset} />
+  }
 
   return (
     <div>
