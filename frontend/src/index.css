@@ -62,3 +62,21 @@
 .sheet-backdrop {
   animation: fade-in 0.2s ease-out both;
 }
+
+/* 사용자가 시스템 설정에서 모션 감소를 선호하면 장식성 애니메이션·트랜지션 제거.
+   단, .animate-spin(로딩 인디케이터)은 작업 진행 중임을 알리는 기능적 모션이므로 유지. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-spin {
+    animation-duration: 1s !important;
+    animation-iteration-count: infinite !important;
+  }
+}

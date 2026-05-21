@@ -120,33 +120,38 @@ export default function App() {
   return (
     <div className="min-h-dvh bg-surface flex flex-col">
       {/* Header */}
-      <header className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm border-b border-orange-100 px-4 h-14 flex items-center gap-3">
-        {/* Back button — only on detail step */}
-        {route.step === 'detail' && (
-          <button
-            onClick={() => window.history.back()}
-            className="p-2 -ml-2 rounded-xl hover:bg-orange-50 transition cursor-pointer"
-            aria-label="뒤로"
-          >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-          </button>
-        )}
+      <header
+        className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm border-b border-orange-100"
+        style={{ paddingTop: 'env(safe-area-inset-top)' }}
+      >
+        <div className="px-4 h-14 flex items-center gap-3">
+          {/* Back button — only on detail step */}
+          {route.step === 'detail' && (
+            <button
+              onClick={() => window.history.back()}
+              className="p-2 -ml-2 rounded-xl hover:bg-orange-50 transition cursor-pointer"
+              aria-label="뒤로"
+            >
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+            </button>
+          )}
 
-        <button
-          onClick={handleReset}
-          className="flex items-center gap-2 cursor-pointer"
-          aria-label="홈으로"
-        >
-          <div className="w-8 h-8 bg-primary rounded-xl flex items-center justify-center shadow-sm shadow-orange-200">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-            </svg>
-          </div>
-          <span className="font-bold text-slate-800 text-[15px] tracking-tight">CheckBook</span>
-        </button>
+          <button
+            onClick={handleReset}
+            className="flex items-center gap-2 cursor-pointer"
+            aria-label="홈으로"
+          >
+            <div className="w-8 h-8 bg-primary rounded-xl flex items-center justify-center shadow-sm shadow-orange-200">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+              </svg>
+            </div>
+            <span className="font-bold text-slate-800 text-[15px] tracking-tight">CheckBook</span>
+          </button>
+        </div>
       </header>
 
       {/* Main */}
