@@ -43,8 +43,11 @@ export function BottomSheet({ open, onClose, title, children }: BottomSheetProps
             </svg>
           </button>
         </div>
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto scrollbar-thin px-5 py-4">
+        {/* Content — iOS 홈 인디케이터 영역 보호 */}
+        <div
+          className="flex-1 overflow-y-auto scrollbar-thin px-5 pt-4"
+          style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+        >
           {children}
         </div>
       </div>
