@@ -86,7 +86,15 @@ public class FeaturedBooksRefresher {
     }
 
     private void refreshFromDatanaru(FeaturedSectionType type, Duration ttl) {
-        List<DatanaruLoanBookResult> rows = datanaruClient.loanItemSrch(pageSize);
+        // 정보나루 loanItemSrch는 콜드 캐시 시 응답이 40초 이상 걸릴 수 있고,
+        // 1차 호출이 서버 캐시를 데우므로 1회 재시도만 해도 2차는 즉시 응답하는 경향.
+        List<DatanaruLoanBookResult> rows;
+        try {
+            rows = datanaruClient.loanItemSrch(pageSize);
+        } catch (RuntimeException first) {
+            log.warn("정보나루 loanItemSrch 1차 실패, 재시도: {}", first.toString());
+            rows = datanaruClient.loanItemSrch(pageSize);
+        }
         // DatanaruClient.loanItemSrch가 이미 isbn13 blank를 걸러주지만 title 가드 추가
         List<DatanaruLoanBookResult> valid = rows.stream()
                 .filter(r -> isNonBlank(r.title()))

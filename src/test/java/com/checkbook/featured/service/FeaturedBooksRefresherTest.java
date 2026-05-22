@@ -163,4 +163,25 @@ class FeaturedBooksRefresherTest {
                 org.mockito.ArgumentMatchers.contains("timeout after 2000ms"));
         verify(writer, never()).replaceSection(any(), any(), anyList(), any());
     }
+
+    @Test
+    void refreshSection_loan_retriesOnceAfterFailure_andSucceeds() {
+        when(datanaruClient.loanItemSrch(15))
+                .thenThrow(new RuntimeException("read timed out"))
+                .thenReturn(List.of(
+                        new DatanaruLoanBookResult(1, "9791161571188", "불편한 편의점",
+                                "김호연", "나무옆의자", "https://cover/x.jpg", "2021")
+                ));
+
+        refresher().refreshSection(FeaturedSectionType.LOAN);
+
+        verify(datanaruClient, org.mockito.Mockito.times(2)).loanItemSrch(15);
+        verify(writer).replaceSection(
+                eq(FeaturedSectionType.LOAN),
+                eq(FeaturedSource.DATANARU),
+                anyList(),
+                eq(Duration.ofHours(168))
+        );
+        verify(writer, never()).markFailed(any(), org.mockito.ArgumentMatchers.anyString());
+    }
 }
