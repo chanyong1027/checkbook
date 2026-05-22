@@ -128,7 +128,7 @@ export function FeaturedBooksSection({ onSelect }: Props) {
                   px-1.5 py-0.5 rounded-full bg-orange-50 text-primary mb-1">
                   {idx + 1}
                 </span>
-                <p className="font-semibold text-slate-800 truncate text-[14px] group-hover:text-primary transition leading-snug">
+                <p className="font-semibold text-slate-800 truncate text-sm group-hover:text-primary transition leading-snug">
                   {book.title}
                 </p>
                 <p className="text-xs text-slate-600 mt-0.5 truncate">{book.author}</p>

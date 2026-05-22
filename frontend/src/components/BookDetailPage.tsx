@@ -13,6 +13,7 @@ import { BookDetailCard } from './shared/BookDetailCard'
 import { SectionCard } from './shared/SectionCard'
 import { Skeleton } from './shared/Skeleton'
 import { BottomSheet } from './shared/BottomSheet'
+import { ConfirmDialog } from './shared/ConfirmDialog'
 
 function isSafeUrl(url: string | null | undefined): url is string {
   if (!url) return false
@@ -127,14 +128,22 @@ function ElibLoadingSkeleton() {
 
 // --- E-library selector bottom sheet content ---
 
+function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
+  if (a.size !== b.size) return false
+  for (const v of a) if (!b.has(v)) return false
+  return true
+}
+
 function ELibrarySelector({
   initialIds,
   onConfirm,
   onCancel,
+  onDirtyChange,
 }: {
   initialIds: Set<number>
   onConfirm: (ids: number[]) => void
   onCancel: () => void
+  onDirtyChange?: (dirty: boolean) => void
 }) {
   const [libraries, setLibraries] = useState<ELibraryInfo[]>([])
   const [loading, setLoading] = useState(true)
@@ -148,6 +157,11 @@ function ELibrarySelector({
       .catch(e => setError(toUserMessage(e, '전자도서관 목록을 불러오지 못했습니다.')))
       .finally(() => setLoading(false))
   }, [])
+
+  // 변경 여부 추적 — 백드롭/취소 시 부모에서 확인 다이얼로그 게이트로 사용
+  useEffect(() => {
+    onDirtyChange?.(!setsEqual(draftIds, initialIds))
+  }, [draftIds, initialIds, onDirtyChange])
 
   function toggle(id: number) {
     setDraftIds(prev => {
@@ -366,6 +380,10 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
 
   // Bottom sheet
   const [sheetOpen, setSheetOpen] = useState(false)
+  // 전자도서관 선택 시트의 변경분 추적 (백드롭/취소 시 확인 다이얼로그 게이트)
+  const [sheetDirty, setSheetDirty] = useState(false)
+  // 변경분 폐기 확인 다이얼로그
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
 
   // Cold-entry book metadata (Kakao) — initialBook이 없을 때 채워짐
   const [coldBook, setColdBook] = useState<BookCandidate | null>(null)
@@ -528,10 +546,26 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   function handleElibSheetConfirm(ids: number[]) {
     setSavedElibIds(ids)
     saveIds(ids)
+    setSheetDirty(false)
     setSheetOpen(false)
     if (displayBook) {
       runElibSearch(ids, displayBook.title, displayBook.author)
     }
+  }
+
+  // 시트 닫기 요청 (백드롭·취소·X 공통). dirty 면 확인 다이얼로그로 게이트.
+  function requestSheetClose() {
+    if (sheetDirty) {
+      setDiscardConfirmOpen(true)
+      return
+    }
+    setSheetOpen(false)
+  }
+
+  function discardSheetChanges() {
+    setDiscardConfirmOpen(false)
+    setSheetDirty(false)
+    setSheetOpen(false)
   }
 
   // Get section statuses from metadata
@@ -696,7 +730,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                               rel="noopener noreferrer"
                               aria-label={`${lib.libraryName} 카카오맵에서 보기`}
                               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs
-                                text-[#3A1D1D] bg-[#FEE500] hover:bg-[#FDD835] transition font-medium"
+                                text-brand-kakao-dark bg-brand-kakao hover:bg-brand-kakao-hover transition font-medium"
                             >
                               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
@@ -710,7 +744,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                               rel="noopener noreferrer"
                               aria-label={`${lib.libraryName} 길찾기`}
                               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs
-                                text-white bg-[#3A1D1D] hover:bg-black transition font-medium"
+                                text-white bg-brand-kakao-dark hover:bg-black transition font-medium"
                             >
                               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                                 <polygon points="3 11 22 2 13 21 11 13 3 11" />
@@ -770,8 +804,8 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                             href={millie.detailUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#e8400c]/10
-                              text-xs text-[#e8400c] font-medium hover:bg-[#e8400c]/20 transition"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-aladin/10
+                              text-xs text-brand-aladin font-medium hover:bg-brand-aladin/20 transition"
                           >
                             밀리
                             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -814,8 +848,8 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                                 href={url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#e8400c]/10
-                                  text-xs text-[#e8400c] font-medium hover:bg-[#e8400c]/20 transition"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-aladin/10
+                                  text-xs text-brand-aladin font-medium hover:bg-brand-aladin/20 transition"
                               >
                                 알라딘
                                 <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -876,8 +910,8 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                       href={searchResult.newBook.productUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#e8400c]/10
-                        text-xs text-[#e8400c] font-medium hover:bg-[#e8400c]/20 transition"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-aladin/10
+                        text-xs text-brand-aladin font-medium hover:bg-brand-aladin/20 transition"
                     >
                       알라딘
                       <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -1026,15 +1060,28 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
       {/* ==================== BOTTOM SHEET ==================== */}
       <BottomSheet
         open={sheetOpen}
-        onClose={() => setSheetOpen(false)}
+        onClose={requestSheetClose}
         title="전자도서관 선택"
       >
         <ELibrarySelector
           initialIds={new Set(savedElibIds)}
           onConfirm={handleElibSheetConfirm}
-          onCancel={() => setSheetOpen(false)}
+          onCancel={requestSheetClose}
+          onDirtyChange={setSheetDirty}
         />
       </BottomSheet>
+
+      {/* ==================== DISCARD CONFIRM DIALOG ==================== */}
+      <ConfirmDialog
+        open={discardConfirmOpen}
+        title="변경사항을 버리시겠어요?"
+        message="저장하지 않으면 선택한 도서관 변경 내용이 사라집니다."
+        confirmLabel="버리고 닫기"
+        cancelLabel="계속 편집"
+        destructive
+        onConfirm={discardSheetChanges}
+        onCancel={() => setDiscardConfirmOpen(false)}
+      />
     </div>
   )
 }

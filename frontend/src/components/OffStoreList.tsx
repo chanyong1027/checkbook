@@ -116,8 +116,8 @@ export function OffStoreList({
                   href={spaceUsedUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="relative z-10 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#e8400c]/10
-                    text-xs text-[#e8400c] font-medium hover:bg-[#e8400c]/20 transition"
+                  className="relative z-10 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-aladin/10
+                    text-xs text-brand-aladin font-medium hover:bg-brand-aladin/20 transition"
                 >
                   알라딘
                   <svg
