@@ -730,7 +730,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                               rel="noopener noreferrer"
                               aria-label={`${lib.libraryName} 카카오맵에서 보기`}
                               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs
-                                text-[#3A1D1D] bg-[#FEE500] hover:bg-[#FDD835] transition font-medium"
+                                text-brand-kakao-dark bg-brand-kakao hover:bg-brand-kakao-hover transition font-medium"
                             >
                               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
@@ -744,7 +744,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                               rel="noopener noreferrer"
                               aria-label={`${lib.libraryName} 길찾기`}
                               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs
-                                text-white bg-[#3A1D1D] hover:bg-black transition font-medium"
+                                text-white bg-brand-kakao-dark hover:bg-black transition font-medium"
                             >
                               <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                                 <polygon points="3 11 22 2 13 21 11 13 3 11" />
@@ -804,8 +804,8 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                             href={millie.detailUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#e8400c]/10
-                              text-xs text-[#e8400c] font-medium hover:bg-[#e8400c]/20 transition"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-aladin/10
+                              text-xs text-brand-aladin font-medium hover:bg-brand-aladin/20 transition"
                           >
                             밀리
                             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -848,8 +848,8 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                                 href={url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#e8400c]/10
-                                  text-xs text-[#e8400c] font-medium hover:bg-[#e8400c]/20 transition"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-aladin/10
+                                  text-xs text-brand-aladin font-medium hover:bg-brand-aladin/20 transition"
                               >
                                 알라딘
                                 <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -910,8 +910,8 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                       href={searchResult.newBook.productUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#e8400c]/10
-                        text-xs text-[#e8400c] font-medium hover:bg-[#e8400c]/20 transition"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-aladin/10
+                        text-xs text-brand-aladin font-medium hover:bg-brand-aladin/20 transition"
                     >
                       알라딘
                       <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
