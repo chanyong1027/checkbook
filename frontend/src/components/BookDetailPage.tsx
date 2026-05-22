@@ -13,6 +13,7 @@ import { BookDetailCard } from './shared/BookDetailCard'
 import { SectionCard } from './shared/SectionCard'
 import { Skeleton } from './shared/Skeleton'
 import { BottomSheet } from './shared/BottomSheet'
+import { ConfirmDialog } from './shared/ConfirmDialog'
 
 function isSafeUrl(url: string | null | undefined): url is string {
   if (!url) return false
@@ -127,14 +128,22 @@ function ElibLoadingSkeleton() {
 
 // --- E-library selector bottom sheet content ---
 
+function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
+  if (a.size !== b.size) return false
+  for (const v of a) if (!b.has(v)) return false
+  return true
+}
+
 function ELibrarySelector({
   initialIds,
   onConfirm,
   onCancel,
+  onDirtyChange,
 }: {
   initialIds: Set<number>
   onConfirm: (ids: number[]) => void
   onCancel: () => void
+  onDirtyChange?: (dirty: boolean) => void
 }) {
   const [libraries, setLibraries] = useState<ELibraryInfo[]>([])
   const [loading, setLoading] = useState(true)
@@ -148,6 +157,11 @@ function ELibrarySelector({
       .catch(e => setError(toUserMessage(e, '전자도서관 목록을 불러오지 못했습니다.')))
       .finally(() => setLoading(false))
   }, [])
+
+  // 변경 여부 추적 — 백드롭/취소 시 부모에서 확인 다이얼로그 게이트로 사용
+  useEffect(() => {
+    onDirtyChange?.(!setsEqual(draftIds, initialIds))
+  }, [draftIds, initialIds, onDirtyChange])
 
   function toggle(id: number) {
     setDraftIds(prev => {
@@ -366,6 +380,10 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
 
   // Bottom sheet
   const [sheetOpen, setSheetOpen] = useState(false)
+  // 전자도서관 선택 시트의 변경분 추적 (백드롭/취소 시 확인 다이얼로그 게이트)
+  const [sheetDirty, setSheetDirty] = useState(false)
+  // 변경분 폐기 확인 다이얼로그
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
 
   // Cold-entry book metadata (Kakao) — initialBook이 없을 때 채워짐
   const [coldBook, setColdBook] = useState<BookCandidate | null>(null)
@@ -528,10 +546,26 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   function handleElibSheetConfirm(ids: number[]) {
     setSavedElibIds(ids)
     saveIds(ids)
+    setSheetDirty(false)
     setSheetOpen(false)
     if (displayBook) {
       runElibSearch(ids, displayBook.title, displayBook.author)
     }
+  }
+
+  // 시트 닫기 요청 (백드롭·취소·X 공통). dirty 면 확인 다이얼로그로 게이트.
+  function requestSheetClose() {
+    if (sheetDirty) {
+      setDiscardConfirmOpen(true)
+      return
+    }
+    setSheetOpen(false)
+  }
+
+  function discardSheetChanges() {
+    setDiscardConfirmOpen(false)
+    setSheetDirty(false)
+    setSheetOpen(false)
   }
 
   // Get section statuses from metadata
@@ -1026,15 +1060,28 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
       {/* ==================== BOTTOM SHEET ==================== */}
       <BottomSheet
         open={sheetOpen}
-        onClose={() => setSheetOpen(false)}
+        onClose={requestSheetClose}
         title="전자도서관 선택"
       >
         <ELibrarySelector
           initialIds={new Set(savedElibIds)}
           onConfirm={handleElibSheetConfirm}
-          onCancel={() => setSheetOpen(false)}
+          onCancel={requestSheetClose}
+          onDirtyChange={setSheetDirty}
         />
       </BottomSheet>
+
+      {/* ==================== DISCARD CONFIRM DIALOG ==================== */}
+      <ConfirmDialog
+        open={discardConfirmOpen}
+        title="변경사항을 버리시겠어요?"
+        message="저장하지 않으면 선택한 도서관 변경 내용이 사라집니다."
+        confirmLabel="버리고 닫기"
+        cancelLabel="계속 편집"
+        destructive
+        onConfirm={discardSheetChanges}
+        onCancel={() => setDiscardConfirmOpen(false)}
+      />
     </div>
   )
 }
