@@ -81,6 +81,7 @@ export function ConfirmDialog({
         </p>
         <div className="flex gap-2">
           <button
+            type="button"
             ref={cancelBtnRef}
             onClick={onCancel}
             className="flex-1 py-2.5 rounded-2xl text-sm font-semibold text-slate-700
@@ -89,6 +90,7 @@ export function ConfirmDialog({
             {cancelLabel}
           </button>
           <button
+            type="button"
             onClick={onConfirm}
             className={
               'flex-1 py-2.5 rounded-2xl text-sm font-semibold text-white active:scale-[0.98] transition cursor-pointer shadow-sm ' +
