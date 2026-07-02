@@ -64,23 +64,54 @@ jobs:
           cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/checkbook:buildcache
           cache-to: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/checkbook:buildcache,mode=max
 
-      - name: deploy.sh를 EC2로 복사
-        uses: appleboy/scp-action@v0.1.7
+      # SSH(22번 포트) 대신 SSM Run Command로 배포 — 인바운드 포트 개방 불필요.
+      # deploy.sh 복사(scp)는 public repo raw URL curl로 대체.
+      - name: AWS 자격증명 설정
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: scripts/deploy.sh
-          target: /home/ubuntu/
-          strip_components: 1
-          overwrite: true
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
 
-      - name: EC2에 배포
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            chmod +x /home/ubuntu/deploy.sh
-            /home/ubuntu/deploy.sh
+      - name: EC2에 배포 (SSM Run Command)
+        env:
+          INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "checkbook backend deploy ${GITHUB_SHA::7}" \
+            --timeout-seconds 600 \
+            --parameters 'commands=[
+              "set -e",
+              "curl -fsSL https://raw.githubusercontent.com/chanyong1027/checkbook/main/scripts/deploy.sh -o /home/ubuntu/deploy.sh",
+              "chmod +x /home/ubuntu/deploy.sh",
+              "bash /home/ubuntu/deploy.sh"
+            ]' \
+            --query "Command.CommandId" --output text)
+          echo "SSM CommandId: $COMMAND_ID"
+
+          # 배포 스크립트가 헬스체크 대기(30s+)를 포함하므로 기본 waiter 대신 수동 폴링 (최대 10분)
+          STATUS=Pending
+          for i in $(seq 1 60); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+              --query Status --output text)
+            case "$STATUS" in
+              Success|Failed|Cancelled|TimedOut) break ;;
+            esac
+            sleep 10
+          done
+
+          echo "=== 배포 stdout ==="
+          aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+            --query StandardOutputContent --output text
+          echo "=== 배포 stderr ==="
+          aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+            --query StandardErrorContent --output text
+
+          if [ "$STATUS" != "Success" ]; then
+            echo "배포 실패: 상태=$STATUS"
+            exit 1
+          fi
+          echo "배포 성공"
