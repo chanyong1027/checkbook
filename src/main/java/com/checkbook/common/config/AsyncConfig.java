@@ -1,5 +1,7 @@
 package com.checkbook.common.config;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.binder.jvm.ExecutorServiceMetrics;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,17 +24,20 @@ public class AsyncConfig {
     private int publicLibraryPoolSize;
 
     @Bean(name = "eLibraryExecutor", destroyMethod = "shutdown")
-    public ExecutorService eLibraryExecutor() {
-        return Executors.newFixedThreadPool(eLibraryPoolSize);
+    public ExecutorService eLibraryExecutor(MeterRegistry meterRegistry) {
+        return ExecutorServiceMetrics.monitor(
+                meterRegistry, Executors.newFixedThreadPool(eLibraryPoolSize), "eLibraryExecutor");
     }
 
     @Bean(name = "searchExecutor", destroyMethod = "shutdown")
-    public ExecutorService searchExecutor() {
-        return Executors.newFixedThreadPool(searchPoolSize);
+    public ExecutorService searchExecutor(MeterRegistry meterRegistry) {
+        return ExecutorServiceMetrics.monitor(
+                meterRegistry, Executors.newFixedThreadPool(searchPoolSize), "searchExecutor");
     }
 
     @Bean(name = "publicLibraryExecutor", destroyMethod = "shutdown")
-    public ExecutorService publicLibraryExecutor() {
-        return Executors.newFixedThreadPool(publicLibraryPoolSize);
+    public ExecutorService publicLibraryExecutor(MeterRegistry meterRegistry) {
+        return ExecutorServiceMetrics.monitor(
+                meterRegistry, Executors.newFixedThreadPool(publicLibraryPoolSize), "publicLibraryExecutor");
     }
 }

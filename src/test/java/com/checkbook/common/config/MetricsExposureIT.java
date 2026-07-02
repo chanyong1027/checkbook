@@ -28,5 +28,7 @@ class MetricsExposureIT {
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(response.getBody()).contains("jvm_memory_used_bytes");
         assertThat(response.getBody()).contains("hikaricp_connections");
+        assertThat(response.getBody()).contains("executor_active_threads");
+        assertThat(response.getBody()).contains("executor_queued_tasks");
     }
 }
