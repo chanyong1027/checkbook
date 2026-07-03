@@ -120,6 +120,37 @@ class AsyncConfigTest {
         }
     }
 
+    @Test
+    void 종료_drain은_예산_내_작업을_완주시키고_초과분은_인터럽트한다() throws Exception {
+        ReflectionTestUtils.setField(asyncConfig, "searchPoolSize", 1);
+        ReflectionTestUtils.setField(asyncConfig, "searchQueueCapacity", 4);
+        ReflectionTestUtils.setField(asyncConfig, "publicLibraryPoolSize", 1);
+        ReflectionTestUtils.setField(asyncConfig, "publicLibraryQueueCapacity", 4);
+        ReflectionTestUtils.setField(asyncConfig, "rejectionPolicy", "abort");
+        ReflectionTestUtils.setField(asyncConfig, "shutdownGraceMs", 500L);
+
+        ExecutorService quickPool = asyncConfig.searchExecutor(registry);
+        ExecutorService slowPool = asyncConfig.publicLibraryExecutor(registry);
+
+        CountDownLatch quickDone = new CountDownLatch(1);
+        quickPool.execute(quickDone::countDown);            // 예산 내 완주 대상
+        CountDownLatch slowInterrupted = new CountDownLatch(1);
+        slowPool.execute(() -> {
+            try {
+                Thread.sleep(5_000);                        // 예산(500ms) 초과 작업
+            } catch (InterruptedException e) {
+                slowInterrupted.countDown();                // shutdownNow의 인터럽트 확인
+            }
+        });
+
+        asyncConfig.shutdownGracefully();
+
+        assertThat(quickDone.await(1, TimeUnit.SECONDS)).isTrue();
+        assertThat(slowInterrupted.await(1, TimeUnit.SECONDS)).isTrue();
+        assertThat(quickPool.isShutdown()).isTrue();
+        assertThat(slowPool.isShutdown()).isTrue();
+    }
+
     private static void awaitQuietly(CountDownLatch latch) {
         try {
             latch.await(5, TimeUnit.SECONDS);
