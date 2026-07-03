@@ -20,6 +20,8 @@
 
 주의: 이 시스템은 데드라인+graceful degradation 때문에 **느려지는 대신 섹션을 비워서 응답**한다.
 → latency만 보면 문제가 안 보이고, FAILED율이 주지표다 (k6 커스텀 메트릭 `public_library_failed`).
+단, `public_library_failed`는 **HTTP 200 응답만 분모**에 들어간다 — 고부하에서 5xx/타임아웃이 나기
+시작하면 최악의 요청들이 이 지표에서 빠지므로, 반드시 k6의 `http_req_failed`와 **함께** 읽는다.
 3.0s 예산은 [추정] 등급 초기 SLO 가설 (근거: notes/decisions 5/22 문서 교정 주석).
 
 ## 사전 준비 (1회)
