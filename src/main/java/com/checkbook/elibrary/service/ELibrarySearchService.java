@@ -26,8 +26,10 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -94,8 +96,7 @@ public class ELibrarySearchService {
             ELibrary library = foundMap.get(id);
             long startedAt = System.currentTimeMillis();
             futureMap.put(id, new ScrapeTask(
-                    CompletableFuture
-                            .supplyAsync(() -> searchBooks(library, selected), eLibraryExecutor)
+                    submitSafely(() -> searchBooks(library, selected))
                             .orTimeout(perLibraryTimeoutMs, TimeUnit.MILLISECONDS),
                     startedAt
             ));
@@ -131,6 +132,19 @@ public class ELibrarySearchService {
                         failures
                 )
         );
+    }
+
+    /**
+     * eLibraryExecutor가 bounded(AbortPolicy)로 전환되어, 풀 거절 시 supplyAsync가 동기로 던지는
+     * RejectedExecutionException을 failedFuture로 흡수한다 — 없으면 제출 루프 밖으로 전파돼 요청 전체가 500.
+     * 하류 toResult()가 CompletionException을 FAILED로 분류하므로 해당 도서관만 실패 처리된다.
+     */
+    private CompletableFuture<ScrapeOutcome> submitSafely(Supplier<ScrapeOutcome> task) {
+        try {
+            return CompletableFuture.supplyAsync(task, eLibraryExecutor);
+        } catch (RejectedExecutionException e) {
+            return CompletableFuture.failedFuture(e);
+        }
     }
 
     private ScrapeOutcome searchBooks(ELibrary library, BookMatcher.Selected selected) {

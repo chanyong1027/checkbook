@@ -28,8 +28,10 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 
 @Slf4j
 @Service
@@ -84,8 +86,8 @@ public class SearchService {
 
         List<SearchResponse.FailureDetail> failures = new CopyOnWriteArrayList<>();
 
-        CompletableFuture<AladinUsedBookResult> usedFuture = CompletableFuture
-                .supplyAsync(() -> aladinBookService.getUsedBooks(isbn13), searchExecutor)
+        CompletableFuture<AladinUsedBookResult> usedFuture =
+                submitSafely(() -> aladinBookService.getUsedBooks(isbn13), searchExecutor)
                 .exceptionally(exception -> {
                     failures.add(new SearchResponse.FailureDetail(
                             SearchSection.USED_BOOK,
@@ -96,8 +98,7 @@ public class SearchService {
 
         CompletableFuture<List<SearchResponse.PublicLibraryInfo>> publicFuture;
         if (lat != null && lon != null) {
-            publicFuture = CompletableFuture
-                    .supplyAsync(() -> fetchPublicLibraries(isbn13, lat, lon), searchExecutor)
+            publicFuture = submitSafely(() -> fetchPublicLibraries(isbn13, lat, lon), searchExecutor)
                     .exceptionally(exception -> {
                         failures.add(new SearchResponse.FailureDetail(
                                 SearchSection.PUBLIC_LIBRARY,
@@ -109,8 +110,7 @@ public class SearchService {
         }
 
         CompletableFuture<MillieAvailability> millieFuture = identifiedBook
-                .map(book -> CompletableFuture
-                        .supplyAsync(() -> millieBookService.findAvailability(book), searchExecutor)
+                .map(book -> submitSafely(() -> millieBookService.findAvailability(book), searchExecutor)
                         .exceptionally(exception -> {
                             failures.add(new SearchResponse.FailureDetail(
                                     SearchSection.SUBSCRIPTION,
@@ -174,7 +174,7 @@ public class SearchService {
         List<PublicLibrary> nearbyLibraries = publicLibraryRepository.findNearest(lat, lon, publicLibraryTopN);
 
         List<CompletableFuture<SearchResponse.PublicLibraryInfo>> futures = nearbyLibraries.stream()
-                .map(library -> CompletableFuture.supplyAsync(() -> {
+                .map(library -> submitSafely(() -> {
                     LibraryAvailabilityResult availability = snapshotService.getAvailability(isbn13, library.getLibCode());
                     boolean hasBook = availability.hasBook();
                     boolean loanAvailable = availability.loanAvailable();
@@ -327,8 +327,26 @@ public class SearchService {
         }
     }
 
+    /**
+     * 풀 거절(AbortPolicy) 시 supplyAsync가 동기로 던지는 RejectedExecutionException을
+     * failedFuture로 변환 → 기존 exceptionally 폴백 경로(섹션 FAILED/도서관 스킵)로 흡수한다.
+     * 이 게이트가 없으면 부모 제출 거절은 500, 자식 제출 거절은 fan-out 전체 사망이 된다.
+     */
+    private static <T> CompletableFuture<T> submitSafely(Supplier<T> task, ExecutorService executor) {
+        try {
+            return CompletableFuture.supplyAsync(task, executor);
+        } catch (RejectedExecutionException e) {
+            return CompletableFuture.failedFuture(e);
+        }
+    }
+
     private String failureReason(Throwable exception) {
         Throwable cause = exception.getCause() != null ? exception.getCause() : exception;
+        if (cause instanceof RejectedExecutionException) {
+            // TPE 내부 문자열(스레드 정보 포함 원문)을 클라이언트에 노출하지 않고,
+            // fault 분석에서 타임아웃("타임아웃")과 거절을 구분 가능하게 정규화
+            return "검색 풀 포화";
+        }
         return cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
     }
 }
