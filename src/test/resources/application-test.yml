@@ -28,13 +28,16 @@ search:
   public-library-fanout-timeout: 2200
   # 부하 사이징과 무관 — 테스트 컨텍스트용으로 의도적으로 작게 유지 (운영 값은 application.yaml)
   executor-pool-size: 3
+  executor-queue-capacity: 8
 
 public-library:
   bootstrap-enabled: false
   executor-pool-size: 20
+  executor-queue-capacity: 20
 
 elibrary:
   thread-pool-size: 5
+  queue-capacity: 10
   per-library-timeout: 15000
   total-timeout: 20000
 
