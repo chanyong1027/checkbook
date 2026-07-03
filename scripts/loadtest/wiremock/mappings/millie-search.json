@@ -1,0 +1,12 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/v3/search/total"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "body": "{\"respData\":{\"content\":{\"list\":[]}}}",
+    "fixedDelayMilliseconds": 150
+  }
+}

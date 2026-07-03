@@ -1,0 +1,16 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "urlPath": "/ttb/api/ItemLookUp.aspx",
+    "queryParameters": {
+      "OptResult": { "equalTo": "usedList" }
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "body": "{\"item\":[{\"itemId\":123456,\"subInfo\":{\"usedList\":{\"aladinUsed\":{\"minPrice\":7000,\"itemCount\":2},\"userUsed\":{\"minPrice\":6500,\"itemCount\":1},\"spaceUsed\":{\"minPrice\":6000,\"itemCount\":3}}}}]}",
+    "fixedDelayMilliseconds": 250
+  }
+}

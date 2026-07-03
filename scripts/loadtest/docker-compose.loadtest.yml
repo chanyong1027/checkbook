@@ -1,0 +1,47 @@
+# 부하테스트 전용 격리 환경 — 운영/로컬 개발 DB와 완전 분리, 운영(t3.micro) 스펙 근사
+# 기동:   docker compose -f scripts/loadtest/docker-compose.loadtest.yml up -d --build
+# 종료:   docker compose -f scripts/loadtest/docker-compose.loadtest.yml down -v
+services:
+  app:
+    build: ../..
+    container_name: loadtest-app
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: loadtest
+      DB_URL: jdbc:postgresql://postgres:5432/checkbook
+      DB_USERNAME: checkbook
+      DB_PASSWORD: checkbook
+      # 거절 정책 A/B 등 JVM 플래그 주입용 — 기본 비움
+      JAVA_TOOL_OPTIONS: ${LOADTEST_JAVA_OPTS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      wiremock:
+        condition: service_started
+    cpus: 2          # t3.micro 2 vCPU 근사 (버스트 크레딧 소진 상태는 재현 불가 — 상대 비교 목적)
+    mem_limit: 1g    # t3.micro 1GB 근사. JVM 기본 MaxRAMPercentage(25%)로 운영과 동일 힙 조건
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: loadtest-postgres
+    ports:
+      - "5433:5432"  # 호스트 5433 — 로컬 개발 postgres(5432)와 충돌 방지. pgAdmin으로 확인 가능
+    environment:
+      POSTGRES_DB: checkbook
+      POSTGRES_USER: checkbook
+      POSTGRES_PASSWORD: checkbook
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U checkbook"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  wiremock:
+    image: wiremock/wiremock:3.13.0
+    container_name: loadtest-wiremock
+    ports:
+      - "8089:8080"  # 지연 주입 스크립트가 호스트에서 admin API(8089) 사용
+    volumes:
+      - ./wiremock:/home/wiremock
+    command: ["--global-response-templating"]
