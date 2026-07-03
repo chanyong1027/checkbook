@@ -19,8 +19,10 @@ export const options = {
 
 // 런 식별자를 섞어 런 간 ISBN 충돌 차단 — 유령 태스크가 남긴 스냅샷 캐시 적중 방지.
 // 기본값 두면 충돌·재사용 사고가 나므로 필수화 (-e RUN=고유값)
-if (!__ENV.RUN) {
-  throw new Error('RUN 환경변수 필수: k6 run -e RUN=<런마다 고유한 2자리>');
+if (!__ENV.RUN || !/^\d+$/.test(__ENV.RUN)) {
+  // 비수치 RUN이면 ISBN이 '978NaN...'이 되어 KEYWORD 경로로 빠지고
+  // 전 섹션 SKIPPED의 무부하 측정이 정상 런처럼 통과한다 — 숫자만 허용
+  throw new Error('RUN 환경변수 필수(숫자): k6 run -e RUN=<런마다 고유한 2자리>');
 }
 const RUN = String(Number(__ENV.RUN) % 100).padStart(2, '0');
 function uniqueIsbn13() {

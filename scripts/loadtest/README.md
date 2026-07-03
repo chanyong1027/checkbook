@@ -20,8 +20,13 @@
 
 주의: 이 시스템은 데드라인+graceful degradation 때문에 **느려지는 대신 섹션을 비워서 응답**한다.
 → latency만 보면 문제가 안 보이고, FAILED율이 주지표다 (k6 커스텀 메트릭 `public_library_failed`).
-단, `public_library_failed`는 **HTTP 200 응답만 분모**에 들어간다 — 고부하에서 5xx/타임아웃이 나기
+FAILED율과 함께 **`public_library_incomplete`**(섹션 SUCCESS인데 도서관 20곳 미만 = fan-out 내부
+publicLibraryExecutor 병목의 조용한 부분 실패)를 본다. 두 지표는 요청 단위로 상호배타이고
+분모가 같아(모든 HTTP 200) 합산 가능하다.
+단, 두 지표 모두 **HTTP 200 응답만 분모**에 들어간다 — 고부하에서 5xx/타임아웃이 나기
 시작하면 최악의 요청들이 이 지표에서 빠지므로, 반드시 k6의 `http_req_failed`와 **함께** 읽는다.
+그리고 rampup 요약의 수치는 전 스테이지 합산이라 **희석**된다 — 임계점·결론 수치는 반드시
+고정 VU 탐침(constant-vus 90s)으로 별도 측정한 값을 쓰고, rampup은 탐침 지점 선정용으로만 쓴다.
 3.0s 예산은 [추정] 등급 초기 SLO 가설 (근거: notes/decisions 5/22 문서 교정 주석).
 
 ## 사전 준비 (1회, 전부 WSL)
@@ -54,12 +59,16 @@ curl -s "http://localhost:8089/api/bookExist?authKey=x&libCode=1&isbn13=97811111
 curl -s "http://localhost:8080/api/search?q=9781111111111&lat=37.5665&lon=126.9780" | head -c 300
 # → publicLibraries에 부하테스트도서관 20곳
 
-# [4] 측정: 수집(백그라운드) → k6 → 그래프
+# [4] 측정: 수집(백그라운드) → k6 → 그래프  (RUN은 런마다 고유한 숫자 — 필수)
 mkdir -p scripts/loadtest/results
 ./scripts/loadtest/poll-executor-metrics.sh scripts/loadtest/results/<시나리오>-metrics.csv &
-k6 run --summary-export scripts/loadtest/results/<시나리오>.json scripts/loadtest/k6-search-rampup.js
+k6 run -e RUN=<2자리 고유 숫자> --summary-export scripts/loadtest/results/<시나리오>.json scripts/loadtest/k6-search-rampup.js
 kill %1
 python3 scripts/loadtest/plot-metrics.py scripts/loadtest/results/<시나리오>-metrics.csv
+
+# [5] 런 간 드레인: 이전 런의 유령 태스크가 소진될 때까지 대기 후 다음 런 (VU15 기준 실측 84초)
+#     아래 게이지(양쪽 풀의 큐·활성)가 전부 0인지 확인 — 0 전에 시작하면 다음 런 초반이 오염됨
+curl -s http://localhost:8080/actuator/prometheus | grep -E '^executor_(queued_tasks|active_threads)'
 ```
 
 pgAdmin으로 들여다보기: localhost:**5433**, checkbook/checkbook (일회용 DB — 로컬 개발 DB와 별개).
@@ -78,7 +87,7 @@ pgAdmin으로 들여다보기: localhost:**5433**, checkbook/checkbook (일회�
 
 ```bash
 ./scripts/loadtest/poll-executor-metrics.sh scripts/loadtest/results/fault-<코드상태>-metrics.csv &
-k6 run --summary-export scripts/loadtest/results/fault-<코드상태>.json scripts/loadtest/k6-search-fault.js &
+k6 run -e RUN=<2자리 고유 숫자> --summary-export scripts/loadtest/results/fault-<코드상태>.json scripts/loadtest/k6-search-fault.js &
 sleep 60 && ./scripts/loadtest/inject-datanaru-delay.sh 1900
 sleep 120 && ./scripts/loadtest/reset-datanaru-delay.sh
 wait %2
@@ -105,3 +114,7 @@ bash /tmp/mel.sh 100    # 약 4~5분, API별 p50/p95/p99 요약 출력. 주간/�
 - WireMock의 datanaru 지연 분포는 `measure-external-latency.sh` 실측값 기준 (측정 전엔 임시 lognormal 400ms).
 - featured 워밍업이 기동 시 WireMock의 빈 응답 스텁에 부딪히는 것은 정상 (검색 부하와 무관).
 - 코드 상태를 바꿔 재측정할 때는 반드시 `--build`로 이미지 재빌드 + 커밋 해시 기록.
+- WireMock은 `--container-threads 200`(기본 25는 fan-out 동시성에서 하네스가 병목이 됨)과
+  `--no-request-journal`(저널 무제한 누적이 런 순서 드리프트 유발)로 기동한다 —
+  따라서 `__admin/requests` 기반 검증은 불가. 필요 시 compose에서 잠시
+  `--max-request-journal-entries 1000`으로 바꿔 확인 후 원복할 것.
