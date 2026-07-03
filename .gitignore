@@ -57,4 +57,4 @@ src/test/java/com/checkbook/aladinstore/AladinStoreSeedCollector.java
 /_bmad-output
 
 ### loadtest ###
-scripts/loadtest/results/
+scripts/loadtest/results/scripts/loadtest/__pycache__/
