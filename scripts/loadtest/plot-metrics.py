@@ -29,6 +29,10 @@ def main():
 
     fig, ax = plt.subplots(figsize=(12, 6))
     t0 = min(points[0][0] for points in series.values())
+    # 수집 실패 시점은 시리즈가 아니라 수직선으로 표시 — 직선 보간이 결측을 은폐하지 않게
+    fails = series.pop("scrape_failed", [])
+    for ts, _ in fails:
+        ax.axvline(ts - t0, color="red", alpha=0.4, linewidth=0.8)
     for name, points in sorted(series.items()):
         xs = [p[0] - t0 for p in points]
         ys = [p[1] for p in points]

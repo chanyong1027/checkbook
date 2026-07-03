@@ -62,11 +62,19 @@ curl -s "http://localhost:8080/api/search?q=9781111111111&lat=37.5665&lon=126.97
 # [4] 측정: 수집(백그라운드) → k6 → 그래프  (RUN은 런마다 고유한 숫자 — 필수)
 mkdir -p scripts/loadtest/results
 ./scripts/loadtest/poll-executor-metrics.sh scripts/loadtest/results/<시나리오>-metrics.csv &
-k6 run -e RUN=<2자리 고유 숫자> --summary-export scripts/loadtest/results/<시나리오>.json scripts/loadtest/k6-search-rampup.js
+k6 run -e RUN=<1~2자리 고유 숫자> --summary-export scripts/loadtest/results/<시나리오>.json scripts/loadtest/k6-search-rampup.js
 kill %1
 python3 scripts/loadtest/plot-metrics.py scripts/loadtest/results/<시나리오>-metrics.csv
 
-# [5] 런 간 드레인: 이전 런의 유령 태스크가 소진될 때까지 대기 후 다음 런 (VU15 기준 실측 84초)
+# [4-1] 결론 수치용 고정 VU 탐침 (rampup으로 지점을 고른 뒤 여기서 확정)
+k6 run -e VUS=<고정 VU> -e RUN=<고유 숫자> --summary-export scripts/loadtest/results/probe-vu<VU>-<코드상태>.json scripts/loadtest/k6-search-probe.js
+
+# [4-2] baseline(3/20) 재현 — 처방 머지 후에도 동일 이미지에 설정만 오버라이드해 A/B 가능
+LOADTEST_JAVA_OPTS="-Dsearch.executor-pool-size=3 -Dpublic-library.executor-pool-size=20" \
+  docker compose -f scripts/loadtest/docker-compose.loadtest.yml up -d --force-recreate app
+# (원복: LOADTEST_JAVA_OPTS 없이 같은 명령)
+
+# [5] 런 간 드레인: 이전 런의 유령 태스크가 소진될 때까지 대기 후 다음 런 (VU15·하네스 v2 기준 실측 62초, 종료 시점 큐 470)
 #     아래 게이지(양쪽 풀의 큐·활성)가 전부 0인지 확인 — 0 전에 시작하면 다음 런 초반이 오염됨
 curl -s http://localhost:8080/actuator/prometheus | grep -E '^executor_(queued_tasks|active_threads)'
 ```
