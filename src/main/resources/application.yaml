@@ -52,7 +52,7 @@ search:
   # baseline 실측(2026-07-03, 하네스 v2): 이 풀(구 3)이 1차 병목 —
   # FAILED율 절벽 VU8(0.8%)↔VU12(97.8%), VU15 종료 시점 유령 큐 470 (notes/todo/benchmark-results.md §4)
   executor-pool-size: 12
-  # 큐 = 요청 2건분 — 무제한 큐의 "유령 작업 62초" 병리 차단, 데드라인 내 소화 가능량만 수용
+  # 큐 = 풀(12)의 2배 — 무제한 큐의 "유령 작업 62초" 병리 차단, 데드라인 내 소화 가능량만 수용
   executor-queue-capacity: 24
 
 public-library:
@@ -60,7 +60,12 @@ public-library:
   # fan-out 20/요청 × 동시 요청 2건 full-width. baseline에선 이 풀이 아니라 searchExecutor가
   # 병목이었으나(incomplete 0%), 상류 확장(3→12) 후의 2차 병목 대비
   executor-pool-size: 40
-  executor-queue-capacity: 40
+  # 큐 = (fan-out 윈도 2.2s − 자식 처리 p50 0.36s) × 소화속도(40스레드÷0.36s ≈ 111/s) ≈ 200 —
+  # "기다리면 윈도 내 완주 가능한" 버스트만 수용, 그 밖은 거절. 40으로는 정상 부하(VU12)에서도
+  # 도서관 스킵 85%(incomplete) 발생을 실측 — 과소 용량은 데이터 유실로 나타난다.
+  # p50 0.36s = datanaru bookExist EC2 실측(주·야간 355~356ms) — WireMock도 동 분포로 캘리브레이션.
+  # 윈도(fanout-timeout)나 운영 p50이 변하면 이 큐도 재산정 대상.
+  executor-queue-capacity: 200
 
 elibrary:
   thread-pool-size: 5
@@ -69,7 +74,8 @@ elibrary:
   total-timeout: 20000
 
 async:
-  # abort | callerRuns — fault A/B 측정으로 확정 예정 (확정 전 임시 기본값 abort)
+  # abort — fault A/B 실측으로 확정 (2026-07-04): callerRuns는 FAILED 15.8%·max 41.5s·처리량 43%
+  # (인라인 실행이 제출 루프와 데드라인 예산을 점유). abort는 FAILED 0.05%·부분 결과로 우아한 열화.
   rejection-policy: abort
 
 featured:

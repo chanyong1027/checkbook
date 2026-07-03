@@ -41,10 +41,10 @@ public class AsyncConfig {
     private int publicLibraryQueueCapacity;
 
     /**
-     * abort | callerRuns — fault 시나리오 A/B 측정으로 확정 (기본 abort는 확정 전 임시값).
-     * callerRuns는 중첩 fan-out 구조에서 제출 루프를 인라인 실행이 잡아
-     * 섹션 데드라인 예산을 소모하고 bulkhead(외부 호출 상한)를 뚫는 위험이 있어
-     * 코드만으로 단정하지 않고 측정으로 결정한다.
+     * abort — fault A/B 실측으로 확정 (2026-07-04, VU12 + 1900ms 주입):
+     * callerRuns는 인라인 실행이 제출 루프·데드라인 예산을 점유해 FAILED 15.8%, max 41.5s,
+     * 처리량 43%로 붕괴. abort는 FAILED 0.05%에 부분 결과로 우아하게 열화.
+     * callerRuns 선택지는 A/B 재검(설정 변경 시)을 위해 유지.
      */
     @Value("${async.rejection-policy:abort}")
     private String rejectionPolicy;
