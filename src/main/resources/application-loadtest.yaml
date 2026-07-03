@@ -1,0 +1,21 @@
+# 부하테스트 전용: 외부 API를 전부 compose 내 WireMock으로 대체
+# 실행: docker compose -f scripts/loadtest/docker-compose.loadtest.yml up -d --build
+aladin:
+  ttb-key: loadtest
+  base-url: http://wiremock:8080/ttb/api
+
+kakao:
+  book:
+    rest-api-key: loadtest
+    base-url: http://wiremock:8080
+
+datanaru:
+  auth-key: loadtest
+  base-url: http://wiremock:8080/api
+
+millie:
+  base-url: http://wiremock:8080
+
+logging:
+  level:
+    com.checkbook.client: INFO

@@ -55,3 +55,6 @@ src/test/java/com/checkbook/aladinstore/AladinStoreSeedCollector.java
 ### bmad ###
 /_bmad
 /_bmad-output
+
+### loadtest ###
+scripts/loadtest/results/

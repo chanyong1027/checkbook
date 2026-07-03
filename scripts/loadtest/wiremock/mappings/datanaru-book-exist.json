@@ -1,0 +1,12 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/api/bookExist"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "body": "{\"response\":{\"result\":{\"hasBook\":\"Y\",\"loanAvailable\":\"Y\"}}}",
+    "delayDistribution": { "type": "lognormal", "median": 400, "sigma": 0.4 }
+  }
+}

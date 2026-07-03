@@ -45,5 +45,19 @@ dependencies {
 }
 
 tasks.named('test') {
-	useJUnitPlatform()
+	useJUnitPlatform {
+		// 타이밍(sleep) 의존 동시성 재현 테스트는 기본 스위트에서 제외 —
+		// 배포 CI가 test를 돌리므로 스케줄링 지연으로 인한 위양성이 배포를 막지 않게
+		excludeTags 'diagnosis'
+	}
+}
+
+tasks.register('diagnosisTest', Test) {
+	description = '동시성 재현 테스트 (타이밍 의존 — 기본 test에서 제외된 것들)'
+	group = 'verification'
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+	useJUnitPlatform {
+		includeTags 'diagnosis'
+	}
 }
