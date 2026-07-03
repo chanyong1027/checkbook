@@ -11,6 +11,7 @@ import com.checkbook.publiclibrary.snapshot.service.LibraryAvailabilitySnapshotS
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.SearchResponse;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -36,6 +37,7 @@ import static org.mockito.Mockito.when;
  * 동시 요청 2건이면 자식 40개가 20슬롯을 경합한다. 자식당 1500ms 지연 기준:
  * 첫 배치 20개만 fan-out 윈도(2200ms) 안에 도착, 나머지 20개는 3000ms에 완료되어 버려진다.
  */
+@Timeout(10) // 이 테스트가 잡으려는 회귀가 기아/데드락 계열 — 회귀 시 행 대신 실패로
 @MockitoSettings(strictness = Strictness.LENIENT)
 @ExtendWith(MockitoExtension.class)
 class ConcurrentRequestContentionTest {
@@ -58,8 +60,10 @@ class ConcurrentRequestContentionTest {
         int arrived = runTwoConcurrentSearches(
                 Executors.newFixedThreadPool(3), Executors.newFixedThreadPool(20));
 
-        // 자식 40건 중 첫 배치 20건만 윈도 내 도착
-        assertThat(arrived).isLessThanOrEqualTo(20);
+        // 자식 40건 중 첫 배치 20건만 윈도 내 도착.
+        // 상한만 두면 0건 도착(재현 실패)도 통과하므로 정확히 20건을 단언한다 —
+        // 첫 배치는 1500ms 완료로 윈도(2200ms) 안에 확실히 들어오고, 둘째 배치는 3000ms라 확실히 놓친다
+        assertThat(arrived).isEqualTo(20);
     }
 
     @Test

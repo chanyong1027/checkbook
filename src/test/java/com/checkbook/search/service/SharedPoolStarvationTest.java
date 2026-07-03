@@ -11,6 +11,7 @@ import com.checkbook.publiclibrary.snapshot.service.LibraryAvailabilitySnapshotS
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.SearchResponse;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -37,6 +38,7 @@ import static org.mockito.Mockito.when;
  *
  * 기아 여부가 스케줄링 타이밍에 따라 스텁 사용량을 바꾸므로 LENIENT 사용.
  */
+@Timeout(10) // 기아/데드락 계열 재현 테스트 — 회귀 시 빌드 행 대신 실패로
 @MockitoSettings(strictness = Strictness.LENIENT)
 @ExtendWith(MockitoExtension.class)
 class SharedPoolStarvationTest {
