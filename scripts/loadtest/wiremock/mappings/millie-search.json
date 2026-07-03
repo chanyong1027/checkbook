@@ -7,6 +7,6 @@
     "status": 200,
     "headers": { "Content-Type": "application/json" },
     "body": "{\"respData\":{\"content\":{\"list\":[]}}}",
-    "fixedDelayMilliseconds": 150
+    "fixedDelayMilliseconds": 286
   }
 }
