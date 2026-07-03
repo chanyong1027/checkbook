@@ -36,6 +36,8 @@ docker compose -f scripts/loadtest/docker-compose.loadtest.yml up -d --build
 docker logs -f loadtest-app        # "Started CheckbookApplication" 확인 후 Ctrl+C
 
 # [2] 시드 (매 측정 전 재실행 — 스냅샷 TRUNCATE 포함)
+# ⚠️ 반드시 WSL(bash)에서 실행 — PowerShell의 Get-Content 파이프는 UTF-8 한글을 CP949로 깨뜨려
+#    도서관 이름이 mojibake로 저장된다 (측정엔 무해하나 데이터가 지저분해짐)
 docker exec -i loadtest-postgres psql -U checkbook -d checkbook < scripts/loadtest/seed-libraries.sql
 
 # [3] 동작 확인
