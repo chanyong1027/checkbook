@@ -95,7 +95,7 @@ pgAdmin으로 들여다보기: localhost:**5433**, checkbook/checkbook (일회�
 
 ```bash
 ./scripts/loadtest/poll-executor-metrics.sh scripts/loadtest/results/fault-<코드상태>-metrics.csv &
-k6 run -e RUN=<2자리 고유 숫자> --summary-export scripts/loadtest/results/fault-<코드상태>.json scripts/loadtest/k6-search-fault.js &
+k6 run -e RUN=<1~2자리 고유 숫자> --summary-export scripts/loadtest/results/fault-<코드상태>.json scripts/loadtest/k6-search-fault.js &
 sleep 60 && ./scripts/loadtest/inject-datanaru-delay.sh 1900
 sleep 120 && ./scripts/loadtest/reset-datanaru-delay.sh
 wait %2
