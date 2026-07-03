@@ -11,7 +11,7 @@ export const options = {
   scenarios: {
     steady: {
       executor: 'constant-vus',
-      vus: 5,
+      vus: Number(__ENV.VUS || 5),
       duration: '4m',
     },
   },

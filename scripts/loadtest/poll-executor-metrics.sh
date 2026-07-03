@@ -10,7 +10,7 @@ while true; do
   body=$(curl -sf --max-time 2 http://localhost:8080/actuator/prometheus) \
     || { echo "$ts,scrape_failed,1" >> "$OUT"; sleep 1; continue; }
   printf '%s\n' "$body" \
-    | grep -E '^(executor_(active_threads|queued_tasks)|hikaricp_connections_(active|pending))' \
+    | grep -E '^(executor_(active_threads|queued_tasks|rejected_total)|hikaricp_connections_(active|pending))' \
     | while read -r name value; do
         # 라벨 내부의 콤마(예: {name="x",})가 CSV를 깨지 않도록 세미콜론으로 치환
         echo "$ts,${name//,/;},$value" >> "$OUT"
