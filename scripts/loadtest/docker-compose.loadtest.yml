@@ -44,4 +44,7 @@ services:
       - "8089:8080"  # 지연 주입 스크립트가 호스트에서 admin API(8089) 사용
     volumes:
       - ./wiremock:/home/wiremock
-    command: ["--global-response-templating"]
+    # container-threads: 기본값 10(문서 기준, 관측 Jetty 풀은 acceptor 포함 ~25)으로는 fan-out 동시성에서
+    # 하네스가 병목 — 동시 40건에서 명목 지연 0.36s가 실효 0.84s(2.4배)로 늘어남을 실측, 200스레드에서 0.42s로 정상화
+    # no-request-journal: 저널 무제한 누적(148k건/2.9GB 실측)이 런 순서에 따른 성능 드리프트를 유발
+    command: ["--global-response-templating", "--container-threads", "200", "--no-request-journal"]

@@ -58,3 +58,4 @@ src/test/java/com/checkbook/aladinstore/AladinStoreSeedCollector.java
 
 ### loadtest ###
 scripts/loadtest/results/
+scripts/loadtest/__pycache__/

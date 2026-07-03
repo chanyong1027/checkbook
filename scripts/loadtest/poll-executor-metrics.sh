@@ -6,8 +6,11 @@ OUT="${1:-executor-metrics.csv}"
 echo "epoch,metric,value" > "$OUT"
 while true; do
   ts=$(date +%s)
-  curl -sf http://localhost:8080/actuator/prometheus \
-    | grep -E '^(executor_(active_threads|queued_tasks)|hikaricp_connections_active)' \
+  # 스크레이프 실패(포화·GC pause)를 결측 행으로 남겨 plot의 직선 보간이 은폐하지 않게 함
+  body=$(curl -sf --max-time 2 http://localhost:8080/actuator/prometheus) \
+    || { echo "$ts,scrape_failed,1" >> "$OUT"; sleep 1; continue; }
+  printf '%s\n' "$body" \
+    | grep -E '^(executor_(active_threads|queued_tasks)|hikaricp_connections_(active|pending))' \
     | while read -r name value; do
         # 라벨 내부의 콤마(예: {name="x",})가 CSV를 깨지 않도록 세미콜론으로 치환
         echo "$ts,${name//,/;},$value" >> "$OUT"
