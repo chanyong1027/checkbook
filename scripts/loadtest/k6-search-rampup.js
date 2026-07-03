@@ -25,8 +25,11 @@ export const options = {
 };
 
 // 요청마다 유일한 13자리 ISBN → 스냅샷 캐시 우회, 매 요청 fan-out 20건 실행
+// 런 식별자(2자리)를 섞어 런 간 ISBN 충돌 차단 — 직전 런의 유령 태스크가 남긴
+// 스냅샷 캐시에 적중해 측정이 낙관 왜곡되는 것을 방지 (k6 실행 시 -e RUN=NN 권장)
+const RUN = String((Number(__ENV.RUN) || (Date.now() % 90) + 10) % 100).padStart(2, '0');
 function uniqueIsbn13() {
-  const tail = String(__VU).padStart(4, '0') + String(__ITER % 1000000).padStart(6, '0');
+  const tail = RUN + String(__VU).padStart(3, '0') + String(__ITER % 100000).padStart(5, '0');
   return '978' + tail;
 }
 
