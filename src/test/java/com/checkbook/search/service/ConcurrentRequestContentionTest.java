@@ -10,6 +10,7 @@ import com.checkbook.publiclibrary.snapshot.dto.LibraryAvailabilityResult;
 import com.checkbook.publiclibrary.snapshot.service.LibraryAvailabilitySnapshotService;
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.SearchResponse;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,6 +38,7 @@ import static org.mockito.Mockito.when;
  * 동시 요청 2건이면 자식 40개가 20슬롯을 경합한다. 자식당 1500ms 지연 기준:
  * 첫 배치 20개만 fan-out 윈도(2200ms) 안에 도착, 나머지 20개는 3000ms에 완료되어 버려진다.
  */
+@Tag("diagnosis") // 타이밍(sleep) 의존 재현 테스트 — 기본 스위트 제외, ./gradlew diagnosisTest로 실행
 @Timeout(10) // 이 테스트가 잡으려는 회귀가 기아/데드락 계열 — 회귀 시 행 대신 실패로
 @MockitoSettings(strictness = Strictness.LENIENT)
 @ExtendWith(MockitoExtension.class)
