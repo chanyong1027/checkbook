@@ -48,11 +48,16 @@ search:
   total-deadline: 2800
   public-library-top-n: 20
   public-library-fanout-timeout: 2200
-  executor-pool-size: 3
+  # 3태스크/요청(usedBook·publicLibrary부모·millie) × 목표 동시 요청 4건.
+  # baseline 실측(2026-07-03, 하네스 v2): 이 풀(구 3)이 1차 병목 —
+  # FAILED율 절벽 VU8(0.8%)↔VU12(97.8%), VU15 종료 시점 유령 큐 470 (notes/todo/benchmark-results.md §4)
+  executor-pool-size: 12
 
 public-library:
   bootstrap-enabled: false
-  executor-pool-size: 20
+  # fan-out 20/요청 × 동시 요청 2건 full-width. baseline에선 이 풀이 아니라 searchExecutor가
+  # 병목이었으나(incomplete 0%), 상류 확장(3→12) 후의 2차 병목 대비
+  executor-pool-size: 40
 
 elibrary:
   thread-pool-size: 5

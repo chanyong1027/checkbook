@@ -26,6 +26,7 @@ search:
   total-deadline: 2800
   public-library-top-n: 20
   public-library-fanout-timeout: 2200
+  # 부하 사이징과 무관 — 테스트 컨텍스트용으로 의도적으로 작게 유지 (운영 값은 application.yaml)
   executor-pool-size: 3
 
 public-library:

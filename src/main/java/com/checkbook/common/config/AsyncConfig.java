@@ -14,13 +14,15 @@ import java.util.concurrent.Executors;
 @EnableAsync
 public class AsyncConfig {
 
-    @Value("${elibrary.thread-pool-size:5}")
+    // 기본값 없음(fail-fast): yaml이 사이징의 SSOT. 코드 기본값을 두면 키 오타·프로파일 누락 시
+    // 경고 없이 구 값으로 폴백하는 함정이 생긴다 (실측으로 병목임을 확인한 3/20으로 되돌아가는 최악 케이스)
+    @Value("${elibrary.thread-pool-size}")
     private int eLibraryPoolSize;
 
-    @Value("${search.executor-pool-size:3}")
+    @Value("${search.executor-pool-size}")
     private int searchPoolSize;
 
-    @Value("${public-library.executor-pool-size:20}")
+    @Value("${public-library.executor-pool-size}")
     private int publicLibraryPoolSize;
 
     @Bean(name = "eLibraryExecutor", destroyMethod = "shutdown")
