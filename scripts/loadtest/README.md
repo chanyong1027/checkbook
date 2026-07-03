@@ -8,7 +8,7 @@
 
 - **운영 EC2에서 부하테스트 금지** — 운영 DB 오염(시드가 TRUNCATE 포함) + t3 버스터블 크레딧 변동으로 재현성 없음.
 - compose가 운영 스펙을 근사: app `cpus:2, mem:1g` (t3.micro). 단 **크레딧 소진 상태는 재현 불가** — 절대 수치가 아니라 동일 환경 내 before/after 상대 비교가 목적.
-- 실행 위치: compose·k6는 Windows, 수집 스크립트(bash)는 WSL — Docker Desktop이 포트를 양쪽 localhost에 공개하므로 둘 다 같은 앱을 본다.
+- **측정 세션은 전부 WSL에서 실행한다** (compose, 시드, k6, 수집·주입 스크립트 모두). Docker Desktop이 포트를 WSL localhost에도 공개하므로 문제없고, 환경을 하나로 통일해야 절차 모순·인코딩 함정이 없다. Windows(PowerShell)는 `./gradlew test` 전용.
 
 ## 판정 기준 (상정 SLO — 진단·처방의 성공 기준)
 
@@ -24,13 +24,20 @@
 시작하면 최악의 요청들이 이 지표에서 빠지므로, 반드시 k6의 `http_req_failed`와 **함께** 읽는다.
 3.0s 예산은 [추정] 등급 초기 SLO 가설 (근거: notes/decisions 5/22 문서 교정 주석).
 
-## 사전 준비 (1회)
+## 사전 준비 (1회, 전부 WSL)
 
-1. Docker Desktop 실행 확인
-2. k6 설치 (Windows PowerShell): `winget install k6 --source winget`
+1. Docker Desktop 실행 + WSL 연동 확인 (`docker ps`가 WSL에서 동작)
+2. k6 설치 (WSL):
+   ```bash
+   sudo gpg -k && sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg \
+     --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+   echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" \
+     | sudo tee /etc/apt/sources.list.d/k6.list
+   sudo apt-get update && sudo apt-get install k6
+   ```
 3. 그래프용 matplotlib (WSL): `pip3 install matplotlib` (또는 `sudo apt install python3-matplotlib`)
 
-## 매 실행 순서
+## 매 실행 순서 (WSL 터미널 1개에서 순서대로)
 
 ```bash
 # [1] compose 기동 (코드 바뀌었으면 --build 필수. 첫 빌드 수 분 소요)
@@ -38,8 +45,7 @@ docker compose -f scripts/loadtest/docker-compose.loadtest.yml up -d --build
 docker logs -f loadtest-app        # "Started CheckbookApplication" 확인 후 Ctrl+C
 
 # [2] 시드 (매 측정 전 재실행 — 스냅샷 TRUNCATE 포함)
-# ⚠️ 반드시 WSL(bash)에서 실행 — PowerShell의 Get-Content 파이프는 UTF-8 한글을 CP949로 깨뜨려
-#    도서관 이름이 mojibake로 저장된다 (측정엔 무해하나 데이터가 지저분해짐)
+# ⚠️ PowerShell에서 돌리지 말 것 — Get-Content 파이프가 UTF-8 한글을 CP949로 깨뜨린다
 docker exec -i loadtest-postgres psql -U checkbook -d checkbook < scripts/loadtest/seed-libraries.sql
 
 # [3] 동작 확인
@@ -48,15 +54,17 @@ curl -s "http://localhost:8089/api/bookExist?authKey=x&libCode=1&isbn13=97811111
 curl -s "http://localhost:8080/api/search?q=9781111111111&lat=37.5665&lon=126.9780" | head -c 300
 # → publicLibraries에 부하테스트도서관 20곳
 
-# [4] 측정: 수집(WSL) → k6(Windows) → 그래프(WSL)
+# [4] 측정: 수집(백그라운드) → k6 → 그래프
 mkdir -p scripts/loadtest/results
-./scripts/loadtest/poll-executor-metrics.sh scripts/loadtest/results/<시나리오>-metrics.csv &   # WSL
-k6 run --summary-export scripts/loadtest/results/<시나리오>.json scripts/loadtest/k6-search-rampup.js  # Windows
-kill %1                                                                                        # WSL
-python3 scripts/loadtest/plot-metrics.py scripts/loadtest/results/<시나리오>-metrics.csv        # WSL
+./scripts/loadtest/poll-executor-metrics.sh scripts/loadtest/results/<시나리오>-metrics.csv &
+k6 run --summary-export scripts/loadtest/results/<시나리오>.json scripts/loadtest/k6-search-rampup.js
+kill %1
+python3 scripts/loadtest/plot-metrics.py scripts/loadtest/results/<시나리오>-metrics.csv
 ```
 
 pgAdmin으로 들여다보기: localhost:**5433**, checkbook/checkbook (일회용 DB — 로컬 개발 DB와 별개).
+
+재현 테스트(타이밍 의존)는 기본 `./gradlew test`에서 제외되어 있다 — 실행: `./gradlew diagnosisTest`.
 
 ## 결과 파일 네이밍 규칙 (before/after 비교의 생명)
 
