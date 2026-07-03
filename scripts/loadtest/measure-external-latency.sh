@@ -54,7 +54,9 @@ measure millie-search 2 "$((N/2))" \
 
 echo "원본: $OUT"
 echo "=== 백분위 요약 (ms) ==="
-sort -t, -k1,1 -k3,3n "$OUT" | awk -F, 'NR>1 {
+# 헤더는 sort 전에 제거해야 한다 — 정렬에 섞이면 사전순으로 중간에 끼어들어
+# awk NR>1이 헤더 대신 첫 API의 최솟값 표본을 버리고 백분위가 위로 밀린다
+tail -n +2 "$OUT" | sort -t, -k1,1 -k3,3n | awk -F, '{
   cnt[$1]++; vals[$1","cnt[$1]]=$3
 } END {
   for (k in cnt) {
