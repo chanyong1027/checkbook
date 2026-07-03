@@ -21,12 +21,21 @@ echo "api,run,total_ms" > "$OUT"
 
 measure() { # $1=api명 $2=요청간격(초) $3=회수, 이후 curl 인자
   local api=$1 gap=$2 n=$3; shift 3
+  local ok=0 fail=0
   echo "측정 중: $api (${n}회, ${gap}s 간격)..."
   for i in $(seq 1 "$n"); do
-    t=$(curl -sf -o /dev/null -w "%{time_total}" --max-time 10 "$@" || echo "")
-    [ -n "$t" ] && echo "$api,$i,$(awk "BEGIN{printf \"%.0f\", $t*1000}")" >> "$OUT"
+    # 주의: -w 출력은 --fail과 무관하게 실패(4xx/연결오류)에도 찍히므로
+    # 반드시 curl 종료 코드로 게이트해야 실패 표본이 백분위를 오염시키지 않는다
+    if t=$(curl -sf -o /dev/null -w "%{time_total}" --max-time 10 "$@"); then
+      echo "$api,$i,$(awk "BEGIN{printf \"%.0f\", $t*1000}")" >> "$OUT"
+      ok=$((ok+1))
+    else
+      fail=$((fail+1))
+    fi
     sleep "$gap"
   done
+  echo "  → 성공 $ok / 실패 $fail"
+  [ "$fail" -gt $((n/10)) ] && echo "  ⚠️ 실패율 10% 초과 — 키/엔드포인트 확인 후 이 세션 폐기 검토"
 }
 
 # 정보나루 bookExist — 권장 "초당 2회 미만" 준수 (0.7s 간격). libCode는 실존 코드로 교체 가능
