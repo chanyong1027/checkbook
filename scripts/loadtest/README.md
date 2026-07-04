@@ -91,12 +91,20 @@ pgAdmin으로 들여다보기: localhost:**5433**, checkbook/checkbook (일회�
 | `*-resized` | 처방① 적용 (12/40, 무제한 큐) |
 | `*-bounded-abort` / `*-bounded-callerruns` | (q40 과소 큐 — 재산정 전. 최종 비교에 쓰지 말 것) |
 | `*-bounded-final*` | **처방② 최종 (publib 큐 200 + abort)** — before/after 비교 기준 |
+| `openloop-*` | open-loop(고정 도착률) 시나리오 — coordinated omission 보완 검증 |
 
 ## Fault Injection 절차 (시나리오명: fault-<코드상태>)
 
 ```bash
 ./scripts/loadtest/poll-executor-metrics.sh scripts/loadtest/results/fault-<코드상태>-metrics.csv &
 k6 run -e VUS=<고정 VU — 한계 직전 부하 권장> -e RUN=<1~2자리 고유 숫자> --summary-export scripts/loadtest/results/fault-<코드상태>.json scripts/loadtest/k6-search-fault.js &
+```
+
+**open-loop (용량 초과 유입 거동)** — closed-loop(VU)은 시스템이 느려지면 유입도 줄어드는
+coordinated omission이 있어, 과부하 거동의 결론 수치는 고정 도착률로 별도 검증한다:
+
+```bash
+k6 run -e RUN=<1~2자리 고유 숫자> -e RATE=<초당 도착 수, 기본 15> --summary-export scripts/loadtest/results/openloop-<코드상태>.json scripts/loadtest/k6-search-openloop.js
 sleep 60 && ./scripts/loadtest/inject-datanaru-delay.sh 1900
 sleep 120 && ./scripts/loadtest/reset-datanaru-delay.sh
 wait %2
