@@ -98,13 +98,6 @@ pgAdmin으로 들여다보기: localhost:**5433**, checkbook/checkbook (일회�
 ```bash
 ./scripts/loadtest/poll-executor-metrics.sh scripts/loadtest/results/fault-<코드상태>-metrics.csv &
 k6 run -e VUS=<고정 VU — 한계 직전 부하 권장> -e RUN=<1~2자리 고유 숫자> --summary-export scripts/loadtest/results/fault-<코드상태>.json scripts/loadtest/k6-search-fault.js &
-```
-
-**open-loop (용량 초과 유입 거동)** — closed-loop(VU)은 시스템이 느려지면 유입도 줄어드는
-coordinated omission이 있어, 과부하 거동의 결론 수치는 고정 도착률로 별도 검증한다:
-
-```bash
-k6 run -e RUN=<1~2자리 고유 숫자> -e RATE=<초당 도착 수, 기본 15> --summary-export scripts/loadtest/results/openloop-<코드상태>.json scripts/loadtest/k6-search-openloop.js
 sleep 60 && ./scripts/loadtest/inject-datanaru-delay.sh 1900
 sleep 120 && ./scripts/loadtest/reset-datanaru-delay.sh
 wait %2
@@ -115,6 +108,18 @@ python3 scripts/loadtest/plot-metrics.py scripts/loadtest/results/fault-<코드�
 관측 포인트: 주입 구간(60~180s)의 `executor_queued_tasks` 추이, 해제(180s) 이후 회복 시간.
 대조 실험: `inject-datanaru-delay.sh 5000` → read-timeout(2000ms) 실패 누적 → CB OPEN → stale 폴백(빠른 FAILED).
 **"CB는 실패엔 강하지만 느린 성공(1900ms)에는 무력"**이 핵심 대비.
+
+## Open-loop 절차 (시나리오명: openloop-<코드상태>)
+
+closed-loop(VU)은 시스템이 느려지면 유입도 줄어드는 coordinated omission이 있어,
+용량 초과 유입의 결론 수치는 고정 도착률로 별도 검증한다. 아래 한 줄이 전부다:
+
+```bash
+k6 run -e RUN=<1~2자리 고유 숫자> -e RATE=<초당 도착 수, 기본 15> --summary-export scripts/loadtest/results/openloop-<코드상태>.json scripts/loadtest/k6-search-openloop.js
+```
+
+관측 포인트: `public_library_failed`(셰딩률), `executor_rejected_total`(거절 직접 관측 —
+런 직후 프로메테우스 조회 또는 폴링 스크립트 병행), p95 안정 여부(발산 없음), 5xx 0%.
 
 ## 외부 API 레이턴시 실측 (measure-external-latency.sh)
 
