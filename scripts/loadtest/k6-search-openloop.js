@@ -14,7 +14,8 @@ export const options = {
   scenarios: {
     openloop: {
       executor: 'constant-arrival-rate',
-      rate: Number(__ENV.RATE || 15), timeUnit: '1s', duration: '2m',
+      // rate는 정수만 허용(k6 int64) — 소수 도착률은 TIMEUNIT을 늘려 표현: rate=11,TIMEUNIT=2s → 5.5/s
+      rate: Number(__ENV.RATE || 15), timeUnit: __ENV.TIMEUNIT || '1s', duration: '2m',
       preAllocatedVUs: 80, maxVUs: 120,
     },
   },
