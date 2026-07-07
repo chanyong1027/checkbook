@@ -32,7 +32,10 @@ kakao:
   book:
     rest-api-key: ${KAKAO_BOOK_REST_API_KEY:}
     base-url: https://dapi.kakao.com
-    timeout: 3000
+    # EC2 4세션 실측(n=400): p99 173ms, max 250ms — 구 3000ms의 근거("가끔 1.5~2s")는 미재현으로
+    # 폐기. 1000ms = max의 4배 여유 (connect/read 각각 적용 — 이론적 최악 2s).
+    # 별도 후보검색 엔드포인트(식별 실패 시 프론트가 호출하는 UX 폴백)라 과도하게 조이지 않음
+    timeout: 1000
 
 datanaru:
   auth-key: ${DATANARU_AUTH_KEY:}

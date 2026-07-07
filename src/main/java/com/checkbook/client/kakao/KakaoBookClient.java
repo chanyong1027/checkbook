@@ -18,7 +18,7 @@ public class KakaoBookClient {
     public KakaoBookClient(
             @Value("${kakao.book.base-url:https://dapi.kakao.com}") String baseUrl,
             @Value("${kakao.book.rest-api-key}") String restApiKey,
-            @Value("${kakao.book.timeout:3000}") int timeoutMs
+            @Value("${kakao.book.timeout:1000}") int timeoutMs
     ) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(timeoutMs);
