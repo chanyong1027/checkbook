@@ -63,7 +63,7 @@ public class PublicLibraryAvailabilityService {
         List<PublicLibrary> candidates = publicLibraryRepository.findNearest(lat, lon, maxCount);
         int total = candidates.size();
         int from = Math.min(offset, total);
-        int to = Math.min(offset + pageSize, total);
+        int to = (int) Math.min((long) offset + pageSize, total);
         List<PublicLibrary> targets = candidates.subList(from, to);
 
         List<CompletableFuture<PublicLibraryInfo>> futures = targets.stream()

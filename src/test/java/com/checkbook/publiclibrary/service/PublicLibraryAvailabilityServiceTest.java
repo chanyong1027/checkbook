@@ -176,6 +176,20 @@ class PublicLibraryAvailabilityServiceTest {
     }
 
     @Test
+    void hugeOffsetDoesNotOverflowReturnsEmptyPage() {
+        when(publicLibraryRepository.findNearest(37.5665, 126.9780, 20)).thenReturn(libs(20));
+
+        PublicLibraryAvailabilityPage page = service.fetch(
+                "9788936439743", 37.5665, 126.9780, Integer.MAX_VALUE);
+
+        assertThat(page.libraries()).isEmpty();
+        assertThat(page.total()).isEqualTo(20);
+        assertThat(page.hasMoreLibraries()).isFalse();
+        assertThat(page.nextOffset()).isNull();
+        assertThat(page.failedCount()).isZero();
+    }
+
+    @Test
     void latOutOfRangeThrowsInvalidLocation() {
         assertThatThrownBy(() -> service.fetch("9788936439743", 999.0, 126.9780, 0))
                 .isInstanceOf(BusinessException.class);
