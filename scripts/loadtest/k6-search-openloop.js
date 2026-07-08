@@ -69,7 +69,7 @@ export default function () {
   const pubStatus = sectionStatus(statuses, 'PUBLIC_LIBRARY');
   publicLibraryFailed.add(pubStatus === 'FAILED');
   const libs = body.publicLibraries || [];
-  publicLibraryIncomplete.add(pubStatus === 'SUCCESS' && libs.length < 20);
+  publicLibraryIncomplete.add(pubStatus === 'SUCCESS' && libs.length < 5);
 
   // quality 신규 2종 — SKIPPED(미시도)는 분모에서 제외: availability 문제의 quality 이중 계상 방지
   addFailedIfAttempted(usedBookFailed, usedStatus);

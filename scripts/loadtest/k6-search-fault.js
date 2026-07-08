@@ -3,7 +3,7 @@ import { check, sleep } from 'k6';
 import { Rate } from 'k6/metrics';
 
 const publicLibraryFailed = new Rate('public_library_failed');
-// 섹션 SUCCESS인데 도서관이 20곳 미만 = fan-out 내부(publicLibraryExecutor) 병목의 조용한 부분 실패
+// 섹션 SUCCESS인데 요청 page(5곳) 미만 = fan-out 내부(publicLibraryExecutor) 병목의 조용한 부분 실패
 const publicLibraryIncomplete = new Rate('public_library_incomplete');
 
 // 4분 지속 부하: t=60s에 지연 주입, t=180s에 해제 (외부 스크립트로 수동 조작)
@@ -41,7 +41,7 @@ export default function () {
     const pub = statuses.find((s) => s.section === 'PUBLIC_LIBRARY');
     publicLibraryFailed.add(!!(pub && pub.status === 'FAILED'));
     const libs = body.publicLibraries || [];
-    publicLibraryIncomplete.add(!!(pub && pub.status === 'SUCCESS' && libs.length < 20));
+    publicLibraryIncomplete.add(!!(pub && pub.status === 'SUCCESS' && libs.length < 5));
   }
   sleep(0.5);
 }
