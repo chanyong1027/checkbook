@@ -6,10 +6,13 @@ import com.checkbook.client.datanaru.dto.DatanaruLibSrchResponse;
 import com.checkbook.client.datanaru.dto.DatanaruLibSrchResult;
 import com.checkbook.client.datanaru.dto.DatanaruLoanBookResult;
 import com.checkbook.client.datanaru.dto.DatanaruLoanItemResponse;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.util.List;
@@ -22,16 +25,21 @@ public class DatanaruClient {
     private final RestClient defaultClient;
     private final RestClient listClient;
     private final String authKey;
+    private final Counter rateLimitedCounter;
 
     public DatanaruClient(
             @Value("${datanaru.base-url}") String baseUrl,
             @Value("${datanaru.auth-key}") String authKey,
             @Value("${datanaru.timeout:2000}") int timeout,
-            @Value("${datanaru.list-timeout:10000}") int listTimeout
+            @Value("${datanaru.list-timeout:10000}") int listTimeout,
+            MeterRegistry meterRegistry
     ) {
         this.authKey = authKey;
         this.defaultClient = buildClient(baseUrl, timeout);
         this.listClient = buildClient(baseUrl, listTimeout);
+        this.rateLimitedCounter = Counter.builder("datanaru.rate_limited")
+                .description("정보나루 429 Too Many Requests 수신 횟수 (rate limiter 재도입 트리거)")
+                .register(meterRegistry);
     }
 
     private static RestClient buildClient(String baseUrl, int timeoutMs) {
@@ -45,11 +53,20 @@ public class DatanaruClient {
     }
 
     public DatanaruBookExistResult bookExist(String isbn13, String libCode) {
-        DatanaruBookExistResponse response = defaultClient.get()
-                .uri("/bookExist?authKey={key}&libCode={code}&isbn13={isbn}&format=json",
-                        authKey, libCode, isbn13)
-                .retrieve()
-                .body(DatanaruBookExistResponse.class);
+        DatanaruBookExistResponse response;
+        try {
+            response = defaultClient.get()
+                    .uri("/bookExist?authKey={key}&libCode={code}&isbn13={isbn}&format=json",
+                            authKey, libCode, isbn13)
+                    .retrieve()
+                    .body(DatanaruBookExistResponse.class);
+        } catch (HttpClientErrorException.TooManyRequests e) {
+            rateLimitedCounter.increment();
+            log.warn("정보나루 bookExist 429 Too Many Requests: isbn13={}, libCode={} "
+                    + "— rate limiter 재도입 트리거 관측", isbn13, libCode);
+            throw new DatanaruResponseException(
+                    "정보나루 rate limited(429): libCode=" + libCode, e);
+        }
 
         if (response == null || response.response() == null || response.response().result() == null) {
             throw new DatanaruResponseException(

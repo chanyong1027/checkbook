@@ -3,6 +3,7 @@ package com.checkbook.client;
 import com.checkbook.client.datanaru.DatanaruClient;
 import com.checkbook.client.datanaru.dto.DatanaruBookExistResult;
 import com.checkbook.client.datanaru.dto.DatanaruLibSrchResult;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterEach;
@@ -45,7 +46,8 @@ class DatanaruClientTest {
                         """));
         server.start();
 
-        DatanaruClient client = new DatanaruClient(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000);
+        DatanaruClient client = new DatanaruClient(
+                baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000, new SimpleMeterRegistry());
 
         DatanaruBookExistResult result = client.bookExist("9788936439743", "111111");
 
@@ -91,7 +93,8 @@ class DatanaruClientTest {
                         """));
         server.start();
 
-        DatanaruClient client = new DatanaruClient(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000);
+        DatanaruClient client = new DatanaruClient(
+                baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000, new SimpleMeterRegistry());
 
         List<DatanaruLibSrchResult> result = client.libSrch(1, 100);
 
@@ -102,7 +105,8 @@ class DatanaruClientTest {
 
     @Test
     void bookExistThrowsOnNetworkFailure() {
-        DatanaruClient client = new DatanaruClient("http://127.0.0.1:1/api", "test-key", 50, 50);
+        DatanaruClient client = new DatanaruClient(
+                "http://127.0.0.1:1/api", "test-key", 50, 50, new SimpleMeterRegistry());
 
         assertThatThrownBy(() -> client.bookExist("9788936439743", "111111"))
                 .isInstanceOf(Exception.class);
@@ -110,10 +114,26 @@ class DatanaruClientTest {
 
     @Test
     void libSrchThrowsOnNetworkFailure() {
-        DatanaruClient client = new DatanaruClient("http://127.0.0.1:1/api", "test-key", 50, 50);
+        DatanaruClient client = new DatanaruClient(
+                "http://127.0.0.1:1/api", "test-key", 50, 50, new SimpleMeterRegistry());
 
         assertThatThrownBy(() -> client.libSrch(1, 100))
                 .isInstanceOf(DatanaruResponseException.class);
+    }
+
+    @Test
+    void bookExist429IncrementsRateLimitedCounterAndThrows() throws Exception {
+        server = new MockWebServer();
+        server.enqueue(new MockResponse().setResponseCode(429));
+        server.start();
+
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        DatanaruClient client = new DatanaruClient(
+                baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000, registry);
+
+        assertThatThrownBy(() -> client.bookExist("9788936439743", "111111"))
+                .isInstanceOf(DatanaruResponseException.class);
+        assertThat(registry.get("datanaru.rate_limited").counter().count()).isEqualTo(1.0);
     }
 
     private String baseUrl(String path) {
