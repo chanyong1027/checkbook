@@ -76,7 +76,8 @@ class SearchControllerTest {
                         null,
                         new SearchResponse.NewBookInfo(32000, "https://www.aladin.co.kr/shop/wproduct.aspx?ISBN=9788994492032"),
                         new SearchResponse.SubscriptionInfo(MillieAvailability.unavailable()),
-                        new SearchResponse.SearchMetadata(LocalDateTime.now(), List.of(), List.of())
+                        new SearchResponse.SearchMetadata(
+                                LocalDateTime.now(), List.of(), List.of(), null, false, null)
                 ));
 
         mockMvc.perform(get("/api/search").param("q", "자바"))

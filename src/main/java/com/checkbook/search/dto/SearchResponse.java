@@ -48,7 +48,10 @@ public record SearchResponse(
     public record SearchMetadata(
             LocalDateTime searchedAt,
             List<SectionStatusDetail> sectionStatuses,
-            List<FailureDetail> failures
+            List<FailureDetail> failures,
+            Integer publicLibraryTotal,
+            boolean publicLibraryHasMore,
+            Integer publicLibraryNextOffset
     ) {
     }
 

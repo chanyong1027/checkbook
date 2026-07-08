@@ -2,20 +2,17 @@ package com.checkbook.search.service;
 
 import com.checkbook.client.aladin.dto.AladinSearchResult;
 import com.checkbook.client.aladin.dto.AladinUsedBookResult;
+import com.checkbook.common.concurrent.AsyncSubmit;
 import com.checkbook.common.exception.BusinessException;
-import com.checkbook.publiclibrary.snapshot.dto.LibraryAvailabilityResult;
-import com.checkbook.publiclibrary.snapshot.service.LibraryAvailabilitySnapshotService;
 import com.checkbook.common.exception.ErrorCode;
-import com.checkbook.common.util.DistanceCalculator;
 import com.checkbook.common.util.InputNormalizer;
-import com.checkbook.publiclibrary.domain.PublicLibrary;
+import com.checkbook.publiclibrary.dto.PublicLibraryAvailabilityPage;
 import com.checkbook.publiclibrary.dto.PublicLibraryInfo;
-import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
+import com.checkbook.publiclibrary.service.PublicLibraryAvailabilityService;
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.SearchResponse;
 import com.checkbook.search.dto.SearchSection;
 import com.checkbook.search.dto.SearchSectionStatus;
-import java.util.Comparator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,7 +21,6 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -32,42 +28,29 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.function.Supplier;
 
 @Slf4j
 @Service
 public class SearchService {
 
     private final AladinBookService aladinBookService;
-    private final LibraryAvailabilitySnapshotService snapshotService;
-    private final PublicLibraryRepository publicLibraryRepository;
     private final MillieBookService millieBookService;
+    private final PublicLibraryAvailabilityService publicLibraryAvailabilityService;
     private final ExecutorService searchExecutor;
-    private final ExecutorService publicLibraryExecutor;
 
     @Value("${search.total-deadline:2800}")
     private long totalDeadlineMs = 2800;
 
-    @Value("${search.public-library-top-n:20}")
-    private int publicLibraryTopN = 20;
-
-    @Value("${search.public-library-fanout-timeout:2200}")
-    private long publicLibraryFanoutTimeoutMs = 2200;
-
     public SearchService(
             AladinBookService aladinBookService,
-            LibraryAvailabilitySnapshotService snapshotService,
-            PublicLibraryRepository publicLibraryRepository,
             MillieBookService millieBookService,
-            @Qualifier("searchExecutor") ExecutorService searchExecutor,
-            @Qualifier("publicLibraryExecutor") ExecutorService publicLibraryExecutor
+            PublicLibraryAvailabilityService publicLibraryAvailabilityService,
+            @Qualifier("searchExecutor") ExecutorService searchExecutor
     ) {
         this.aladinBookService = aladinBookService;
-        this.snapshotService = snapshotService;
-        this.publicLibraryRepository = publicLibraryRepository;
         this.millieBookService = millieBookService;
+        this.publicLibraryAvailabilityService = publicLibraryAvailabilityService;
         this.searchExecutor = searchExecutor;
-        this.publicLibraryExecutor = publicLibraryExecutor;
     }
 
     public SearchResponse search(String q, Double lat, Double lon) {
@@ -88,7 +71,7 @@ public class SearchService {
         List<SearchResponse.FailureDetail> failures = new CopyOnWriteArrayList<>();
 
         CompletableFuture<AladinUsedBookResult> usedFuture =
-                submitSafely(() -> aladinBookService.getUsedBooks(isbn13), searchExecutor)
+                AsyncSubmit.submitSafely(() -> aladinBookService.getUsedBooks(isbn13), searchExecutor)
                 .exceptionally(exception -> {
                     failures.add(new SearchResponse.FailureDetail(
                             SearchSection.USED_BOOK,
@@ -97,21 +80,22 @@ public class SearchService {
                 });
 
 
-        CompletableFuture<List<PublicLibraryInfo>> publicFuture;
+        CompletableFuture<PublicLibraryAvailabilityPage> publicFuture;
         if (lat != null && lon != null) {
-            publicFuture = submitSafely(() -> fetchPublicLibraries(isbn13, lat, lon), searchExecutor)
+            publicFuture = AsyncSubmit.submitSafely(
+                            () -> publicLibraryAvailabilityService.fetch(isbn13, lat, lon, 0), searchExecutor)
                     .exceptionally(exception -> {
                         failures.add(new SearchResponse.FailureDetail(
                                 SearchSection.PUBLIC_LIBRARY,
                                 failureReason(exception)));
-                        return List.of();
+                        return null;
                     });
         } else {
-            publicFuture = CompletableFuture.completedFuture(List.of());
+            publicFuture = CompletableFuture.completedFuture(null);
         }
 
         CompletableFuture<MillieAvailability> millieFuture = identifiedBook
-                .map(book -> submitSafely(() -> millieBookService.findAvailability(book), searchExecutor)
+                .map(book -> AsyncSubmit.submitSafely(() -> millieBookService.findAvailability(book), searchExecutor)
                         .exceptionally(exception -> {
                             failures.add(new SearchResponse.FailureDetail(
                                     SearchSection.SUBSCRIPTION,
@@ -131,8 +115,13 @@ public class SearchService {
 
         AladinUsedBookResult usedResult =
                 usedFuture.isDone() && !usedFuture.isCompletedExceptionally() ? usedFuture.join() : null;
+        PublicLibraryAvailabilityPage publicPage =
+                publicFuture.isDone() && !publicFuture.isCompletedExceptionally() ? publicFuture.join() : null;
         List<PublicLibraryInfo> publicResults =
-                publicFuture.isDone() && !publicFuture.isCompletedExceptionally() ? publicFuture.join() : List.of();
+                publicPage != null ? publicPage.libraries() : List.of();
+        Integer publicLibraryTotal = publicPage != null ? publicPage.total() : null;
+        boolean publicLibraryHasMore = publicPage != null && publicPage.hasMoreLibraries();
+        Integer publicLibraryNextOffset = publicPage != null ? publicPage.nextOffset() : null;
         MillieAvailability millieResult =
                 millieFuture.isDone() && !millieFuture.isCompletedExceptionally() ? millieFuture.join() : MillieAvailability.unavailable();
 
@@ -167,53 +156,10 @@ public class SearchService {
                 usedBookInfo,
                 newBookInfo,
                 new SearchResponse.SubscriptionInfo(millieResult),
-                new SearchResponse.SearchMetadata(LocalDateTime.now(), statuses, List.copyOf(failures))
+                new SearchResponse.SearchMetadata(
+                        LocalDateTime.now(), statuses, List.copyOf(failures),
+                        publicLibraryTotal, publicLibraryHasMore, publicLibraryNextOffset)
         );
-    }
-
-    private List<PublicLibraryInfo> fetchPublicLibraries(String isbn13, double lat, double lon) {
-        List<PublicLibrary> nearbyLibraries = publicLibraryRepository.findNearest(lat, lon, publicLibraryTopN);
-
-        List<CompletableFuture<PublicLibraryInfo>> futures = nearbyLibraries.stream()
-                .map(library -> submitSafely(() -> {
-                    LibraryAvailabilityResult availability = snapshotService.getAvailability(isbn13, library.getLibCode());
-                    boolean hasBook = availability.hasBook();
-                    boolean loanAvailable = availability.loanAvailable();
-                    double distance = Math.round(
-                            DistanceCalculator.km(lat, lon, library.getLat(), library.getLon()) * 10.0
-                    ) / 10.0;
-
-                    return new PublicLibraryInfo(
-                            library.getName(),
-                            hasBook,
-                            loanAvailable,
-                            library.getAddress(),
-                            library.getLat(),
-                            library.getLon(),
-                            distance,
-                            library.getHomepage()
-                    );
-                }, publicLibraryExecutor).exceptionally(exception -> {
-                    log.warn("bookExist 호출 실패: {} - 건너뜀", library.getName(), exception);
-                    return null;
-                }))
-                .toList();
-
-        CompletableFuture<Void> all = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
-        try {
-            all.get(publicLibraryFanoutTimeoutMs, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            log.warn("공공도서관 bookExist fan-out 타임아웃 {}ms", publicLibraryFanoutTimeoutMs);
-        } catch (Exception e) {
-            log.warn("공공도서관 bookExist fan-out 대기 중 오류", e);
-        }
-
-        return futures.stream()
-                .filter(CompletableFuture::isDone)
-                .map(future -> future.getNow(null))
-                .filter(Objects::nonNull)
-                .sorted(Comparator.comparingDouble(PublicLibraryInfo::distance))
-                .toList();
     }
 
     private void validateLocation(Double lat, Double lon) {
@@ -253,7 +199,7 @@ public class SearchService {
                 null,
                 null,
                 new SearchResponse.SubscriptionInfo(MillieAvailability.unavailable()),
-                new SearchResponse.SearchMetadata(LocalDateTime.now(), statuses, List.of())
+                new SearchResponse.SearchMetadata(LocalDateTime.now(), statuses, List.of(), null, false, null)
         );
     }
 
@@ -325,19 +271,6 @@ public class SearchService {
     private void addTimeoutFailureIfAbsent(List<SearchResponse.FailureDetail> failures, SearchSection section) {
         if (!hasFailure(failures, section)) {
             failures.add(new SearchResponse.FailureDetail(section, "타임아웃"));
-        }
-    }
-
-    /**
-     * 풀 거절(AbortPolicy) 시 supplyAsync가 동기로 던지는 RejectedExecutionException을
-     * failedFuture로 변환 → 기존 exceptionally 폴백 경로(섹션 FAILED/도서관 스킵)로 흡수한다.
-     * 이 게이트가 없으면 부모 제출 거절은 500, 자식 제출 거절은 fan-out 전체 사망이 된다.
-     */
-    private static <T> CompletableFuture<T> submitSafely(Supplier<T> task, ExecutorService executor) {
-        try {
-            return CompletableFuture.supplyAsync(task, executor);
-        } catch (RejectedExecutionException e) {
-            return CompletableFuture.failedFuture(e);
         }
     }
 

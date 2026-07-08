@@ -5,6 +5,7 @@ import com.checkbook.client.aladin.dto.AladinUsedBookResult;
 import com.checkbook.common.util.InputNormalizer;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
+import com.checkbook.publiclibrary.service.PublicLibraryAvailabilityService;
 import com.checkbook.publiclibrary.snapshot.domain.SnapshotSourceStatus;
 import com.checkbook.publiclibrary.snapshot.dto.LibraryAvailabilityResult;
 import com.checkbook.publiclibrary.snapshot.service.LibraryAvailabilitySnapshotService;
@@ -18,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
@@ -81,9 +83,13 @@ class ConcurrentRequestContentionTest {
         setupMocks();
         ExecutorService callers = Executors.newFixedThreadPool(2);
         try {
+            PublicLibraryAvailabilityService availabilityService = new PublicLibraryAvailabilityService(
+                    snapshotService, publicLibraryRepository, libraryPool);
+            ReflectionTestUtils.setField(availabilityService, "pageSize", 20);
+            ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
+            ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
             SearchService service = new SearchService(
-                    aladinBookService, snapshotService, publicLibraryRepository,
-                    millieBookService, searchPool, libraryPool);
+                    aladinBookService, millieBookService, availabilityService, searchPool);
 
             Callable<SearchResponse> call = () -> service.search(TEST_ISBN, 37.5665, 126.9780);
             List<Future<SearchResponse>> futures = callers.invokeAll(List.of(call, call));

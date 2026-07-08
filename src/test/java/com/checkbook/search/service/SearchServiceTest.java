@@ -5,11 +5,9 @@ import com.checkbook.client.aladin.dto.AladinUsedBookResult;
 import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
 import com.checkbook.common.util.InputNormalizer;
-import com.checkbook.publiclibrary.domain.PublicLibrary;
-import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
-import com.checkbook.publiclibrary.snapshot.domain.SnapshotSourceStatus;
-import com.checkbook.publiclibrary.snapshot.dto.LibraryAvailabilityResult;
-import com.checkbook.publiclibrary.snapshot.service.LibraryAvailabilitySnapshotService;
+import com.checkbook.publiclibrary.dto.PublicLibraryAvailabilityPage;
+import com.checkbook.publiclibrary.dto.PublicLibraryInfo;
+import com.checkbook.publiclibrary.service.PublicLibraryAvailabilityService;
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.SearchResponse;
 import com.checkbook.search.dto.SearchSection;
@@ -42,40 +40,31 @@ class SearchServiceTest {
     private AladinBookService aladinBookService;
 
     @Mock
-    private LibraryAvailabilitySnapshotService snapshotService;
-
-    @Mock
-    private PublicLibraryRepository publicLibraryRepository;
-
-    @Mock
     private MillieBookService millieBookService;
 
+    @Mock
+    private PublicLibraryAvailabilityService publicLibraryAvailabilityService;
+
     private ExecutorService searchExecutor;
-    private ExecutorService publicLibraryExecutor;
     private SearchService searchService;
 
     @BeforeEach
     void setUp() {
         searchExecutor = Executors.newFixedThreadPool(3);
-        publicLibraryExecutor = Executors.newFixedThreadPool(20);
         // 기존 테스트가 밀리 호출 경로를 거치는 경우 NPE 회피용 lenient default stub.
         // 신규 케이스는 각자 명시적 stub으로 덮어씀.
         lenient().when(millieBookService.findAvailability(any()))
                 .thenReturn(MillieAvailability.unavailable());
         searchService = new SearchService(
                 aladinBookService,
-                snapshotService,
-                publicLibraryRepository,
                 millieBookService,
-                searchExecutor,
-                publicLibraryExecutor
-        );
+                publicLibraryAvailabilityService,
+                searchExecutor);
     }
 
     @AfterEach
     void tearDown() {
         searchExecutor.shutdownNow();
-        publicLibraryExecutor.shutdownNow();
     }
 
     @Test
@@ -128,35 +117,40 @@ class SearchServiceTest {
     }
 
     @Test
-    void searchWithLocationReturnsPublicLibraryResults() {
+    void searchWithLocationCarriesPagingMetadata() {
         AladinSearchResult aladinResult = new AladinSearchResult(
                 "9788936439743", "혼자가 혼자에게", "성해나", "창비", null, 16800);
-        PublicLibrary library = PublicLibrary.builder()
-                .libCode("111111")
-                .name("종로도서관")
-                .address("서울 종로구")
-                .lat(37.57)
-                .lon(126.98)
-                .homepage("https://lib.example")
-                .build();
-
         when(aladinBookService.identify(
                 new InputNormalizer.NormalizedQuery("혼모노", InputNormalizer.QueryType.KEYWORD)))
                 .thenReturn(Optional.of(aladinResult));
         when(aladinBookService.getUsedBooks("9788936439743")).thenReturn(null);
-        when(publicLibraryRepository.findNearest(37.5665, 126.9780, 20)).thenReturn(List.of(library));
-        when(snapshotService.getAvailability("9788936439743", "111111"))
-                .thenReturn(new LibraryAvailabilityResult("111111", true, false, SnapshotSourceStatus.SUCCESS));
+        when(publicLibraryAvailabilityService.fetch("9788936439743", 37.5665, 126.9780, 0))
+                .thenReturn(new PublicLibraryAvailabilityPage(
+                        List.of(new PublicLibraryInfo(
+                                "종로도서관", true, false, "서울 종로구",
+                                37.57, 126.98, 0.5, "https://lib.example")),
+                        0, 20, 5, true, 0));
 
         SearchResponse response = searchService.search("혼모노", 37.5665, 126.9780);
 
         assertThat(response.publicLibraries()).hasSize(1);
-        assertThat(response.publicLibraries().get(0).libraryName()).isEqualTo("종로도서관");
-        assertThat(response.publicLibraries().get(0).hasBook()).isTrue();
-        assertThat(response.metadata().sectionStatuses())
-                .filteredOn(status -> status.section() == SearchSection.PUBLIC_LIBRARY)
-                .extracting(SearchResponse.SectionStatusDetail::status)
-                .containsOnly(SearchSectionStatus.SUCCESS);
+        assertThat(response.metadata().publicLibraryTotal()).isEqualTo(20);
+        assertThat(response.metadata().publicLibraryHasMore()).isTrue();
+        assertThat(response.metadata().publicLibraryNextOffset()).isEqualTo(5);
+    }
+
+    @Test
+    void searchWithoutLocationHasNullPagingMetadata() {
+        AladinSearchResult aladinResult = new AladinSearchResult(
+                "9788936439743", "혼자가 혼자에게", "성해나", "창비", null, 16800);
+        when(aladinBookService.identify(any())).thenReturn(Optional.of(aladinResult));
+        when(aladinBookService.getUsedBooks("9788936439743")).thenReturn(null);
+
+        SearchResponse response = searchService.search("혼모노", null, null);
+
+        assertThat(response.metadata().publicLibraryTotal()).isNull();
+        assertThat(response.metadata().publicLibraryHasMore()).isFalse();
+        assertThat(response.metadata().publicLibraryNextOffset()).isNull();
     }
 
     @Test
