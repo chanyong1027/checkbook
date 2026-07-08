@@ -9,6 +9,7 @@ import com.checkbook.common.exception.ErrorCode;
 import com.checkbook.common.util.DistanceCalculator;
 import com.checkbook.common.util.InputNormalizer;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
+import com.checkbook.publiclibrary.dto.PublicLibraryInfo;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.SearchResponse;
@@ -96,7 +97,7 @@ public class SearchService {
                 });
 
 
-        CompletableFuture<List<SearchResponse.PublicLibraryInfo>> publicFuture;
+        CompletableFuture<List<PublicLibraryInfo>> publicFuture;
         if (lat != null && lon != null) {
             publicFuture = submitSafely(() -> fetchPublicLibraries(isbn13, lat, lon), searchExecutor)
                     .exceptionally(exception -> {
@@ -130,7 +131,7 @@ public class SearchService {
 
         AladinUsedBookResult usedResult =
                 usedFuture.isDone() && !usedFuture.isCompletedExceptionally() ? usedFuture.join() : null;
-        List<SearchResponse.PublicLibraryInfo> publicResults =
+        List<PublicLibraryInfo> publicResults =
                 publicFuture.isDone() && !publicFuture.isCompletedExceptionally() ? publicFuture.join() : List.of();
         MillieAvailability millieResult =
                 millieFuture.isDone() && !millieFuture.isCompletedExceptionally() ? millieFuture.join() : MillieAvailability.unavailable();
@@ -170,10 +171,10 @@ public class SearchService {
         );
     }
 
-    private List<SearchResponse.PublicLibraryInfo> fetchPublicLibraries(String isbn13, double lat, double lon) {
+    private List<PublicLibraryInfo> fetchPublicLibraries(String isbn13, double lat, double lon) {
         List<PublicLibrary> nearbyLibraries = publicLibraryRepository.findNearest(lat, lon, publicLibraryTopN);
 
-        List<CompletableFuture<SearchResponse.PublicLibraryInfo>> futures = nearbyLibraries.stream()
+        List<CompletableFuture<PublicLibraryInfo>> futures = nearbyLibraries.stream()
                 .map(library -> submitSafely(() -> {
                     LibraryAvailabilityResult availability = snapshotService.getAvailability(isbn13, library.getLibCode());
                     boolean hasBook = availability.hasBook();
@@ -182,7 +183,7 @@ public class SearchService {
                             DistanceCalculator.km(lat, lon, library.getLat(), library.getLon()) * 10.0
                     ) / 10.0;
 
-                    return new SearchResponse.PublicLibraryInfo(
+                    return new PublicLibraryInfo(
                             library.getName(),
                             hasBook,
                             loanAvailable,
@@ -211,7 +212,7 @@ public class SearchService {
                 .filter(CompletableFuture::isDone)
                 .map(future -> future.getNow(null))
                 .filter(Objects::nonNull)
-                .sorted(Comparator.comparingDouble(SearchResponse.PublicLibraryInfo::distance))
+                .sorted(Comparator.comparingDouble(PublicLibraryInfo::distance))
                 .toList();
     }
 
