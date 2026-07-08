@@ -1,10 +1,14 @@
 package com.checkbook.search.controller;
 
+import com.checkbook.publiclibrary.dto.PublicLibraryAvailabilityResponse;
+import com.checkbook.publiclibrary.service.PublicLibraryAvailabilityService;
 import com.checkbook.search.dto.OffStoreResponse;
 import com.checkbook.search.dto.SearchResponse;
 import com.checkbook.search.service.AladinBookService;
 import com.checkbook.search.service.SearchService;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +26,7 @@ public class SearchController {
 
     private final SearchService searchService;
     private final AladinBookService aladinBookService;
+    private final PublicLibraryAvailabilityService publicLibraryAvailabilityService;
 
     @GetMapping("/search")
     public ResponseEntity<SearchResponse> search(
@@ -39,5 +44,16 @@ public class SearchController {
             @RequestParam Double lon
     ) {
         return ResponseEntity.ok(aladinBookService.getOffStoreList(isbn13, lat, lon));
+    }
+
+    @GetMapping("/public-libraries/availability")
+    public ResponseEntity<PublicLibraryAvailabilityResponse> getPublicLibraryAvailability(
+            @RequestParam @NotBlank @Pattern(regexp = "\\d{13}") String isbn13,
+            @RequestParam Double lat,
+            @RequestParam Double lon,
+            @RequestParam(defaultValue = "0") @Min(0) int offset
+    ) {
+        return ResponseEntity.ok(PublicLibraryAvailabilityResponse.from(
+                publicLibraryAvailabilityService.fetch(isbn13, lat, lon, offset)));
     }
 }
