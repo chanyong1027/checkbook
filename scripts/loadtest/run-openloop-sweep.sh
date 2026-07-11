@@ -12,7 +12,7 @@ REPO=$(git rev-parse --show-toplevel 2>/dev/null || echo /mnt/c/Users/cyhong/Des
 RAW=$REPO/scripts/loadtest/results/${SCENARIO}-raw
 OUT=$REPO/scripts/loadtest/results/openloop-${SCENARIO}-rate${LABEL}-r${RUN}.json
 mkdir -p "$RAW"
-cd "$REPO"
+cd "$REPO" || { echo "FAIL: REPO 디렉터리 이동 실패 — $REPO"; exit 1; }
 
 echo "=== RUN=$RUN RATE=$RATE TIMEUNIT=$TIMEUNIT (효과 ${LABEL}rps, 코드상태 $SCENARIO) ==="
 
