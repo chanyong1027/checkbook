@@ -20,7 +20,7 @@
 
 주의: 이 시스템은 데드라인+graceful degradation 때문에 **느려지는 대신 섹션을 비워서 응답**한다.
 → latency만 보면 문제가 안 보이고, FAILED율이 주지표다 (k6 커스텀 메트릭 `public_library_failed`).
-FAILED율과 함께 **`public_library_incomplete`**(섹션 SUCCESS인데 도서관 20곳 미만 = fan-out 내부
+FAILED율과 함께 **`public_library_incomplete`**(섹션 SUCCESS인데 요청 page(5곳) 미만 = fan-out 내부
 publicLibraryExecutor 병목의 조용한 부분 실패)를 본다. 두 지표는 요청 단위로 상호배타이고
 분모가 같아(모든 HTTP 200) 합산 가능하다.
 단, 두 지표 모두 **HTTP 200 응답만 분모**에 들어간다 — 고부하에서 5xx/타임아웃이 나기
@@ -57,7 +57,8 @@ docker exec -i loadtest-postgres psql -U checkbook -d checkbook < scripts/loadte
 curl -s "http://localhost:8089/api/bookExist?authKey=x&libCode=1&isbn13=9781111111111&format=json"
 # → {"response":{"result":{"hasBook":"Y","loanAvailable":"Y"}}}
 curl -s "http://localhost:8080/api/search?q=9781111111111&lat=37.5665&lon=126.9780" | head -c 300
-# → publicLibraries에 부하테스트도서관 20곳
+# → publicLibraries에 부하테스트도서관 5곳 + metadata.publicLibraryNextOffset=5
+#    (20곳이 나오면 fan-out 20 시절 stale 이미지 — --build 누락 신호)
 
 # [4] 측정: 수집(백그라운드) → k6 → 그래프  (RUN은 런마다 고유한 숫자 — 필수)
 mkdir -p scripts/loadtest/results
@@ -132,7 +133,7 @@ bash /tmp/mel.sh 100    # 약 4~5분, API별 p50/p95/p99 요약 출력. 주간/�
 
 ## 주의
 
-- k6 스크립트가 요청마다 유일한 ISBN을 생성 → 스냅샷 캐시(24h TTL)를 우회해 매 요청이 fan-out 20건을 실제 실행한다. **재실행 전 시드를 다시 돌려 스냅샷을 TRUNCATE할 것.**
+- k6 스크립트가 요청마다 유일한 ISBN을 생성 → 스냅샷 캐시(24h TTL)를 우회해 매 요청이 fan-out(page-size 5건)을 실제 실행한다. **재실행 전 시드를 다시 돌려 스냅샷을 TRUNCATE할 것.**
 - WireMock의 datanaru 지연 분포는 `measure-external-latency.sh` 실측값 기준 (측정 전엔 임시 lognormal 400ms).
 - featured 워밍업이 기동 시 WireMock의 빈 응답 스텁에 부딪히는 것은 정상 (검색 부하와 무관).
 - 코드 상태를 바꿔 재측정할 때는 반드시 `--build`로 이미지 재빌드 + 커밋 해시 기록.
