@@ -1,5 +1,7 @@
 package com.checkbook.search.dto;
 
+import com.checkbook.publiclibrary.dto.PublicLibraryInfo;
+
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -18,18 +20,6 @@ public record SearchResponse(
             String isbn13,
             String publisher,
             String coverUrl
-    ) {
-    }
-
-    public record PublicLibraryInfo(
-            String libraryName,
-            boolean hasBook,
-            boolean loanAvailable,
-            String address,
-            Double latitude,
-            Double longitude,
-            Double distance,
-            String homepage
     ) {
     }
 
@@ -58,7 +48,10 @@ public record SearchResponse(
     public record SearchMetadata(
             LocalDateTime searchedAt,
             List<SectionStatusDetail> sectionStatuses,
-            List<FailureDetail> failures
+            List<FailureDetail> failures,
+            Integer publicLibraryTotal,
+            boolean publicLibraryHasMore,
+            Integer publicLibraryNextOffset
     ) {
     }
 

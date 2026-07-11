@@ -4,7 +4,7 @@ import { Rate } from 'k6/metrics';
 
 // 섹션별 성패는 http 레벨에 안 드러나므로 커스텀 메트릭으로 뽑는다
 const publicLibraryFailed = new Rate('public_library_failed');
-// 섹션 SUCCESS인데 도서관이 20곳 미만 = fan-out 내부(publicLibraryExecutor) 병목의 조용한 부분 실패
+// 섹션 SUCCESS인데 요청 page(5곳) 미만 = fan-out 내부(publicLibraryExecutor) 병목의 조용한 부분 실패
 const publicLibraryIncomplete = new Rate('public_library_incomplete');
 
 export const options = {
@@ -26,7 +26,7 @@ export const options = {
   },
 };
 
-// 요청마다 유일한 13자리 ISBN → 스냅샷 캐시 우회, 매 요청 fan-out 20건 실행
+// 요청마다 유일한 13자리 ISBN → 스냅샷 캐시 우회, 매 요청 fan-out 5건(page-size) 실행
 // 런 식별자를 섞어 런 간 ISBN 충돌 차단 — 유령 태스크가 남긴 스냅샷 캐시 적중 방지.
 // 기본값 두면 충돌·재사용 사고가 나므로 필수화 (-e RUN=고유값)
 if (!__ENV.RUN || !/^\d{1,2}$/.test(__ENV.RUN)) {
@@ -55,7 +55,7 @@ export default function () {
     const pub = statuses.find((s) => s.section === 'PUBLIC_LIBRARY');
     publicLibraryFailed.add(!!(pub && pub.status === 'FAILED'));
     const libs = body.publicLibraries || [];
-    publicLibraryIncomplete.add(!!(pub && pub.status === 'SUCCESS' && libs.length < 20));
+    publicLibraryIncomplete.add(!!(pub && pub.status === 'SUCCESS' && libs.length < 5));
   }
 
   sleep(0.5); // 사용자 think time 근사

@@ -3,6 +3,7 @@ package com.checkbook.search.service;
 import com.checkbook.client.aladin.dto.AladinSearchResult;
 import com.checkbook.common.util.InputNormalizer;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
+import com.checkbook.publiclibrary.service.PublicLibraryAvailabilityService;
 import com.checkbook.publiclibrary.snapshot.service.LibraryAvailabilitySnapshotService;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
 import com.checkbook.search.dto.SearchResponse;
@@ -15,6 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -77,9 +79,13 @@ class PoolRejectionFallbackTest {
             });
             saturated.execute(() -> { });
 
+            PublicLibraryAvailabilityService availabilityService = new PublicLibraryAvailabilityService(
+                    snapshotService, publicLibraryRepository, saturated);
+            ReflectionTestUtils.setField(availabilityService, "pageSize", 20);
+            ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
+            ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
             SearchService service = new SearchService(
-                    aladinBookService, snapshotService, publicLibraryRepository,
-                    millieBookService, saturated, saturated);
+                    aladinBookService, millieBookService, availabilityService, saturated);
 
             // 헬퍼가 없으면 여기서 RejectedExecutionException이 그대로 터진다
             SearchResponse response = service.search(TEST_ISBN, 37.5665, 126.9780);
@@ -132,9 +138,13 @@ class PoolRejectionFallbackTest {
                 }
             });
 
+            PublicLibraryAvailabilityService availabilityService = new PublicLibraryAvailabilityService(
+                    snapshotService, publicLibraryRepository, saturatedChildren);
+            ReflectionTestUtils.setField(availabilityService, "pageSize", 20);
+            ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
+            ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
             SearchService service = new SearchService(
-                    aladinBookService, snapshotService, publicLibraryRepository,
-                    millieBookService, healthyParents, saturatedChildren);
+                    aladinBookService, millieBookService, availabilityService, healthyParents);
 
             SearchResponse response = service.search(TEST_ISBN, 37.5665, 126.9780);
 

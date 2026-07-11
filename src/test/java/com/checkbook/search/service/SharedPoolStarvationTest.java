@@ -5,6 +5,7 @@ import com.checkbook.client.aladin.dto.AladinUsedBookResult;
 import com.checkbook.common.util.InputNormalizer;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
+import com.checkbook.publiclibrary.service.PublicLibraryAvailabilityService;
 import com.checkbook.publiclibrary.snapshot.domain.SnapshotSourceStatus;
 import com.checkbook.publiclibrary.snapshot.dto.LibraryAvailabilityResult;
 import com.checkbook.publiclibrary.snapshot.service.LibraryAvailabilitySnapshotService;
@@ -18,6 +19,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Optional;
@@ -32,7 +34,7 @@ import static org.mockito.Mockito.when;
 
 /**
  * 풀 분리 설계의 근거 재현 (측정 전 가설 4).
- * fetchPublicLibraries(부모)가 fan-out 자식 20개를 제출하고 블로킹 대기하는 중첩 구조에서,
+ * 부모 태스크(공공도서관 섹션)가 fan-out 자식 20개를 제출하고 블로킹 대기하는 중첩 구조에서,
  * searchExecutor와 publicLibraryExecutor를 같은 풀로 합치면 부모가 자식의 스레드를 점유해
  * 자식이 큐에 갇힌다(thread starvation). 타임아웃이 있어 영구 데드락 대신
  * "공공도서관 섹션 전멸 + fan-out 타임아웃 2.2초 소진"으로 발현된다.
@@ -63,9 +65,13 @@ class SharedPoolStarvationTest {
         setupMocks();
         ExecutorService sharedPool = Executors.newFixedThreadPool(1);
         try {
+            PublicLibraryAvailabilityService availabilityService = new PublicLibraryAvailabilityService(
+                    snapshotService, publicLibraryRepository, sharedPool);
+            ReflectionTestUtils.setField(availabilityService, "pageSize", 20);
+            ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
+            ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
             SearchService service = new SearchService(
-                    aladinBookService, snapshotService, publicLibraryRepository,
-                    millieBookService, sharedPool, sharedPool);
+                    aladinBookService, millieBookService, availabilityService, sharedPool);
 
             long start = System.currentTimeMillis();
             SearchResponse response = service.search(TEST_ISBN, 37.5665, 126.9780);
@@ -86,9 +92,13 @@ class SharedPoolStarvationTest {
         ExecutorService searchPool = Executors.newFixedThreadPool(3);
         ExecutorService libraryPool = Executors.newFixedThreadPool(20);
         try {
+            PublicLibraryAvailabilityService availabilityService = new PublicLibraryAvailabilityService(
+                    snapshotService, publicLibraryRepository, libraryPool);
+            ReflectionTestUtils.setField(availabilityService, "pageSize", 20);
+            ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
+            ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
             SearchService service = new SearchService(
-                    aladinBookService, snapshotService, publicLibraryRepository,
-                    millieBookService, searchPool, libraryPool);
+                    aladinBookService, millieBookService, availabilityService, searchPool);
 
             long start = System.currentTimeMillis();
             SearchResponse response = service.search(TEST_ISBN, 37.5665, 126.9780);

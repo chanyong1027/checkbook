@@ -5,7 +5,7 @@ import { Rate } from 'k6/metrics';
 // 고정 VU 탐침 — 임계점·결론 수치는 rampup(스테이지 희석)이 아니라 이 스크립트로 잰다.
 // 사용: k6 run -e VUS=<고정 VU 수> -e RUN=<런마다 고유한 1~2자리 숫자> [-e DURATION=90s] k6-search-probe.js
 const publicLibraryFailed = new Rate('public_library_failed');
-// 섹션 SUCCESS인데 도서관이 20곳 미만 = fan-out 내부(publicLibraryExecutor) 병목의 조용한 부분 실패
+// 섹션 SUCCESS인데 요청 page(5곳) 미만 = fan-out 내부(publicLibraryExecutor) 병목의 조용한 부분 실패
 const publicLibraryIncomplete = new Rate('public_library_incomplete');
 
 if (!__ENV.RUN || !/^\d{1,2}$/.test(__ENV.RUN)) {
@@ -47,7 +47,7 @@ export default function () {
     const pub = statuses.find((s) => s.section === 'PUBLIC_LIBRARY');
     publicLibraryFailed.add(!!(pub && pub.status === 'FAILED'));
     const libs = body.publicLibraries || [];
-    publicLibraryIncomplete.add(!!(pub && pub.status === 'SUCCESS' && libs.length < 20));
+    publicLibraryIncomplete.add(!!(pub && pub.status === 'SUCCESS' && libs.length < 5));
   }
 
   sleep(0.5); // 사용자 think time 근사

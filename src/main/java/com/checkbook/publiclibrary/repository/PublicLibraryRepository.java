@@ -37,8 +37,10 @@ public interface PublicLibraryRepository extends JpaRepository<PublicLibrary, Lo
         }
 
         return candidates.stream()
-                .sorted(Comparator.comparingDouble(
-                        library -> DistanceCalculator.km(lat, lon, library.getLat(), library.getLon())))
+                .sorted(Comparator
+                        .comparingDouble((PublicLibrary library) ->
+                                DistanceCalculator.km(lat, lon, library.getLat(), library.getLon()))
+                        .thenComparing(PublicLibrary::getLibCode))
                 .limit(limit)
                 .toList();
     }

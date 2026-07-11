@@ -74,4 +74,19 @@ class PublicLibraryRepositoryTest {
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getName()).isEqualTo("종로도서관");
     }
+
+    @Test
+    void findNearestBreaksDistanceTiesByLibCode() {
+        List<PublicLibrary> libraries = List.of(
+                PublicLibrary.builder().libCode("B").name("나").lat(37.5665).lon(126.9780).build(),
+                PublicLibrary.builder().libCode("A").name("가").lat(37.5665).lon(126.9780).build()
+        );
+
+        when(repository.findByLatBetweenAndLonBetween(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+                .thenReturn(libraries);
+
+        List<PublicLibrary> result = repository.findNearest(37.5665, 126.9780, 10);
+
+        assertThat(result).extracting(PublicLibrary::getLibCode).containsExactly("A", "B");
+    }
 }

@@ -49,7 +49,8 @@ millie:
 
 search:
   total-deadline: 2800
-  public-library-top-n: 20
+  public-library-page-size: 5    # 최초 조회와 더보기 1회당 fan-out 수
+  public-library-max-count: 20   # 더보기로 접근 가능한 최대 후보 수 = findNearest 상한
   public-library-fanout-timeout: 2200
   # 3태스크/요청(usedBook·publicLibrary부모·millie) × 목표 동시 요청 4건.
   # baseline 실측(2026-07-03, 하네스 v2): 이 풀(구 3)이 1차 병목 —

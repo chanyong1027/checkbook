@@ -20,7 +20,7 @@
 
 주의: 이 시스템은 데드라인+graceful degradation 때문에 **느려지는 대신 섹션을 비워서 응답**한다.
 → latency만 보면 문제가 안 보이고, FAILED율이 주지표다 (k6 커스텀 메트릭 `public_library_failed`).
-FAILED율과 함께 **`public_library_incomplete`**(섹션 SUCCESS인데 도서관 20곳 미만 = fan-out 내부
+FAILED율과 함께 **`public_library_incomplete`**(섹션 SUCCESS인데 요청 page(5곳) 미만 = fan-out 내부
 publicLibraryExecutor 병목의 조용한 부분 실패)를 본다. 두 지표는 요청 단위로 상호배타이고
 분모가 같아(모든 HTTP 200) 합산 가능하다.
 단, 두 지표 모두 **HTTP 200 응답만 분모**에 들어간다 — 고부하에서 5xx/타임아웃이 나기
@@ -57,7 +57,8 @@ docker exec -i loadtest-postgres psql -U checkbook -d checkbook < scripts/loadte
 curl -s "http://localhost:8089/api/bookExist?authKey=x&libCode=1&isbn13=9781111111111&format=json"
 # → {"response":{"result":{"hasBook":"Y","loanAvailable":"Y"}}}
 curl -s "http://localhost:8080/api/search?q=9781111111111&lat=37.5665&lon=126.9780" | head -c 300
-# → publicLibraries에 부하테스트도서관 20곳
+# → publicLibraries에 부하테스트도서관 5곳 + metadata.publicLibraryNextOffset=5
+#    (20곳이 나오면 fan-out 20 시절 stale 이미지 — --build 누락 신호)
 
 # [4] 측정: 수집(백그라운드) → k6 → 그래프  (RUN은 런마다 고유한 숫자 — 필수)
 mkdir -p scripts/loadtest/results
@@ -112,14 +113,23 @@ python3 scripts/loadtest/plot-metrics.py scripts/loadtest/results/fault-<코드�
 ## Open-loop 절차 (시나리오명: openloop-<코드상태>)
 
 closed-loop(VU)은 시스템이 느려지면 유입도 줄어드는 coordinated omission이 있어,
-용량 초과 유입의 결론 수치는 고정 도착률로 별도 검증한다. 아래 한 줄이 전부다:
+용량 초과 유입의 결론 수치는 고정 도착률로 별도 검증한다. 런 절차 전체(재시드→드레인
+확인→거절 스냅샷→k6+프로브·stats 병행→요약)가 스크립트로 승격되어 있다 — 한 줄이 전부다:
 
 ```bash
-k6 run -e RUN=<1~2자리 고유 숫자> -e RATE=<초당 도착 수, 기본 15> --summary-export scripts/loadtest/results/openloop-<코드상태>.json scripts/loadtest/k6-search-openloop.js
+# <RATE> <TIMEUNIT> <RUN(고유)> <라벨(효과rps)> <코드상태>  — 소수 도착률은 TIMEUNIT으로: 14.5 = RATE 29/2s
+./scripts/loadtest/run-openloop-sweep.sh 29 2s 71 14.5 lazy5
 ```
 
-관측 포인트: `public_library_failed`(셰딩률), `executor_rejected_total`(거절 직접 관측 —
-런 직후 프로메테우스 조회 또는 폴링 스크립트 병행), p95 안정 여부(발산 없음), 5xx 0%.
+런 직후 판정 게이트(스크립트 출력에서 순서대로 확인):
+1. **http rps ≈ 목표 도착률(±2%)** — 괴리 시 결과 폐기하고 하네스부터 의심(§7 시계 표류 사례:
+   -10% 괴리가 W32Time 문제의 첫 신호였다).
+2. 과부하 런이면 **`섹션 FAILED 합 == searchExecutor 거절 증분` 항등식** — 일치하면 순수 거절
+   레짐, 어긋나면 타임아웃 혼합 레짐(§6/§7의 레짐 구분 진단법).
+3. `public_library_failed`(셰딩률), p95 안정 여부(발산 없음), 5xx 0%, WireMock 프로브 med가
+   명목(356ms)과 일치.
+판정 임계 근처(게이트 ±1%p)의 통과/붕괴는 단일 런으로 확정하지 말 것 — 완만형 무릎은 반복
+합산 CI로 확정한다(§7의 14.5rps 4반복 선례). 절벽형(구간 낙차 큼)은 단일 런 허용.
 
 ## 외부 API 레이턴시 실측 (measure-external-latency.sh)
 
@@ -132,10 +142,25 @@ bash /tmp/mel.sh 100    # 약 4~5분, API별 p50/p95/p99 요약 출력. 주간/�
 
 ## 주의
 
-- k6 스크립트가 요청마다 유일한 ISBN을 생성 → 스냅샷 캐시(24h TTL)를 우회해 매 요청이 fan-out 20건을 실제 실행한다. **재실행 전 시드를 다시 돌려 스냅샷을 TRUNCATE할 것.**
+- k6 스크립트가 요청마다 유일한 ISBN을 생성 → 스냅샷 캐시(24h TTL)를 우회해 매 요청이 fan-out(page-size 5건)을 실제 실행한다. **재실행 전 시드를 다시 돌려 스냅샷을 TRUNCATE할 것.**
 - WireMock의 datanaru 지연 분포는 `measure-external-latency.sh` 실측값 기준 (측정 전엔 임시 lognormal 400ms).
 - featured 워밍업이 기동 시 WireMock의 빈 응답 스텁에 부딪히는 것은 정상 (검색 부하와 무관).
 - 코드 상태를 바꿔 재측정할 때는 반드시 `--build`로 이미지 재빌드 + 커밋 해시 기록.
+- **시계도 하네스다**: open-loop rps의 분모는 벽시계라, 호스트 시계 표류(W32Time 꺼짐 등)가
+  있으면 Hyper-V가 WSL 게스트 시계를 주기 점프 보정해 도착률 결손·가짜 지연·데드라인 오발이
+  생긴다(2026-07-11 실사례 — benchmark-results.md §7 "하네스 사건 기록"). 측정 전 60초 점검:
+
+  ```bash
+  python3 - <<'EOF'
+  import time
+  p=time.time(); ok=True; end=p+60
+  while time.time()<end:
+      time.sleep(0.2); n=time.time()
+      if n-p>1: print(f"clock jump {n-p:.1f}s"); ok=False
+      p=n
+  print("clock-ok" if ok else "clock-BAD: W32Time/호스트 시계 동기화부터 해결")
+  EOF
+  ```
 - WireMock은 `--container-threads 200`(기본 25는 fan-out 동시성에서 하네스가 병목이 됨)과
   `--no-request-journal`(저널 무제한 누적이 런 순서 드리프트 유발)로 기동한다 —
   따라서 `__admin/requests` 기반 검증은 불가. 필요 시 compose에서 잠시

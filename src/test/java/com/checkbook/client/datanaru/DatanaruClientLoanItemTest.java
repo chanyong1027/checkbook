@@ -1,6 +1,7 @@
 package com.checkbook.client.datanaru;
 
 import com.checkbook.client.datanaru.dto.DatanaruLoanBookResult;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
@@ -22,7 +23,7 @@ class DatanaruClientLoanItemTest {
     void setUp() throws Exception {
         server = new MockWebServer();
         server.start();
-        client = new DatanaruClient(server.url("/").toString(), "AUTHKEY", 2000, 10000);
+        client = new DatanaruClient(server.url("/").toString(), "AUTHKEY", 2000, 10000, new SimpleMeterRegistry());
     }
 
     @AfterEach
