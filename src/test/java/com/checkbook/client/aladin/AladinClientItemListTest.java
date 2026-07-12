@@ -21,7 +21,7 @@ class AladinClientItemListTest {
     void setUp() throws Exception {
         server = new MockWebServer();
         server.start();
-        client = new AladinClient(server.url("/").toString(), "TESTKEY", 500, 2000);
+        client = new AladinClient(server.url("/").toString(), "TESTKEY", 500, 2000, 2000);
     }
 
     @AfterEach
@@ -93,5 +93,21 @@ class AladinClientItemListTest {
         org.assertj.core.api.Assertions.assertThatThrownBy(
                 () -> client.itemList(AladinListQueryType.BESTSELLER, 15)
         ).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void itemList_usesListTimeout_notSearchTimeout() throws Exception {
+        // 검색용 timeout(100ms)보다 느리지만 list-timeout(2000ms) 안인 응답 —
+        // itemList가 검색 클라이언트의 타임아웃을 빌려 쓰면 실패한다 (2026-07-12 장애 회귀 가드)
+        AladinClient slowTolerantClient = new AladinClient(
+                server.url("/").toString(), "TESTKEY", 100, 100, 2000);
+        server.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"item\":[]}")
+                .setBodyDelay(500, java.util.concurrent.TimeUnit.MILLISECONDS));
+
+        List<Item> result = slowTolerantClient.itemList(AladinListQueryType.BESTSELLER, 15);
+
+        assertThat(result).isEmpty();
     }
 }

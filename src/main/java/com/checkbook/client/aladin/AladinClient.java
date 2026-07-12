@@ -22,12 +22,14 @@ public class AladinClient {
     private final String ttbKey;
     private final RestClient identificationClient;
     private final RestClient priceClient;
+    private final RestClient listClient;
 
     public AladinClient(
             @Value("${aladin.base-url}") String baseUrl,
             @Value("${aladin.ttb-key}") String ttbKey,
             @Value("${aladin.identification-timeout:500}") int identificationTimeout,
-            @Value("${aladin.timeout:2000}") int timeout
+            @Value("${aladin.timeout:2000}") int timeout,
+            @Value("${aladin.list-timeout:10000}") int listTimeout
     ) {
         this.ttbKey = ttbKey;
         this.identificationClient = RestClient.builder()
@@ -37,6 +39,13 @@ public class AladinClient {
         this.priceClient = RestClient.builder()
                 .baseUrl(baseUrl)
                 .requestFactory(requestFactory(timeout))
+                .build();
+        // 목록(ItemList)은 featured 배치 전용 — 사용자 응답 예산(2.8s)과 무관하므로
+        // 검색 경로의 2s 타임아웃을 빌려 쓰지 않는다 (datanaru.list-timeout과 같은 패턴).
+        // 실측: BESTSELLER 응답이 2s를 넘겨 워밍업 갱신 실패 (2026-07-12)
+        this.listClient = RestClient.builder()
+                .baseUrl(baseUrl)
+                .requestFactory(requestFactory(listTimeout))
                 .build();
     }
 
@@ -143,7 +152,7 @@ public class AladinClient {
 
     public List<Item> itemList(AladinListQueryType queryType, int maxResults) {
         try {
-            AladinItemResponse response = priceClient.get()
+            AladinItemResponse response = listClient.get()
                     .uri("/ItemList.aspx?ttbkey={key}&QueryType={qt}&MaxResults={max}&start=1&SearchTarget=Book&output=js&Version=20131101&Cover=Big",
                             ttbKey, queryType.value(), maxResults)
                     .retrieve()
