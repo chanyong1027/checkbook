@@ -28,7 +28,10 @@ public class FeaturedBooksWriter {
             List<FeaturedBook> books,
             Duration ttl
     ) {
-        FeaturedSectionSnapshot snapshot = snapshotRepository.findById(sectionType)
+        // FOR UPDATE: 동시 replaceSection(워밍업 ↔ cron)이 같은 섹션의 delete-insert를
+        // 겹쳐 실행하면 uq_featured_book_section_rank 충돌 — 스냅샷 행 락으로 직렬화.
+        // 진 쪽은 이긴 쪽 커밋 후 자기 데이터로 정상 교체한다 (둘 다 방금 수집한 데이터).
+        FeaturedSectionSnapshot snapshot = snapshotRepository.findByIdForUpdate(sectionType)
                 .orElseThrow(() -> new IllegalStateException(
                         "featured_section_snapshot 시드 행 없음: " + sectionType));
 
@@ -48,7 +51,8 @@ public class FeaturedBooksWriter {
 
     @Transactional
     public void markFailed(FeaturedSectionType sectionType, String reason) {
-        FeaturedSectionSnapshot snapshot = snapshotRepository.findById(sectionType)
+        // replaceSection과 같은 락 — 성공 트랜잭션 도중에 FAILED가 끼어들지 않도록
+        FeaturedSectionSnapshot snapshot = snapshotRepository.findByIdForUpdate(sectionType)
                 .orElseThrow(() -> new IllegalStateException(
                         "featured_section_snapshot 시드 행 없음: " + sectionType));
         snapshot.markFailed(reason);

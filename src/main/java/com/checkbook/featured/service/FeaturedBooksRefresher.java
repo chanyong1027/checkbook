@@ -46,7 +46,11 @@ public class FeaturedBooksRefresher {
         this.loanTtl = Duration.ofHours(loanTtlHours);
     }
 
-    /** 트랜잭션 없음. 외부 API 호출 → 성공 시 writer.replaceSection, 실패 시 writer.markFailed. */
+    /**
+     * 트랜잭션 없음. 외부 API 호출 → 성공 시 writer.replaceSection, 실패 시 writer.markFailed.
+     * 동시 갱신(워밍업 @Async ↔ cron) 직렬화는 Writer의 스냅샷 행 락(FOR UPDATE)이 담당 —
+     * 여기서 synchronized로 잡으면 외부 호출(최대 수 분)까지 임계 구역에 들어가므로 두지 않는다.
+     */
     public void refreshSection(FeaturedSectionType type) {
         try {
             switch (type) {
