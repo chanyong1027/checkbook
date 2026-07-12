@@ -46,7 +46,7 @@ class FeaturedBooksWriterTest {
                 .source(FeaturedSource.ALADIN)
                 .status(SnapshotStatus.NEVER_FETCHED)
                 .build();
-        when(snapshotRepository.findById(FeaturedSectionType.BESTSELLER))
+        when(snapshotRepository.findByIdForUpdate(FeaturedSectionType.BESTSELLER))
                 .thenReturn(Optional.of(snapshot));
 
         List<FeaturedBook> books = List.of(book(1), book(2));
@@ -73,7 +73,7 @@ class FeaturedBooksWriterTest {
                 .source(FeaturedSource.DATANARU)
                 .status(SnapshotStatus.SUCCESS)
                 .build();
-        when(snapshotRepository.findById(FeaturedSectionType.LOAN))
+        when(snapshotRepository.findByIdForUpdate(FeaturedSectionType.LOAN))
                 .thenReturn(Optional.of(snapshot));
 
         writer.markFailed(FeaturedSectionType.LOAN, "timeout after 2000ms");
@@ -86,7 +86,7 @@ class FeaturedBooksWriterTest {
 
     @Test
     void replaceSection_missingSnapshotRow_throws() {
-        when(snapshotRepository.findById(FeaturedSectionType.BESTSELLER))
+        when(snapshotRepository.findByIdForUpdate(FeaturedSectionType.BESTSELLER))
                 .thenReturn(Optional.empty());
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
