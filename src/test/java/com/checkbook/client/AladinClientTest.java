@@ -45,7 +45,7 @@ class AladinClientTest {
                         """));
         server.start();
 
-        AladinClient client = new AladinClient(baseUrl("/ttb/api"), "test-key", 2000, 2000);
+        AladinClient client = new AladinClient(baseUrl("/ttb/api"), "test-key", 2000, 2000, 2000);
 
         Optional<AladinSearchResult> result = client.searchBook("자바");
 
@@ -70,7 +70,7 @@ class AladinClientTest {
                         """));
         server.start();
 
-        AladinClient client = new AladinClient(baseUrl("/ttb/api"), "test-key", 2000, 2000);
+        AladinClient client = new AladinClient(baseUrl("/ttb/api"), "test-key", 2000, 2000, 2000);
 
         assertThat(client.lookupItemId("9788936439743")).contains(123456L);
     }
@@ -98,7 +98,7 @@ class AladinClientTest {
                         """));
         server.start();
 
-        AladinClient client = new AladinClient(baseUrl("/ttb/api"), "test-key", 2000, 2000);
+        AladinClient client = new AladinClient(baseUrl("/ttb/api"), "test-key", 2000, 2000, 2000);
 
         AladinUsedBookResult result = client.getUsedBooks("9788936439743");
 
@@ -134,7 +134,7 @@ class AladinClientTest {
                         """));
         server.start();
 
-        AladinClient client = new AladinClient(baseUrl("/ttb/api"), "test-key", 2000, 2000);
+        AladinClient client = new AladinClient(baseUrl("/ttb/api"), "test-key", 2000, 2000, 2000);
 
         var result = client.getOffStoreList("9788936439743");
 
@@ -154,14 +154,14 @@ class AladinClientTest {
                         """));
         server.start();
 
-        AladinClient client = new AladinClient(baseUrl("/ttb/api"), "test-key", 2000, 2000);
+        AladinClient client = new AladinClient(baseUrl("/ttb/api"), "test-key", 2000, 2000, 2000);
 
         assertThat(client.getOffStoreList("9788936439743")).isEmpty();
     }
 
     @Test
     void getOffStoreListOnFailureThrows() {
-        AladinClient client = new AladinClient("http://127.0.0.1:1/ttb/api", "test-key", 50, 50);
+        AladinClient client = new AladinClient("http://127.0.0.1:1/ttb/api", "test-key", 50, 50, 50);
 
         assertThatThrownBy(() -> client.getOffStoreList("9788936439743"))
                 .isInstanceOf(IllegalStateException.class)
@@ -170,7 +170,7 @@ class AladinClientTest {
 
     @Test
     void searchBookOnFailureReturnsEmpty() {
-        AladinClient client = new AladinClient("http://127.0.0.1:1/ttb/api", "test-key", 50, 50);
+        AladinClient client = new AladinClient("http://127.0.0.1:1/ttb/api", "test-key", 50, 50, 50);
 
         assertThat(client.searchBook("자바")).isEmpty();
         assertThat(client.lookupBook("9788936439743")).isEmpty();

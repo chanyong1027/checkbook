@@ -27,6 +27,8 @@ aladin:
   base-url: https://www.aladin.co.kr/ttb/api
   identification-timeout: 500
   timeout: 2000
+  # ItemList(featured 배치 전용) — 사용자 응답 예산과 무관. BESTSELLER 실측 2s 초과(07-12)
+  list-timeout: 10000
 
 kakao:
   book:
