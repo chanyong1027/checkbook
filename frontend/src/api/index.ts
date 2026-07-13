@@ -6,6 +6,7 @@ import type {
   OffStoreResponse,
   FeaturedBooksResponse,
   FeaturedSectionType,
+  PublicLibraryAvailabilityResponse,
 } from '../types'
 import { toApiError } from './errors.ts'
 
@@ -83,6 +84,22 @@ export function getOffStores(
     lon: String(lon),
   })
   return get(`/api/off-stores?${params}`, signal)
+}
+
+export function getPublicLibraryAvailability(
+  isbn13: string,
+  lat: number,
+  lon: number,
+  offset: number,
+  signal?: AbortSignal,
+): Promise<PublicLibraryAvailabilityResponse> {
+  const params = new URLSearchParams({
+    isbn13,
+    lat: String(lat),
+    lon: String(lon),
+    offset: String(offset),
+  })
+  return get(`/api/public-libraries/availability?${params}`, signal)
 }
 
 export function getFeatured(

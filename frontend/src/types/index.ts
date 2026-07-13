@@ -109,6 +109,11 @@ export interface SearchMetadata {
   searchedAt: string
   sectionStatuses: SectionStatusDetail[]
   failures: FailureDetail[]
+  /** 근처 도서관 후보 총 수 (위치 미제공 등으로 섹션 스킵 시 null) */
+  publicLibraryTotal: number | null
+  /** 더 조회할 근처 도서관 후보가 남아있는지 (소장 여부와 무관) */
+  publicLibraryHasMore: boolean
+  publicLibraryNextOffset: number | null
 }
 
 export interface SearchResponse {
@@ -118,6 +123,16 @@ export interface SearchResponse {
   newBook: NewBookInfo | null
   subscription: SubscriptionInfo
   metadata: SearchMetadata
+}
+
+// /api/public-libraries/availability
+export interface PublicLibraryAvailabilityResponse {
+  libraries: PublicLibraryInfo[]
+  offset: number
+  total: number
+  nextOffset: number | null
+  hasMoreLibraries: boolean
+  failedCount: number
 }
 
 // /api/elibraries
