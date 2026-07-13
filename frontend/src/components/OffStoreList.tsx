@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { getOffStores } from '../api'
+import { isSafeUrl } from '../utils/url'
 import type { OffStoreInfo } from '../types'
 
 interface Props {
@@ -13,16 +14,6 @@ interface Props {
 
 const INITIAL_SHOW = 3
 const LOAD_MORE_COUNT = 5
-
-function isSafeUrl(url: string | null | undefined): url is string {
-  if (!url) return false
-  try {
-    const { protocol } = new URL(url)
-    return protocol === 'http:' || protocol === 'https:'
-  } catch {
-    return false
-  }
-}
 
 export function OffStoreList({
   isbn13,

@@ -9,21 +9,13 @@ import type {
   ELibrarySearchResponse,
 } from '../types'
 import { OffStoreList } from './OffStoreList'
+import { PublicLibraryList } from './PublicLibraryList'
 import { BookDetailCard } from './shared/BookDetailCard'
 import { SectionCard } from './shared/SectionCard'
 import { Skeleton } from './shared/Skeleton'
 import { BottomSheet } from './shared/BottomSheet'
 import { ConfirmDialog } from './shared/ConfirmDialog'
-
-function isSafeUrl(url: string | null | undefined): url is string {
-  if (!url) return false
-  try {
-    const { protocol } = new URL(url)
-    return protocol === 'http:' || protocol === 'https:'
-  } catch {
-    return false
-  }
-}
+import { isSafeUrl } from '../utils/url'
 
 interface Props {
   isbn13: string
@@ -364,6 +356,8 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   const [searchResult, setSearchResult] = useState<SearchResponse | null>(null)
   const [searchLoading, setSearchLoading] = useState(true)
   const [searchError, setSearchError] = useState<string | null>(null)
+  // 새 검색 결과마다 증가 — 공공도서관 목록의 누적 페이징 상태를 key 리마운트로 리셋
+  const [searchSeq, setSearchSeq] = useState(0)
 
   // E-library state
   const [elibResult, setElibResult] = useState<ELibrarySearchResponse | null>(null)
@@ -406,7 +400,10 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
     setSearchError(null)
     searchMain(isbn13, lat, lon, controller.signal)
       .then(res => {
-        if (searchAbort.current === controller) setSearchResult(res)
+        if (searchAbort.current === controller) {
+          setSearchResult(res)
+          setSearchSeq(seq => seq + 1)
+        }
       })
       .catch(err => {
         if (err.name !== 'AbortError' && searchAbort.current === controller) {
@@ -654,7 +651,8 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
               >
                 <p className="text-sm text-slate-600 text-center py-2">검색에 실패했습니다</p>
               </SectionCard>
-            ) : searchResult.publicLibraries.length === 0 ? (
+            ) : searchResult.publicLibraries.length === 0 &&
+              !searchResult.metadata.publicLibraryHasMore ? (
               <SectionCard
                 icon={
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
@@ -664,7 +662,11 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                 }
                 title="공공도서관"
               >
-                <p className="text-sm text-slate-600 text-center py-2">소장 도서관이 없습니다</p>
+                <p className="text-sm text-slate-600 text-center py-2">
+                  {(searchResult.metadata.publicLibraryTotal ?? 0) > 0
+                    ? '근처 도서관의 응답을 받지 못했어요'
+                    : '근처에 조회할 도서관이 없습니다'}
+                </p>
               </SectionCard>
             ) : (
               <SectionCard
@@ -674,7 +676,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                     <polyline points="9 22 9 12 15 12 15 22" />
                   </svg>
                 }
-                title={`공공도서관 ${searchResult.publicLibraries.length}개`}
+                title="공공도서관"
               >
                 {useLocation && (
                   <div className="mb-2 flex items-center gap-2 text-xs text-emerald-600 bg-emerald-50 rounded-xl px-2.5 py-1.5">
@@ -684,79 +686,15 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                     위치 기반 검색
                   </div>
                 )}
-                <div className="max-h-52 overflow-y-auto scrollbar-thin">
-                  {searchResult.publicLibraries.map((lib, i) => (
-                    <div key={i} className="py-2.5 border-b border-slate-50 last:border-0">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-slate-700 truncate">{lib.libraryName}</p>
-                          <p className="text-xs text-slate-500 mt-0.5">{lib.distance}km · {lib.address}</p>
-                        </div>
-                        <div className="shrink-0 flex flex-col items-end gap-1">
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${lib.hasBook ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-600'}`}>
-                            {lib.hasBook ? '보유' : '미보유'}
-                          </span>
-                          {lib.hasBook && (
-                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${lib.loanAvailable ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-500'}`}>
-                              {lib.loanAvailable ? '대출가능' : '대출중'}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      {/* Link buttons */}
-                      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                        {isSafeUrl(lib.homepage) && (
-                          <a
-                            href={lib.homepage}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            aria-label={`${lib.libraryName} 홈페이지 열기`}
-                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-50
-                              border border-slate-100 text-xs text-slate-600 hover:border-primary
-                              hover:text-primary transition"
-                          >
-                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                              <circle cx="12" cy="12" r="10" />
-                              <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                            </svg>
-                            홈페이지
-                          </a>
-                        )}
-                        {lib.latitude != null && lib.longitude != null && (
-                          <>
-                            <a
-                              href={`https://map.kakao.com/link/search/${encodeURIComponent(lib.libraryName)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              aria-label={`${lib.libraryName} 카카오맵에서 보기`}
-                              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs
-                                text-brand-kakao-dark bg-brand-kakao hover:bg-brand-kakao-hover transition font-medium"
-                            >
-                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-                                <circle cx="12" cy="10" r="3" />
-                              </svg>
-                              장소 정보
-                            </a>
-                            <a
-                              href={`https://map.kakao.com/link/to/${encodeURIComponent(lib.libraryName)},${lib.latitude},${lib.longitude}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              aria-label={`${lib.libraryName} 길찾기`}
-                              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs
-                                text-white bg-brand-kakao-dark hover:bg-black transition font-medium"
-                            >
-                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                                <polygon points="3 11 22 2 13 21 11 13 3 11" />
-                              </svg>
-                              길찾기
-                            </a>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <PublicLibraryList
+                  key={searchSeq}
+                  isbn13={searchResult.book.isbn13 ?? isbn13}
+                  lat={userLatRef.current}
+                  lon={userLonRef.current}
+                  initialLibraries={searchResult.publicLibraries}
+                  initialTotal={searchResult.metadata.publicLibraryTotal}
+                  initialNextOffset={searchResult.metadata.publicLibraryNextOffset}
+                />
               </SectionCard>
             )}
 
