@@ -1,11 +1,9 @@
 name: Frontend Deploy
 
+# 자동 배포 일시 중지 (2026-10-14): 프런트를 S3 + CloudFront에서 OCI Nginx로 옮기는 중이라
+# 수동 실행만 남긴다. OCI 이전 때 새 배포 방식으로 다시 켠다.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'frontend/**'
-      - '.github/workflows/frontend-deploy.yml'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

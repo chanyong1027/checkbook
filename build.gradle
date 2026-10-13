@@ -1,6 +1,6 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '3.5.11'
+	id 'org.springframework.boot' version '4.1.1'
 	id 'io.spring.dependency-management' version '1.1.7'
 }
 
@@ -25,13 +25,16 @@ repositories {
 }
 
 dependencies {
-	implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.3.0'
-	implementation 'org.springframework.boot:spring-boot-starter-aop'
-	implementation 'org.flywaydb:flyway-core'
+	implementation 'io.github.resilience4j:resilience4j-spring-boot4:2.4.0'
+	// Boot 4: starter-aop → starter-aspectj (Resilience4j @CircuitBreaker가 AOP 프록시 필요)
+	implementation 'org.springframework.boot:spring-boot-starter-aspectj'
+	// Boot 4: Flyway 자동 설정은 전용 스타터가 있어야 동작
+	implementation 'org.springframework.boot:spring-boot-starter-flyway'
 	implementation 'org.flywaydb:flyway-database-postgresql'
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
-	implementation 'org.springframework.boot:spring-boot-starter-web'
+	// Boot 4: starter-web → starter-webmvc
+	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 	implementation 'org.jsoup:jsoup:1.17.2'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'io.micrometer:micrometer-registry-prometheus'
@@ -39,6 +42,11 @@ dependencies {
 	annotationProcessor 'org.projectlombok:lombok'
 	runtimeOnly 'org.postgresql:postgresql'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	// Boot 4: 테스트 슬라이스가 모듈별 스타터로 분리됨
+	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'      // @WebMvcTest, TestRestTemplate
+	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'    // @DataJpaTest
+	testImplementation 'org.springframework.boot:spring-boot-starter-micrometer-metrics-test' // @AutoConfigureMetrics
+	testImplementation 'org.springframework.boot:spring-boot-restclient'               // TestRestTemplate 런타임 의존
 	testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
 	testRuntimeOnly 'com.h2database:h2'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'

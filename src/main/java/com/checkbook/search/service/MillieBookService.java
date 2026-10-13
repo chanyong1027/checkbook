@@ -55,7 +55,7 @@ public class MillieBookService {
         MillieBookItem primary = matched.get().primary();
         Format format = matched.get().format();
 
-        if (!(primary.isService() && primary.isEbookRent())) {
+        if (!primary.isAvailable()) {
             // 매처 Comparator 1차 키가 정확도(키워드 없음)이므로, 정확한 본책이
             // coming_soon이면 derivative/alternative available 있어도 본책이 primary가 됨.
             // 본 분기는 정확도 우선 정책에 따른 의도된 unavailable 반환.

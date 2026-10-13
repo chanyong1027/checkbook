@@ -1,16 +1,9 @@
 name: Backend Deploy
 
+# 자동 배포 일시 중지 (2026-10-14): 운영 서버를 AWS EC2(SSM 배포)에서 OCI(ARM64)로 옮기는 중이라,
+# main push마다 옛 EC2로 배포를 시도하지 않도록 수동 실행만 남긴다. OCI 이전 때 새 배포 방식으로 다시 켠다.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'build.gradle'
-      - 'settings.gradle'
-      - 'Dockerfile'
-      - 'scripts/deploy.sh'
-      - '.github/workflows/backend-deploy.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

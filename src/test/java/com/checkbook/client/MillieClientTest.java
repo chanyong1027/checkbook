@@ -241,4 +241,31 @@ class MillieClientTest {
         assertThat(whitespaceResult).isEmpty();
         assertThat(server.getRequestCount()).isZero();
     }
+
+    // Jackson 3 회귀: 값이 빠진 필드가 원시형이면 파싱 전체가 실패하고(FAIL_ON_NULL_FOR_PRIMITIVES),
+    // 클라이언트가 예외를 삼켜 빈 목록이 된다 — "밀리에 없음"으로 조용히 오판하는 경로
+    @Test
+    void parsesResponseWithMissingFlagsAndCodeInsteadOfDroppingIt() throws Exception {
+        server = new MockWebServer();
+        server.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""
+                        {
+                          "RESP_DATA": {
+                            "content": {
+                              "list": [
+                                { "book_seq": "X1", "content_name": "플래그 누락 도서", "is_service": true }
+                              ]
+                            }
+                          }
+                        }
+                        """));
+        server.start();
+
+        List<MillieBookItem> result = newClient().searchByTitle("플래그 누락 도서");
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).isEbookRent()).isNull();
+        assertThat(result.get(0).isAvailable()).isFalse();
+    }
 }

@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 @Slf4j
 @Service
@@ -29,8 +30,8 @@ public class BookSearchService {
         BookCandidateResponse.Pagination pagination = new BookCandidateResponse.Pagination(
                 page,
                 size,
-                kakaoResponse.meta().totalCount(),
-                kakaoResponse.meta().isEnd()
+                Objects.requireNonNullElse(kakaoResponse.meta().totalCount(), 0),
+                Boolean.TRUE.equals(kakaoResponse.meta().isEnd())
         );
 
         return new BookCandidateResponse(candidates, pagination);
