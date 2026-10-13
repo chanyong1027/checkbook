@@ -11,6 +11,7 @@ import com.checkbook.publiclibrary.snapshot.dto.LibraryAvailabilityResult;
 import com.checkbook.publiclibrary.snapshot.service.LibraryAvailabilitySnapshotService;
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.SearchResponse;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -34,6 +35,8 @@ import static org.mockito.Mockito.when;
  * 목적: 이력서 수치 측정
  * 조건: 로컬 환경, 단일 요청, API 응답시간 100ms 시뮬레이션, 도서관 20곳
  */
+// 검증(assert) 없이 순차·병렬 실행 시간을 출력만 하는 벤치마크라 기본 test에서 제외한다. 실행: ./gradlew benchmarkTest
+@Tag("benchmark")
 @ExtendWith(MockitoExtension.class)
 class PublicLibraryParallelBenchmarkTest {
 
