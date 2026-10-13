@@ -1,7 +1,7 @@
 # 코드 컨벤션 가이드
 
 > **목적**: AI Agent 및 AI 코드 리뷰 자동화를 위한 명확한 규칙 정의
-> **대상 언어/프레임워크**: Java 17+, Spring Boot, JPA, Lombok, JUnit 5, RestAssured, Swagger (springdoc-openapi), Flyway
+> **대상 언어/프레임워크**: Java 21+, Spring Boot, JPA, Lombok, JUnit 5, RestAssured, Swagger (springdoc-openapi), Flyway
 > **최종 수정일**: 2026-03-05
 
 ---

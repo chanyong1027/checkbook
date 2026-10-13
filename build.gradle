@@ -10,7 +10,7 @@ description = 'Book integrated search platform'
 
 java {
 	toolchain {
-		languageVersion = JavaLanguageVersion.of(17)
+		languageVersion = JavaLanguageVersion.of(21)
 	}
 }
 
@@ -18,6 +18,9 @@ configurations {
 	compileOnly {
 		extendsFrom annotationProcessor
 	}
+	// JDK 21부터 실행 중 동적 에이전트 로딩에 경고가 나고, 이후 JDK에서는 기본 차단된다.
+	// Mockito inline mock maker를 테스트 JVM 시작 시 -javaagent로 붙인다 (Mockito 공식 권장 방식)
+	mockitoAgent
 }
 
 repositories {
@@ -48,8 +51,13 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-micrometer-metrics-test' // @AutoConfigureMetrics
 	testImplementation 'org.springframework.boot:spring-boot-restclient'               // TestRestTemplate 런타임 의존
 	testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
+	mockitoAgent('org.mockito:mockito-core') { transitive = false }
 	testRuntimeOnly 'com.h2database:h2'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(Test).configureEach {
+	jvmArgs("-javaagent:${configurations.mockitoAgent.asPath}")
 }
 
 tasks.named('test') {
