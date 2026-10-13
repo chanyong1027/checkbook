@@ -85,7 +85,7 @@ public class MillieBookMatcher {
     }
 
     private boolean isAvailable(MillieBookItem item) {
-        return item.isService() && item.isEbookRent();
+        return item.isAvailable();
     }
 
     private boolean brandMatches(MillieBookItem item, AladinSearchResult selected) {

@@ -135,4 +135,18 @@ class BookSearchServiceTest {
         assertThat(response.pagination().totalCount()).isEqualTo(35);
         assertThat(response.pagination().isEnd()).isFalse();
     }
+
+    @Test
+    void searchCandidatesTreatsMissingMetaFieldsAsZeroAndNotEnd() {
+        when(kakaoBookClient.searchBooks("메타누락", 1, 10))
+                .thenReturn(new KakaoBookResponse(
+                        new KakaoBookResponse.Meta(null, null, null),
+                        List.of()
+                ));
+
+        BookCandidateResponse response = bookSearchService.searchCandidates("메타누락", 1, 10);
+
+        assertThat(response.pagination().totalCount()).isZero();
+        assertThat(response.pagination().isEnd()).isFalse();
+    }
 }
