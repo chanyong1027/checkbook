@@ -2,6 +2,7 @@ package com.checkbook.search.service;
 
 import com.checkbook.client.aladin.dto.AladinSearchResult;
 import com.checkbook.client.millie.MillieClient;
+import com.checkbook.client.millie.MillieClientException;
 import com.checkbook.client.millie.dto.MillieBookItem;
 import com.checkbook.common.matcher.BookMetadataNormalizer;
 import com.checkbook.search.dto.MillieAvailability;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
@@ -66,6 +68,17 @@ class MillieBookServiceTest {
 
         assertThat(result.available()).isFalse();
         verify(millieClient, never()).searchByTitle(anyString());
+    }
+
+    // 클라이언트 실패는 '밀리에 없음'(unavailable)으로 바꾸지 않고 전파한다 → SearchService가 SUBSCRIPTION FAILED로 표시
+    @Test
+    void clientFailure_propagates_notUnavailable() {
+        AladinSearchResult sel = aladin("인간실격", "다자이 오사무");
+        when(millieClient.searchByTitle("인간실격")).thenThrow(new MillieClientException("밀리 HTTP 500"));
+
+        assertThatThrownBy(() -> service.findAvailability(sel))
+                .isInstanceOf(MillieClientException.class);
+        verify(matcher, never()).findMatch(any(), any());
     }
 
     @Test
