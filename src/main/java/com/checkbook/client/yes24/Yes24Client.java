@@ -178,7 +178,7 @@ public class Yes24Client {
             throw new Yes24Exception(Kind.FAILED, true, "YES24 응답 검증 실패: 제목 없음");
         }
         return new Yes24Book(
-                item.title().trim(),
+                item.title().strip(),
                 item.author(),
                 item.publisher(),
                 isbn13,
