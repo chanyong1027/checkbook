@@ -30,6 +30,10 @@ public class AladinBookService {
         if (normalized.type() == InputNormalizer.QueryType.ISBN) {
             return aladinClient.lookupBook(normalized.value());
         }
+        // 비표준 코드를 키워드 검색에 넣으면 엉뚱한 책으로 식별될 수 있다 (YES24 전환 전까지의 가드)
+        if (normalized.type() == InputNormalizer.QueryType.NON_STANDARD_ISBN) {
+            return Optional.empty();
+        }
         return aladinClient.searchBook(normalized.value());
     }
 

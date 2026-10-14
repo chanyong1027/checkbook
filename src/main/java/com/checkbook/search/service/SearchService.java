@@ -64,7 +64,7 @@ public class SearchService {
                 .orElse(normalized.type() == InputNormalizer.QueryType.ISBN ? normalized.value() : null);
 
         if (isbn13 == null) {
-            log.info("isbn13 null - 키워드 입력 + 알라딘 실패: 모든 섹션 SKIPPED");
+            log.info("isbn13 null - 키워드 또는 비표준 코드 + 알라딘 실패: 모든 섹션 SKIPPED");
             return buildSkippedResponse(identifiedBook.orElse(null), identifiedBook.isPresent());
         }
 
