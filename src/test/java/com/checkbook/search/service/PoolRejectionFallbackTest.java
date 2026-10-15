@@ -1,7 +1,7 @@
 package com.checkbook.search.service;
 
-import com.checkbook.client.aladin.dto.AladinSearchResult;
-import com.checkbook.common.util.InputNormalizer;
+import com.checkbook.search.dto.IdentificationResult;
+import com.checkbook.search.dto.IdentifiedBook;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
 import com.checkbook.publiclibrary.service.PublicLibraryAvailabilityService;
 import com.checkbook.publiclibrary.snapshot.service.LibraryAvailabilitySnapshotService;
@@ -20,7 +20,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -33,6 +32,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 /**
@@ -51,6 +51,8 @@ class PoolRejectionFallbackTest {
     @Mock
     private AladinBookService aladinBookService;
     @Mock
+    private BookIdentificationService identificationService;
+    @Mock
     private LibraryAvailabilitySnapshotService snapshotService;
     @Mock
     private PublicLibraryRepository publicLibraryRepository;
@@ -59,9 +61,11 @@ class PoolRejectionFallbackTest {
 
     @Test
     void 풀_포화로_제출이_거절되어도_500이_아니라_섹션_FAILED로_응답한다() {
-        when(aladinBookService.identify(any(InputNormalizer.NormalizedQuery.class)))
-                .thenReturn(Optional.of(new AladinSearchResult(
-                        TEST_ISBN, "혼자가 혼자에게", "성해나", "창비", null, 16800)));
+        when(identificationService.identify(anyString(), any()))
+                .thenReturn(new IdentificationResult(IdentificationResult.Source.YES24,
+                        IdentificationResult.Yes24Status.FOUND, true,
+                        new IdentifiedBook("혼자가 혼자에게", "성해나", TEST_ISBN, "창비", null),
+                        16800, "https://www.yes24.com/product/goods/1"));
 
         // abort 풀(스레드 1 + 큐 1)을 블로커로 포화 → 이후 모든 제출이 거절됨
         // (운영 구성과 동일한 형태를 직접 생성 — 관심사는 팩토리가 아니라 SearchService의 거절 대응)
@@ -85,10 +89,10 @@ class PoolRejectionFallbackTest {
             ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
             ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
             SearchService service = new SearchService(
-                    aladinBookService, millieBookService, availabilityService, saturated);
+                    identificationService, aladinBookService, millieBookService, availabilityService, saturated);
 
             // 헬퍼가 없으면 여기서 RejectedExecutionException이 그대로 터진다
-            SearchResponse response = service.search(TEST_ISBN, 37.5665, 126.9780);
+            SearchResponse response = service.search(TEST_ISBN, 37.5665, 126.9780, null);
 
             assertThat(response.publicLibraries()).isEmpty();
 
@@ -113,9 +117,11 @@ class PoolRejectionFallbackTest {
 
     @Test
     void 자식만_거절되면_해당_도서관만_스킵되고_섹션은_SUCCESS다() {
-        when(aladinBookService.identify(any(InputNormalizer.NormalizedQuery.class)))
-                .thenReturn(Optional.of(new AladinSearchResult(
-                        TEST_ISBN, "혼자가 혼자에게", "성해나", "창비", null, 16800)));
+        when(identificationService.identify(anyString(), any()))
+                .thenReturn(new IdentificationResult(IdentificationResult.Source.YES24,
+                        IdentificationResult.Yes24Status.FOUND, true,
+                        new IdentifiedBook("혼자가 혼자에게", "성해나", TEST_ISBN, "창비", null),
+                        16800, "https://www.yes24.com/product/goods/1"));
         List<PublicLibrary> libraries = IntStream.rangeClosed(1, 20)
                 .mapToObj(i -> PublicLibrary.builder()
                         .libCode(String.format("LIB%03d", i)).name("테스트도서관" + i)
@@ -144,9 +150,9 @@ class PoolRejectionFallbackTest {
             ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
             ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
             SearchService service = new SearchService(
-                    aladinBookService, millieBookService, availabilityService, healthyParents);
+                    identificationService, aladinBookService, millieBookService, availabilityService, healthyParents);
 
-            SearchResponse response = service.search(TEST_ISBN, 37.5665, 126.9780);
+            SearchResponse response = service.search(TEST_ISBN, 37.5665, 126.9780, null);
 
             // 자식 거절 = 도서관 개별 스킵 시맨틱: 목록은 비지만 섹션은 SUCCESS (부분 실패는
             // 측정에서 public_library_incomplete 지표가 담당), 요청은 500 없이 정상 응답

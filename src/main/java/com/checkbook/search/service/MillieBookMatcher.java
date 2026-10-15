@@ -1,6 +1,6 @@
 package com.checkbook.search.service;
 
-import com.checkbook.client.aladin.dto.AladinSearchResult;
+import com.checkbook.search.dto.IdentifiedBook;
 import com.checkbook.client.millie.dto.MillieBookItem;
 import com.checkbook.common.matcher.BookMatcher;
 import com.checkbook.common.matcher.BookMatcher.MatchPath;
@@ -34,7 +34,7 @@ public class MillieBookMatcher {
     private final BookMetadataNormalizer normalizer;
 
     public Optional<MatchedMillie> findMatch(
-            AladinSearchResult selected,
+            IdentifiedBook selected,
             List<MillieBookItem> candidates
     ) {
         BookMatcher.Selected sel = new BookMatcher.Selected(selected.title(), selected.author());
@@ -58,7 +58,7 @@ public class MillieBookMatcher {
         return Optional.of(new MatchedMillie(primary.item(), computeFormat(matched)));
     }
 
-    private Comparator<Scored> comparator(AladinSearchResult selected) {
+    private Comparator<Scored> comparator(IdentifiedBook selected) {
         // 각 키는 "낮은 값이 좋은 후보" 방향. Boolean false < true이므로
         // false가 best일 땐 그대로, true가 best일 땐 부정 또는 매핑.
         return Comparator
@@ -88,7 +88,7 @@ public class MillieBookMatcher {
         return item.isAvailable();
     }
 
-    private boolean brandMatches(MillieBookItem item, AladinSearchResult selected) {
+    private boolean brandMatches(MillieBookItem item, IdentifiedBook selected) {
         if (item.bookBrand() == null || selected.publisher() == null) return false;
         return normalize(item.bookBrand()).equals(normalize(selected.publisher()));
     }

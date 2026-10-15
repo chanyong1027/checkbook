@@ -1,6 +1,6 @@
 package com.checkbook.search.service;
 
-import com.checkbook.client.aladin.dto.AladinSearchResult;
+import com.checkbook.search.dto.IdentifiedBook;
 import com.checkbook.client.millie.MillieClient;
 import com.checkbook.client.millie.MillieClientException;
 import com.checkbook.client.millie.dto.MillieBookItem;
@@ -41,8 +41,8 @@ class MillieBookServiceTest {
     @InjectMocks
     private MillieBookService service;
 
-    private AladinSearchResult aladin(String title, String author) {
-        return new AladinSearchResult(null, title, author, null, null, null);
+    private IdentifiedBook aladin(String title, String author) {
+        return new IdentifiedBook(title, author, null, null, null);
     }
 
     private MillieBookItem item(boolean isService, boolean isEbookRent) {
@@ -62,7 +62,7 @@ class MillieBookServiceTest {
 
     @Test
     void blankTitle_returnsUnavailable_skipsClientCall() {
-        AladinSearchResult sel = aladin("   ", "다자이 오사무");
+        IdentifiedBook sel = aladin("   ", "다자이 오사무");
 
         MillieAvailability result = service.findAvailability(sel);
 
@@ -73,7 +73,7 @@ class MillieBookServiceTest {
     // 클라이언트 실패는 '밀리에 없음'(unavailable)으로 바꾸지 않고 전파한다 → SearchService가 SUBSCRIPTION FAILED로 표시
     @Test
     void clientFailure_propagates_notUnavailable() {
-        AladinSearchResult sel = aladin("인간실격", "다자이 오사무");
+        IdentifiedBook sel = aladin("인간실격", "다자이 오사무");
         when(millieClient.searchByTitle("인간실격")).thenThrow(new MillieClientException("밀리 HTTP 500"));
 
         assertThatThrownBy(() -> service.findAvailability(sel))
@@ -83,7 +83,7 @@ class MillieBookServiceTest {
 
     @Test
     void clientReturnsEmpty_returnsUnavailable() {
-        AladinSearchResult sel = aladin("인간실격", "다자이 오사무");
+        IdentifiedBook sel = aladin("인간실격", "다자이 오사무");
         when(millieClient.searchByTitle("인간실격")).thenReturn(List.of());
 
         MillieAvailability result = service.findAvailability(sel);
@@ -94,7 +94,7 @@ class MillieBookServiceTest {
 
     @Test
     void matcherReturnsEmpty_returnsUnavailable() {
-        AladinSearchResult sel = aladin("인간실격", "다자이 오사무");
+        IdentifiedBook sel = aladin("인간실격", "다자이 오사무");
         MillieBookItem candidate = item(true, true);
         when(millieClient.searchByTitle("인간실격")).thenReturn(List.of(candidate));
         when(matcher.findMatch(sel, List.of(candidate))).thenReturn(Optional.empty());
@@ -106,7 +106,7 @@ class MillieBookServiceTest {
 
     @Test
     void matchedAndAvailable_returnsAvailable_withDetailUrl() {
-        AladinSearchResult sel = aladin("인간실격", "다자이 오사무");
+        IdentifiedBook sel = aladin("인간실격", "다자이 오사무");
         MillieBookItem primary = item(true, true);
         when(millieClient.searchByTitle("인간실격")).thenReturn(List.of(primary));
         when(matcher.findMatch(sel, List.of(primary)))
@@ -122,7 +122,7 @@ class MillieBookServiceTest {
 
     @Test
     void matchedButComingSoon_returnsUnavailable() {
-        AladinSearchResult sel = aladin("인간실격", "다자이 오사무");
+        IdentifiedBook sel = aladin("인간실격", "다자이 오사무");
         MillieBookItem primary = item(true, false); // is_ebook_rent=false → coming_soon
         when(millieClient.searchByTitle("인간실격")).thenReturn(List.of(primary));
         when(matcher.findMatch(sel, List.of(primary)))
@@ -137,7 +137,7 @@ class MillieBookServiceTest {
 
     @Test
     void matchedButNotService_returnsUnavailable() {
-        AladinSearchResult sel = aladin("인간실격", "다자이 오사무");
+        IdentifiedBook sel = aladin("인간실격", "다자이 오사무");
         MillieBookItem primary = item(false, true);
         when(millieClient.searchByTitle("인간실격")).thenReturn(List.of(primary));
         when(matcher.findMatch(sel, List.of(primary)))
@@ -150,7 +150,7 @@ class MillieBookServiceTest {
 
     @Test
     void titleWithSubtitle_searchesWithPrefixOnly() {
-        AladinSearchResult sel = aladin(
+        IdentifiedBook sel = aladin(
                 "사피엔스 - 유인원에서 사이보그까지, 인간 역사의 대담하고 위대한 질문",
                 "유발 하라리"
         );

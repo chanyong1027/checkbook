@@ -1,9 +1,9 @@
 package com.checkbook.search.service;
 
-import com.checkbook.client.aladin.dto.AladinSearchResult;
 import com.checkbook.client.millie.MillieClient;
 import com.checkbook.client.millie.dto.MillieBookItem;
 import com.checkbook.common.matcher.BookMetadataNormalizer;
+import com.checkbook.search.dto.IdentifiedBook;
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.MillieAvailability.Format;
 import com.checkbook.search.service.MillieBookMatcher.MatchedMillie;
@@ -25,29 +25,29 @@ public class MillieBookService {
     private final MillieBookMatcher matcher;
     private final BookMetadataNormalizer normalizer;
 
-    public MillieAvailability findAvailability(AladinSearchResult aladinResult) {
-        if (aladinResult == null
-                || aladinResult.title() == null
-                || aladinResult.title().isBlank()) {
+    public MillieAvailability findAvailability(IdentifiedBook book) {
+        if (book == null
+                || book.title() == null
+                || book.title().isBlank()) {
             return MillieAvailability.unavailable();
         }
 
-        // 알라딘 풀타이틀(부제 포함)로 검색하면 밀리에서 0건 나오는 경우가 잦아
+        // 풀타이틀(부제 포함)로 검색하면 밀리에서 0건 나오는 경우가 잦아
         // 부제 잘라낸 키워드로 검색. 정확도는 이후 matcher가 책임.
-        String keyword = normalizer.searchKeyword(aladinResult.title());
+        String keyword = normalizer.searchKeyword(book.title());
         List<MillieBookItem> candidates = millieClient.searchByTitle(keyword);
         if (candidates.isEmpty()) {
             log.info("밀리 검색 결과 0건: keyword={}, title={}",
-                    keyword, aladinResult.title());
+                    keyword, book.title());
             return MillieAvailability.unavailable();
         }
 
-        Optional<MatchedMillie> matched = matcher.findMatch(aladinResult, candidates);
+        Optional<MatchedMillie> matched = matcher.findMatch(book, candidates);
         if (matched.isEmpty()) {
             log.info("밀리 매칭 실패: title={}, author={}, publisher={}, candidateCount={}",
-                    aladinResult.title(),
-                    aladinResult.author(),
-                    aladinResult.publisher(),
+                    book.title(),
+                    book.author(),
+                    book.publisher(),
                     candidates.size());
             return MillieAvailability.unavailable();
         }
