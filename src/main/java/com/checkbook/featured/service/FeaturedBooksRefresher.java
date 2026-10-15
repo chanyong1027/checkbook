@@ -4,6 +4,7 @@ import com.checkbook.client.datanaru.DatanaruClient;
 import com.checkbook.client.datanaru.dto.DatanaruLoanBookResult;
 import com.checkbook.client.yes24.Yes24CategoryList;
 import com.checkbook.client.yes24.Yes24Client;
+import com.checkbook.client.yes24.Yes24Exception;
 import com.checkbook.client.yes24.dto.Yes24CategoryListResponse.Item;
 import com.checkbook.common.util.InputNormalizer;
 import com.checkbook.featured.snapshot.domain.FeaturedBook;
@@ -79,9 +80,20 @@ public class FeaturedBooksRefresher {
         }
     }
 
-    // 재시도하지 않는다. 우리 쪽 선제한은 클라이언트가 최대 1초 기다려 준다(PR-3 결정 카드 3)
+    // 우리 쪽 선제한은 클라이언트가 최대 1초 기다려 준다(PR-3 결정 카드 3).
+    // 재시작 직후 JVM의 첫 TLS 연결은 연결 제한(200ms)을 넘을 수 있는데, 첫 시도로 JVM이 데워져 두 번째는 빠르다.
+    // 그래서 시간 초과만 1번 바로 다시 부른다. 한도·제한·429·형식 오류·5xx는 다시 해도 같아 재시도하지 않는다(카드 7)
     private void refreshFromYes24(FeaturedSectionType type, Yes24CategoryList list, Duration ttl) {
-        List<Item> raw = yes24Client.categoryList(list, YES24_DOMESTIC_BOOKS, yes24FetchSize);
+        List<Item> raw;
+        try {
+            raw = yes24Client.categoryList(list, YES24_DOMESTIC_BOOKS, yes24FetchSize);
+        } catch (Yes24Exception e) {
+            if (e.kind() != Yes24Exception.Kind.TIMEOUT) {
+                throw e;
+            }
+            log.warn("YES24 목록 시간 초과, 1회 재시도: list={}", list);
+            raw = yes24Client.categoryList(list, YES24_DOMESTIC_BOOKS, yes24FetchSize);
+        }
         // 필수 필드 가드(DB NOT NULL 보호) + 눌렀을 때 상세 화면이 쓸모 있는 항목만:
         // ISBN이 아닌 상품 코드(달력 880… 등)는 '비표준 코드' 카드만 보이고, 메인 화면에는 나이 확인이 없다
         List<Item> valid = raw.stream()

@@ -11,6 +11,8 @@ import com.checkbook.featured.snapshot.domain.FeaturedSectionType;
 import com.checkbook.featured.snapshot.domain.FeaturedSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -163,7 +165,47 @@ class FeaturedBooksRefresherTest {
                 .containsExactly(null, null, "2026-10-16");
     }
 
-    // 선제한·일일 중단·타임아웃 등 YES24 실패는 재시도 없이 실패 기록, 기존 행은 그대로(교체 안 함)
+    // 재시작 직후 JVM의 첫 TLS 연결은 연결 제한(200ms)을 넘을 수 있다. 첫 시도로 JVM이 데워지므로 시간 초과만 1번 바로 다시 부른다(카드 7)
+    @Test
+    void refreshSection_timeoutOnce_retriesImmediatelyAndReplaces() {
+        when(yes24Client.categoryList(Yes24CategoryList.BESTSELLER, "001", 30))
+                .thenThrow(new Yes24Exception(Yes24Exception.Kind.TIMEOUT, true, "YES24 타임아웃"))
+                .thenReturn(List.of(item(ISBN_A, "소년이 온다", "N", "20140519")));
+
+        refresher().refreshSection(FeaturedSectionType.BESTSELLER);
+
+        verify(yes24Client, times(2)).categoryList(Yes24CategoryList.BESTSELLER, "001", 30);
+        assertThat(capturedBooks(FeaturedSectionType.BESTSELLER, Duration.ofHours(168))).hasSize(1);
+        verify(writer, never()).markFailed(any(), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void refreshSection_timeoutTwice_marksFailedAfterOneRetry() {
+        when(yes24Client.categoryList(Yes24CategoryList.NEW_ATTENTION, "001", 30))
+                .thenThrow(new Yes24Exception(Yes24Exception.Kind.TIMEOUT, true, "YES24 타임아웃"));
+
+        refresher().refreshSection(FeaturedSectionType.NEW);
+
+        verify(yes24Client, times(2)).categoryList(Yes24CategoryList.NEW_ATTENTION, "001", 30);
+        verify(writer).markFailed(eq(FeaturedSectionType.NEW),
+                org.mockito.ArgumentMatchers.contains("YES24 타임아웃"));
+        verify(writer, never()).replaceSection(any(), any(), anyList(), any());
+    }
+
+    // 시간 초과가 아닌 실패는 다시 해도 같다(한도·제한·429·형식 오류·5xx) — 재시도 없이 실패 기록
+    @ParameterizedTest
+    @EnumSource(value = Yes24Exception.Kind.class, names = {"RATE_LIMITED", "FAILED"})
+    void refreshSection_nonTimeoutFailure_doesNotRetry(Yes24Exception.Kind kind) {
+        when(yes24Client.categoryList(Yes24CategoryList.BESTSELLER, "001", 30))
+                .thenThrow(new Yes24Exception(kind, true, "YES24 " + kind));
+
+        refresher().refreshSection(FeaturedSectionType.BESTSELLER);
+
+        verify(yes24Client, times(1)).categoryList(Yes24CategoryList.BESTSELLER, "001", 30);
+        verify(writer).markFailed(eq(FeaturedSectionType.BESTSELLER), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    // 선제한·일일 중단 등 YES24 실패는 재시도 없이 실패 기록, 기존 행은 그대로(교체 안 함)
     @Test
     void refreshSection_yes24Failure_marksFailedWithoutRetry() {
         when(yes24Client.categoryList(Yes24CategoryList.BESTSELLER, "001", 30))
