@@ -1,0 +1,15 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/v1/goods/itemDetail"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json",
+      "x-ratelimit-remaining-day": "19999"
+    },
+    "body": "{\"success\":true,\"message\":\"성공\",\"errorCode\":null,\"data\":{\"items\":[{\"title\":\"부하테스트 도서 {{request.query.query}}\",\"author\":\"테스트\",\"publisher\":\"테스트출판\",\"isbn13\":\"{{request.query.query}}\",\"salePrice\":16800,\"link\":\"https://www.yes24.com/product/goods/123456\",\"cover\":\"https://example.com/cover.jpg\"}]}}",
+    "fixedDelayMilliseconds": 212
+  }
+}

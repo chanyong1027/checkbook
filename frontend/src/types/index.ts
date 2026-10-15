@@ -95,9 +95,32 @@ export type SearchSection = 'PUBLIC_LIBRARY' | 'USED_BOOK' | 'NEW_BOOK' | 'SUBSC
 
 export type SearchSectionStatus = 'SUCCESS' | 'FAILED' | 'SKIPPED'
 
+/**
+ * 섹션 상태의 사유(기계용 코드). 안내 문구는 이 코드로 고른다.
+ * 모르는 코드가 오면 status로 처리한다(서버가 코드를 늘려도 화면이 깨지지 않게).
+ */
+export type SearchSectionReason =
+  | 'NON_STANDARD_ISBN'
+  | 'NO_LOCATION'
+  | 'NO_METADATA'
+  | 'NOT_FOUND'
+  | 'PRICE_UNAVAILABLE'
+  | 'TIMEOUT'
+  | 'RATE_LIMITED'
+  | 'DAILY_LIMIT'
+  | 'UNAVAILABLE'
+
 export interface SectionStatusDetail {
   section: SearchSection
   status: SearchSectionStatus
+  // (string & {}): 서버가 새 코드를 보내도 받되, 알려진 코드의 자동완성·오타 검사는 유지
+  reason?: SearchSectionReason | (string & {}) | null
+}
+
+/** 책 정보의 출처(YES24 / 프런트가 보낸 후보 정보 / 없음)와 YES24 조회 결과 */
+export interface IdentificationInfo {
+  source: 'YES24' | 'HINT' | 'NONE'
+  yes24: 'FOUND' | 'NOT_FOUND' | 'TIMEOUT' | 'RATE_LIMITED' | 'DAILY_LIMIT' | 'FAILED' | 'SKIPPED'
 }
 
 export interface FailureDetail {
@@ -114,6 +137,7 @@ export interface SearchMetadata {
   /** 더 조회할 근처 도서관 후보가 남아있는지 (소장 여부와 무관) */
   publicLibraryHasMore: boolean
   publicLibraryNextOffset: number | null
+  identification?: IdentificationInfo
 }
 
 export interface SearchResponse {

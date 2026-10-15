@@ -1,8 +1,8 @@
 package com.checkbook.search.service;
 
-import com.checkbook.client.aladin.dto.AladinSearchResult;
+import com.checkbook.search.dto.IdentificationResult;
+import com.checkbook.search.dto.IdentifiedBook;
 import com.checkbook.client.aladin.dto.AladinUsedBookResult;
-import com.checkbook.common.util.InputNormalizer;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
 import com.checkbook.publiclibrary.service.PublicLibraryAvailabilityService;
@@ -20,7 +20,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.IntStream;
@@ -47,6 +46,8 @@ class PublicLibraryParallelBenchmarkTest {
 
     @Mock
     private AladinBookService aladinBookService;
+    @Mock
+    private BookIdentificationService identificationService;
 
     @Mock
     private LibraryAvailabilitySnapshotService snapshotService;
@@ -105,7 +106,7 @@ class PublicLibraryParallelBenchmarkTest {
         ExecutorService searchExecutor = Executors.newFixedThreadPool(3);
         try {
             MillieBookService millieBookService = Mockito.mock(MillieBookService.class);
-            when(millieBookService.findAvailability(any()))
+            when(millieBookService.findAvailability(any(), any()))
                     .thenReturn(MillieAvailability.unavailable());
 
             PublicLibraryAvailabilityService availabilityService = new PublicLibraryAvailabilityService(
@@ -114,12 +115,12 @@ class PublicLibraryParallelBenchmarkTest {
             ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
             ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
             SearchService service = new SearchService(
-                    aladinBookService,
+                    identificationService, aladinBookService,
                     millieBookService,
                     availabilityService,
                     searchExecutor
             );
-            service.search("혼자가 혼자에게", 37.5665, 126.9780);
+            service.search(TEST_ISBN, 37.5665, 126.9780, null);
         } finally {
             searchExecutor.shutdownNow();
         }
@@ -127,9 +128,11 @@ class PublicLibraryParallelBenchmarkTest {
 
     private void setupMocks() {
         // 알라딘 도서 식별
-        when(aladinBookService.identify(any(InputNormalizer.NormalizedQuery.class)))
-                .thenReturn(Optional.of(new AladinSearchResult(
-                        TEST_ISBN, "혼자가 혼자에게", "성해나", "창비", null, 16800)));
+        when(identificationService.identify(anyString(), any()))
+                .thenReturn(new IdentificationResult(IdentificationResult.Source.YES24,
+                        IdentificationResult.Yes24Status.FOUND, true,
+                        new IdentifiedBook("혼자가 혼자에게", "성해나", TEST_ISBN, "창비", null),
+                        16800, "https://www.yes24.com/product/goods/1"));
 
         // 중고가격
         when(aladinBookService.getUsedBooks(TEST_ISBN))

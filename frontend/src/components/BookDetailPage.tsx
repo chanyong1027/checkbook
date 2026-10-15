@@ -5,6 +5,7 @@ import type {
   BookCandidate,
   MillieAvailability,
   SearchResponse,
+  SearchSectionStatus,
   ELibraryInfo,
   ELibrarySearchResponse,
 } from '../types'
@@ -60,6 +61,24 @@ const elibStatusLabel: Record<string, string> = {
   SUCCESS: '완료',
   FAILED: '실패',
   TIMEOUT: '타임아웃',
+}
+
+/** 공유 링크 첫 진입 때 카카오 후보 조회를 기다리는 최대 시간. 넘기면 힌트 없이 통합 검색을 시작한다 */
+const COLD_FETCH_TIMEOUT_MS = 3000
+
+/**
+ * 새책 칸 안내 문구. 가격을 보여 줄 수 없는 경우만 문구를 돌려준다(null이면 가격 행 또는 숨김).
+ * 모르는 사유는 status로 처리한다.
+ */
+function newBookNoticeText(status: SearchSectionStatus, reason?: string | null): string | null {
+  switch (reason) {
+    case 'NON_STANDARD_ISBN': return '표준 ISBN이 없는 상품이라 새책 가격을 확인할 수 없어요'
+    case 'NOT_FOUND': return 'YES24에 판매 정보가 없어요'
+    case 'PRICE_UNAVAILABLE': return 'YES24에 가격 정보가 없어요'
+    case 'RATE_LIMITED': return '요청이 많아 가격을 확인하지 못했어요. 잠시 후 다시 시도해주세요'
+    case 'DAILY_LIMIT': return '오늘은 가격 확인이 어려워요. 내일 다시 시도해주세요'
+  }
+  return status === 'FAILED' ? '가격 정보를 가져올 수 없습니다' : null
 }
 
 function formatLabel(format: MillieAvailability['format']): string {
@@ -305,30 +324,43 @@ function ELibrarySelector({
   )
 }
 
-// --- 책 정보 없음 (Kakao·Aladin 모두 식별 실패) ---
+// --- 책 정보(제목)를 확보하지 못했을 때의 책 카드 ---
+// '없는 책'과 '조회 실패'를 구분해 이유를 보여 준다. 화면 전체를 막지 않아 받은 도서관·중고 결과는 그대로 보인다
 
-function BookNotFoundView({ isbn13, onReset }: { isbn13: string; onReset: () => void }) {
+function BookInfoUnavailableCard({ isbn13, notice }: { isbn13: string; notice: string }) {
   return (
-    <div className="text-center py-12">
-      <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fdba74" strokeWidth="1.5" strokeLinecap="round">
-          <circle cx="11" cy="11" r="8" />
-          <path d="m21 21-4.35-4.35" />
-        </svg>
+    <div className="bg-white rounded-2xl border border-orange-50 p-4 mb-5 shadow-sm shadow-orange-50">
+      <div className="flex gap-4 items-center">
+        <div className="w-[72px] h-[100px] bg-orange-50 rounded-xl shrink-0 flex items-center justify-center">
+          <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fdba74" strokeWidth="1.5">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          {/* 책 카드의 제목 자리라 제목 수준으로 둔다(BookDetailCard의 h2와 같은 위치) */}
+          <h2 className="text-sm font-semibold text-slate-700 leading-snug">{notice}</h2>
+          <span className="mt-2 inline-block text-xs font-mono bg-orange-50 text-orange-700 px-2 py-0.5 rounded-lg">
+            {isbn13}
+          </span>
+        </div>
       </div>
-      <h2 className="text-base font-semibold text-slate-800 mb-1">책 정보를 찾을 수 없습니다</h2>
-      <p className="text-sm text-slate-500 mb-1">입력하신 ISBN으로 등록된 책이 없어요</p>
-      <p className="text-xs font-mono text-slate-400 mb-6">{isbn13}</p>
-      <button
-        onClick={onReset}
-        className="px-5 py-2.5 bg-primary text-white rounded-2xl text-sm font-semibold
-          hover:bg-primary-dark active:scale-[0.98] transition cursor-pointer
-          shadow-sm shadow-orange-200"
-      >
-        검색으로 돌아가기
-      </button>
     </div>
   )
+}
+
+/**
+ * 책 정보를 못 받았을 때 책 카드 문구. 서버의 YES24 조회 결과(identification.yes24)로 고른다.
+ * 검색 요청 자체가 실패했거나 모르는 값이면 일반 문구.
+ */
+function bookInfoNoticeText(yes24?: string): string {
+  switch (yes24) {
+    case 'NOT_FOUND': return 'YES24에 등록되지 않은 책이에요'
+    case 'SKIPPED': return '표준 ISBN이 없는 상품이라 책 정보를 확인할 수 없어요'
+    case 'RATE_LIMITED':
+    case 'DAILY_LIMIT': return '요청이 많아 책 정보를 잠시 불러오지 못했어요'
+    default: return '책 정보를 잠시 불러오지 못했어요'
+  }
 }
 
 // --- Header skeleton (cold-entry: book metadata not yet loaded) ---
@@ -382,8 +414,11 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   // Cold-entry book metadata (Kakao) — initialBook이 없을 때 채워짐
   const [coldBook, setColdBook] = useState<BookCandidate | null>(null)
   // Cold-fetch 완료 플래그 — warm 진입은 처음부터 true, cold 진입은 fetch 종료(성공/실패) 후 true
-  // e-lib 검색이 Aladin 메타로 락되는 race condition 방지용
+  // e-lib 검색이 서버 응답 메타로 락되는 race condition 방지 + cold 진입 시 통합 검색 시작 시점(힌트 확보 후 1회)
   const [coldFetchDone, setColdFetchDone] = useState<boolean>(Boolean(initialBook))
+
+  // 첫 통합 검색이 나갔는지 — cold 대기 중 위치가 허용되면 별도 요청 없이 첫 요청에 위치를 싣기 위해
+  const searchStartedRef = useRef(false)
 
   // AbortControllers
   const searchAbort = useRef<AbortController | null>(null)
@@ -393,12 +428,18 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   // --- API calls with race guard ---
 
   function runSearch(lat?: number, lon?: number) {
+    searchStartedRef.current = true
     searchAbort.current?.abort()
     const controller = new AbortController()
     searchAbort.current = controller
     setSearchLoading(true)
     setSearchError(null)
-    searchMain(isbn13, lat, lon, controller.signal)
+    // 이미 가진 후보 정보를 힌트로 보낸다 — YES24가 실패하거나 못 찾아도 서버가 책 정보·밀리 조회를 유지한다
+    const hintBook = initialBook ?? coldBook
+    const hint = hintBook
+      ? { title: hintBook.title, author: hintBook.author, publisher: hintBook.publisher, cover: hintBook.coverUrl }
+      : null
+    searchMain(isbn13, lat, lon, controller.signal, hint)
       .then(res => {
         if (searchAbort.current === controller) {
           setSearchResult(res)
@@ -441,7 +482,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
       })
   }
 
-  // --- Display book: initialBook 우선, 콜드 진입 시 Kakao(coldBook), 그래도 없으면 searchResult.book(알라딘) ---
+  // --- Display book: initialBook 우선, 콜드 진입 시 Kakao(coldBook), 그래도 없으면 searchResult.book(YES24·힌트) ---
   // Kakao 우선 이유: 검색 리스트(warm)와 동일한 소스로 통일해 카드 표기 불일치 방지
 
   const displayBook: BookCandidate | null = useMemo(() => {
@@ -468,6 +509,13 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
     coldBookAbort.current?.abort()
     const controller = new AbortController()
     coldBookAbort.current = controller
+    // 통합 검색이 이 조회의 완료를 기다리므로 제한 시간을 둔다. 넘기면 힌트 없이 검색을 시작한다
+    // (서버의 카카오 호출은 연결·읽기 각 1초 — 정상이면 이 안에 끝난다)
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, COLD_FETCH_TIMEOUT_MS)
     searchBooks(isbn13, 1, 1, controller.signal)
       .then(res => {
         if (controller.signal.aborted) return
@@ -476,23 +524,34 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
         if (found) setColdBook(found)
       })
       .catch(() => {
-        // Kakao 실패 → searchResult.book(알라딘) 폴백
+        // Kakao 실패 → 힌트 없이 검색, searchResult.book(YES24) 폴백
       })
       .finally(() => {
-        if (!controller.signal.aborted) setColdFetchDone(true)
+        clearTimeout(timer)
+        // 화면 이탈로 취소된 경우만 완료로 치지 않는다. 제한 시간 초과는 '실패로 완료'
+        if (!controller.signal.aborted || timedOut) setColdFetchDone(true)
       })
-    return () => controller.abort()
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
   }, [initialBook, isbn13])
 
-  // --- Mount: 통합 검색 ---
+  // --- 통합 검색: warm은 즉시, cold는 Kakao 조회 '완료' 뒤 1회 ---
+  // coldBook != null 이 아니라 완료(성공·오류·빈 결과·ISBN 불일치 모두)를 기다린다. 그래야 실패해도 검색이 시작되고,
+  // 힌트 없는 요청과 힌트 있는 요청이 두 번 나가지 않는다. 대기 중 허용된 위치는 ref로 이 요청에 실린다
 
   useEffect(() => {
-    runSearch()
+    if (!coldFetchDone) return
+    runSearch(userLatRef.current ?? undefined, userLonRef.current ?? undefined)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coldFetchDone])
+
+  useEffect(() => {
     return () => {
       searchAbort.current?.abort()
       elibAbort.current?.abort()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // --- Initial e-lib trigger: displayBook 가 처음 준비된 시점에 1회만 실행 ---
@@ -500,7 +559,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   useEffect(() => {
     if (!displayBook) return
     // cold 진입 시 Kakao(coldBook) 가 settle 될 때까지 대기
-    // — Aladin 이 먼저 응답해서 displayBook 이 Aladin 으로 채워지는 race condition 방지
+    // — 서버 응답이 먼저 와서 displayBook 이 서버 값으로 채워지는 race condition 방지
     if (!coldFetchDone) return
     if (savedElibIds.length === 0) return
     // 가드는 일부러 두지 않음:
@@ -526,7 +585,8 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
         userLonRef.current = longitude
         setUseLocation(true)
         setLocLoading(false)
-        runSearch(latitude, longitude)
+        // 첫 검색 전(cold 대기 중)이면 좌표만 남긴다 — 대기가 끝나면 위치를 실은 한 번의 요청이 나간다
+        if (searchStartedRef.current) runSearch(latitude, longitude)
       },
       (err) => {
         setLocLoading(false)
@@ -566,25 +626,26 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   }
 
   // Get section statuses from metadata
-  const libSectionStatus = searchResult?.metadata.sectionStatuses
-    .find(s => s.section === 'PUBLIC_LIBRARY')?.status
-  const newBookSectionStatus = searchResult?.metadata.sectionStatuses
-    .find(s => s.section === 'NEW_BOOK')?.status
+  const libSection = searchResult?.metadata.sectionStatuses.find(s => s.section === 'PUBLIC_LIBRARY')
+  const libSectionStatus = libSection?.status
+  const newBookSection = searchResult?.metadata.sectionStatuses.find(s => s.section === 'NEW_BOOK')
+  const newBookNotice = newBookSection ? newBookNoticeText(newBookSection.status, newBookSection.reason) : null
 
   const hasSavedElibs = savedElibIds.length > 0
 
-  // 통합검색·Kakao cold-fetch 모두 settle 되었는데도 책 메타가 없으면 = 존재하지 않는 ISBN
-  const bookNotFound = !searchLoading && coldFetchDone && !displayBook
-
-  if (bookNotFound) {
-    return <BookNotFoundView isbn13={isbn13} onReset={onReset} />
-  }
+  // 통합 검색·카카오 조회가 모두 끝났는데도 책 제목이 없을 때. '없는 책'으로 단정하지 않는다 —
+  // 호출 제한·장애·YES24 미등록을 구분해 책 카드에 이유를 보이고, 나머지 칸(도서관·중고 등)은 그대로 보여 준다
+  const bookInfoNotice = !searchLoading && coldFetchDone && !displayBook
+    ? bookInfoNoticeText(searchError ? undefined : searchResult?.metadata.identification?.yes24)
+    : null
 
   return (
     <div>
       {/* Book detail card */}
       {displayBook ? (
         <BookDetailCard book={displayBook} />
+      ) : bookInfoNotice ? (
+        <BookInfoUnavailableCard isbn13={isbn13} notice={bookInfoNotice} />
       ) : (
         <BookDetailCardSkeleton />
       )}
@@ -600,8 +661,23 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
         ) : searchResult && (
           <>
             {/* Public Library */}
-            {libSectionStatus === 'SKIPPED' ? (
-              // Location not granted — show CTA card
+            {libSectionStatus === 'SKIPPED' && libSection?.reason === 'NON_STANDARD_ISBN' ? (
+              // 서점 내부 코드 등 표준 ISBN이 아님 — 조회 자체가 무의미해 '미보유'로 보이지 않게 이유를 말한다 (F1)
+              <SectionCard
+                icon={
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                    <polyline points="9 22 9 12 15 12 15 22" />
+                  </svg>
+                }
+                title="공공도서관"
+              >
+                <p className="text-sm text-slate-600 text-center py-2">
+                  표준 ISBN이 없는 상품이라 도서관 소장 여부를 확인할 수 없어요
+                </p>
+              </SectionCard>
+            ) : libSectionStatus === 'SKIPPED' ? (
+              // Location not granted (NO_LOCATION) — show CTA card
               <SectionCard
                 icon={
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
@@ -707,9 +783,8 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
               const subscriptionStatus = searchResult.metadata.sectionStatuses
                 .find(s => s.section === 'SUBSCRIPTION')?.status
 
-              if (!subscriptionStatus || subscriptionStatus === 'SKIPPED') {
-                return null
-              }
+              const subscriptionReason = searchResult.metadata.sectionStatuses
+                .find(s => s.section === 'SUBSCRIPTION')?.reason
 
               const sectionIcon = (
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -717,6 +792,20 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                   <line x1="12" y1="18" x2="12" y2="18" />
                 </svg>
               )
+
+              if (subscriptionStatus === 'SKIPPED' && subscriptionReason === 'NO_METADATA') {
+                return (
+                  <SectionCard icon={sectionIcon} title="구독 서비스">
+                    <p className="text-sm text-slate-600 text-center py-2">
+                      책 정보를 확인하지 못해 구독 여부를 확인할 수 없어요
+                    </p>
+                  </SectionCard>
+                )
+              }
+
+              if (!subscriptionStatus || subscriptionStatus === 'SKIPPED') {
+                return null
+              }
 
               if (subscriptionStatus === 'FAILED') {
                 return (
@@ -815,7 +904,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
             )}
 
             {/* ==================== NEW BOOK SECTION ==================== */}
-            {newBookSectionStatus === 'FAILED' ? (
+            {newBookNotice ? (
               <SectionCard
                 icon={
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
@@ -826,7 +915,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                 }
                 title="새책"
               >
-                <p className="text-sm text-slate-600 text-center py-2">가격 정보를 가져올 수 없습니다</p>
+                <p className="text-sm text-slate-600 text-center py-2">{newBookNotice}</p>
               </SectionCard>
             ) : searchResult.newBook && (
               <SectionCard
@@ -840,7 +929,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                 title="새책"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-600">알라딘</span>
+                  <span className="text-sm text-slate-600">YES24</span>
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-slate-800 text-sm">{searchResult.newBook.price.toLocaleString()}원</span>
                     {isSafeUrl(searchResult.newBook.productUrl) && (
@@ -851,7 +940,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-aladin/10
                         text-xs text-brand-aladin font-medium hover:bg-brand-aladin/20 transition"
                     >
-                      알라딘
+                      YES24
                       <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
                         <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
                       </svg>
@@ -859,6 +948,8 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                     )}
                   </div>
                 </div>
+                {/* YES24 운영 안내: 데이터를 노출하는 화면에 출처 표기 */}
+                <p className="mt-2 text-[11px] text-slate-500 text-right">가격 정보 제공: YES24</p>
               </SectionCard>
             )}
           </>
@@ -957,6 +1048,22 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                 ))}
               </div>
             )}
+          </SectionCard>
+        ) : !displayBook ? (
+          // 전자도서관 검색은 제목·저자로 한다. 책 정보가 없으면 설정해도 검색할 수 없으므로 설정 버튼을 띄우지 않는다.
+          // 아직 불러오는 중이면 비워 두고, 끝났는데도 없으면 이유를 보여 준다
+          bookInfoNotice && <SectionCard
+            icon={
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+              </svg>
+            }
+            title="전자도서관"
+          >
+            <p className="text-sm text-slate-600 text-center py-2">
+              책 정보를 확인하지 못해 전자도서관을 검색할 수 없어요
+            </p>
           </SectionCard>
         ) : !hasSavedElibs ? (
           // No saved libraries — empty state

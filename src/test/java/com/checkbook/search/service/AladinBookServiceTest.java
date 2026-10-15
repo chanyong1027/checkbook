@@ -4,9 +4,7 @@ import com.checkbook.aladinstore.domain.AladinStore;
 import com.checkbook.aladinstore.repository.AladinStoreRepository;
 import com.checkbook.client.aladin.AladinClient;
 import com.checkbook.client.aladin.dto.AladinOffStoreResponse;
-import com.checkbook.client.aladin.dto.AladinSearchResult;
 import com.checkbook.client.aladin.dto.AladinUsedBookResult;
-import com.checkbook.common.util.InputNormalizer;
 import com.checkbook.search.dto.OffStoreResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -33,44 +31,6 @@ class AladinBookServiceTest {
 
     @InjectMocks
     private AladinBookService aladinBookService;
-
-    @Test
-    void identifyKeywordDelegatesToSearchBook() {
-        AladinSearchResult expected = new AladinSearchResult(
-                "9788936439743", "혼자가 혼자에게", "성해나", "창비", null, 16800);
-        when(aladinClient.searchBook("혼모노")).thenReturn(Optional.of(expected));
-
-        InputNormalizer.NormalizedQuery query =
-                new InputNormalizer.NormalizedQuery("혼모노", InputNormalizer.QueryType.KEYWORD);
-        Optional<AladinSearchResult> result = aladinBookService.identify(query);
-
-        assertThat(result).contains(expected);
-        verify(aladinClient).searchBook("혼모노");
-    }
-
-    @Test
-    void identifyIsbnDelegatesToLookupBook() {
-        AladinSearchResult expected = new AladinSearchResult(
-                "9788936439743", "혼자가 혼자에게", "성해나", "창비", null, 16800);
-        when(aladinClient.lookupBook("9788936439743")).thenReturn(Optional.of(expected));
-
-        InputNormalizer.NormalizedQuery query =
-                new InputNormalizer.NormalizedQuery("9788936439743", InputNormalizer.QueryType.ISBN);
-        Optional<AladinSearchResult> result = aladinBookService.identify(query);
-
-        assertThat(result).contains(expected);
-        verify(aladinClient).lookupBook("9788936439743");
-    }
-
-    @Test
-    void identifyReturnsEmptyWhenClientFails() {
-        when(aladinClient.searchBook("없는책")).thenReturn(Optional.empty());
-
-        InputNormalizer.NormalizedQuery query =
-                new InputNormalizer.NormalizedQuery("없는책", InputNormalizer.QueryType.KEYWORD);
-
-        assertThat(aladinBookService.identify(query)).isEmpty();
-    }
 
     @Test
     void getUsedBooksDelegatesToAladinClient() {

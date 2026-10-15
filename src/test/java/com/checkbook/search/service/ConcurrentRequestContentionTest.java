@@ -1,8 +1,8 @@
 package com.checkbook.search.service;
 
-import com.checkbook.client.aladin.dto.AladinSearchResult;
+import com.checkbook.search.dto.IdentificationResult;
+import com.checkbook.search.dto.IdentifiedBook;
 import com.checkbook.client.aladin.dto.AladinUsedBookResult;
-import com.checkbook.common.util.InputNormalizer;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
 import com.checkbook.publiclibrary.service.PublicLibraryAvailabilityService;
@@ -22,7 +22,6 @@ import org.mockito.quality.Strictness;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -52,6 +51,8 @@ class ConcurrentRequestContentionTest {
 
     @Mock
     private AladinBookService aladinBookService;
+    @Mock
+    private BookIdentificationService identificationService;
     @Mock
     private LibraryAvailabilitySnapshotService snapshotService;
     @Mock
@@ -89,9 +90,9 @@ class ConcurrentRequestContentionTest {
             ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
             ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
             SearchService service = new SearchService(
-                    aladinBookService, millieBookService, availabilityService, searchPool);
+                    identificationService, aladinBookService, millieBookService, availabilityService, searchPool);
 
-            Callable<SearchResponse> call = () -> service.search(TEST_ISBN, 37.5665, 126.9780);
+            Callable<SearchResponse> call = () -> service.search(TEST_ISBN, 37.5665, 126.9780, null);
             List<Future<SearchResponse>> futures = callers.invokeAll(List.of(call, call));
 
             int arrived = 0;
@@ -107,12 +108,14 @@ class ConcurrentRequestContentionTest {
     }
 
     private void setupMocks() {
-        when(aladinBookService.identify(any(InputNormalizer.NormalizedQuery.class)))
-                .thenReturn(Optional.of(new AladinSearchResult(
-                        TEST_ISBN, "혼자가 혼자에게", "성해나", "창비", null, 16800)));
+        when(identificationService.identify(anyString(), any()))
+                .thenReturn(new IdentificationResult(IdentificationResult.Source.YES24,
+                        IdentificationResult.Yes24Status.FOUND, true,
+                        new IdentifiedBook("혼자가 혼자에게", "성해나", TEST_ISBN, "창비", null),
+                        16800, "https://www.yes24.com/product/goods/1"));
         when(aladinBookService.getUsedBooks(TEST_ISBN))
                 .thenReturn(new AladinUsedBookResult(5000, 6000, 7000, "url1", "url2", "url3"));
-        when(millieBookService.findAvailability(any()))
+        when(millieBookService.findAvailability(any(), any()))
                 .thenReturn(MillieAvailability.unavailable());
 
         List<PublicLibrary> libraries = IntStream.rangeClosed(1, LIBRARY_COUNT)

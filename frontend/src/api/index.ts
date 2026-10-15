@@ -36,15 +36,31 @@ export function searchBooks(
   )
 }
 
+/** 상세 화면이 이미 가진 후보 정보. YES24가 실패하거나 못 찾을 때 서버가 표시·밀리 매칭에 쓴다 */
+export interface SearchHint {
+  title?: string
+  author?: string
+  publisher?: string
+  cover?: string
+}
+
 export function searchMain(
   q: string,
   lat?: number,
   lon?: number,
   signal?: AbortSignal,
+  hint?: SearchHint | null,
 ): Promise<SearchResponse> {
   const params = new URLSearchParams({ q })
   if (lat != null) params.set('lat', String(lat))
   if (lon != null) params.set('lon', String(lon))
+  if (hint) {
+    // 빈 값은 보내지 않는다(서버는 모두 비면 힌트 없음으로 본다)
+    if (hint.title) params.set('title', hint.title)
+    if (hint.author) params.set('author', hint.author)
+    if (hint.publisher) params.set('publisher', hint.publisher)
+    if (hint.cover) params.set('cover', hint.cover)
+  }
   return get(`/api/search?${params}`, signal)
 }
 

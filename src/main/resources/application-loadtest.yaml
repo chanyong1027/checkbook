@@ -16,6 +16,12 @@ datanaru:
 millie:
   base-url: http://wiremock:8080
 
+# YES24도 WireMock으로 — 실제 API에 부하를 주지 않는다(일 20,000 한도). 스텁: wiremock/mappings/yes24-item-detail.json.
+# 앱의 선제한(100ms당 1건) 때문에 부하 중 대부분 요청은 새책 섹션 SKIPPED(RATE_LIMITED)가 된다
+yes24:
+  api-key: loadtest
+  base-url: http://wiremock:8080
+
 logging:
   level:
     com.checkbook.client: INFO

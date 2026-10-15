@@ -6,7 +6,7 @@
   "response": {
     "status": 200,
     "headers": { "Content-Type": "application/json" },
-    "body": "{\"respData\":{\"content\":{\"list\":[]}}}",
+    "body": "{\"RESP_CD\":200,\"RESP_MSG\":\"성공\",\"RESP_DATA\":{\"content\":{\"list\":[],\"total\":0}}}",
     "fixedDelayMilliseconds": 286
   }
 }

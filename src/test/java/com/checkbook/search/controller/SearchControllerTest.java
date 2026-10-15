@@ -9,6 +9,11 @@ import com.checkbook.publiclibrary.service.PublicLibraryAvailabilityService;
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.OffStoreResponse;
 import com.checkbook.search.dto.SearchResponse;
+import com.checkbook.search.dto.BookHint;
+import com.checkbook.search.dto.IdentificationResult;
+import com.checkbook.search.dto.SearchSection;
+import com.checkbook.search.dto.SearchSectionReason;
+import com.checkbook.search.dto.SearchSectionStatus;
 import com.checkbook.search.service.AladinBookService;
 import com.checkbook.search.service.SearchService;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,9 +28,15 @@ import org.springframework.validation.beanvalidation.MethodValidationPostProcess
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -68,24 +79,82 @@ class SearchControllerTest {
     }
 
     @Test
-    void searchWithQReturns200() throws Exception {
-        when(searchService.search(eq("자바"), isNull(), isNull()))
+    void searchWithIsbnReturns200WithReasonAndIdentification() throws Exception {
+        when(searchService.search(eq("9788994492032"), isNull(), isNull(), isNull()))
                 .thenReturn(new SearchResponse(
                         new SearchResponse.BookInfo("자바의 정석", "남궁성", "9788994492032", "도우출판", null),
                         List.of(),
                         null,
-                        new SearchResponse.NewBookInfo(32000, "https://www.aladin.co.kr/shop/wproduct.aspx?ISBN=9788994492032"),
+                        new SearchResponse.NewBookInfo(32000, "https://www.yes24.com/product/goods/1"),
                         new SearchResponse.SubscriptionInfo(MillieAvailability.unavailable()),
                         new SearchResponse.SearchMetadata(
-                                LocalDateTime.now(), List.of(), List.of(), null, false, null)
+                                LocalDateTime.now(),
+                                List.of(new SearchResponse.SectionStatusDetail(
+                                                SearchSection.PUBLIC_LIBRARY, SearchSectionStatus.SKIPPED, SearchSectionReason.NO_LOCATION),
+                                        new SearchResponse.SectionStatusDetail(
+                                                SearchSection.NEW_BOOK, SearchSectionStatus.SUCCESS, null)),
+                                List.of(), null, false, null,
+                                new SearchResponse.IdentificationInfo(
+                                        IdentificationResult.Source.YES24, IdentificationResult.Yes24Status.FOUND))
                 ));
 
-        mockMvc.perform(get("/api/search").param("q", "자바"))
+        mockMvc.perform(get("/api/search").param("q", "9788994492032"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.book.title").value("자바의 정석"))
                 .andExpect(jsonPath("$.publicLibraries").isArray())
                 .andExpect(jsonPath("$.newBook.price").value(32000))
-                .andExpect(jsonPath("$.metadata").exists());
+                // 계약 2절: reason은 기계용 코드(nullable), identification{source, yes24}
+                .andExpect(jsonPath("$.metadata.sectionStatuses[0].reason").value("NO_LOCATION"))
+                .andExpect(jsonPath("$.metadata.sectionStatuses[1].reason").value(nullValue()))
+                .andExpect(jsonPath("$.metadata.identification.source").value("YES24"))
+                .andExpect(jsonPath("$.metadata.identification.yes24").value("FOUND"));
+    }
+
+    @Test
+    void searchPassesHintParamsToService() throws Exception {
+        when(searchService.search(any(), any(), any(), any())).thenReturn(emptyResponse());
+
+        mockMvc.perform(get("/api/search")
+                        .param("q", "9788994492032")
+                        .param("title", "자바의 정석")
+                        .param("author", "남궁성")
+                        .param("publisher", "도우출판")
+                        .param("cover", "https://k.example/1.jpg"))
+                .andExpect(status().isOk());
+
+        verify(searchService).search("9788994492032", null, null,
+                new BookHint("자바의 정석", "남궁성", "도우출판", "https://k.example/1.jpg"));
+    }
+
+    @Test
+    void searchWithoutHintParamsPassesNullHint() throws Exception {
+        when(searchService.search(any(), any(), any(), any())).thenReturn(emptyResponse());
+
+        mockMvc.perform(get("/api/search").param("q", "9788994492032"))
+                .andExpect(status().isOk());
+
+        verify(searchService).search("9788994492032", null, null, null);
+    }
+
+    // 힌트는 선택 기능이라 무효해도 400이 아니다 — 컨트롤러는 길이 제약 없이 넘기고 서비스가 판정한다
+    @Test
+    void searchWithOverlongHintIsNotRejected() throws Exception {
+        when(searchService.search(any(), any(), any(), any())).thenReturn(emptyResponse());
+
+        mockMvc.perform(get("/api/search")
+                        .param("q", "9788994492032")
+                        .param("title", "가".repeat(500)))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void searchWithKeywordReturns400KeywordNotSupported() throws Exception {
+        when(searchService.search(eq("자바"), any(), any(), any()))
+                .thenThrow(new BusinessException(ErrorCode.KEYWORD_NOT_SUPPORTED));
+
+        mockMvc.perform(get("/api/search").param("q", "자바"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("KEYWORD_NOT_SUPPORTED"));
     }
 
     @Test
@@ -106,7 +175,7 @@ class SearchControllerTest {
 
     @Test
     void searchOnlyLatProvidedReturns400() throws Exception {
-        when(searchService.search(any(), any(), isNull()))
+        when(searchService.search(any(), any(), isNull(), any()))
                 .thenThrow(new BusinessException(ErrorCode.INVALID_LOCATION));
 
         mockMvc.perform(get("/api/search")
@@ -226,6 +295,19 @@ class SearchControllerTest {
                 .andExpect(status().isBadRequest());
     }
 
+    // F1: 숫자 13자리라도 978/979·체크섬이 맞지 않으면 도서관 조회가 무의미하다
+    @Test
+    void availabilityNonStandardIsbnReturns400WithoutFetching() throws Exception {
+        mockMvc.perform(get("/api/public-libraries/availability")
+                        .param("isbn13", "2004566000649")
+                        .param("lat", "37.5665")
+                        .param("lon", "126.9780"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("NON_STANDARD_ISBN"));
+
+        verify(publicLibraryAvailabilityService, never()).fetch(anyString(), anyDouble(), anyDouble(), anyInt());
+    }
+
     @Test
     void availabilityMissingLatReturns400() throws Exception {
         mockMvc.perform(get("/api/public-libraries/availability")
@@ -233,5 +315,15 @@ class SearchControllerTest {
                         .param("lon", "126.9780"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_LOCATION"));
+    }
+
+    private static SearchResponse emptyResponse() {
+        return new SearchResponse(
+                new SearchResponse.BookInfo(null, null, "9788994492032", null, null),
+                List.of(), null, null,
+                new SearchResponse.SubscriptionInfo(MillieAvailability.unavailable()),
+                new SearchResponse.SearchMetadata(LocalDateTime.now(), List.of(), List.of(), null, false, null,
+                        new SearchResponse.IdentificationInfo(
+                                IdentificationResult.Source.NONE, IdentificationResult.Yes24Status.NOT_FOUND)));
     }
 }

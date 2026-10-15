@@ -1,6 +1,6 @@
 package com.checkbook.search.service;
 
-import com.checkbook.client.aladin.dto.AladinSearchResult;
+import com.checkbook.search.dto.IdentifiedBook;
 import com.checkbook.client.millie.dto.MillieBookItem;
 import com.checkbook.common.matcher.BookMatcher;
 import com.checkbook.common.matcher.BookMatcher.MatchPath;
@@ -34,15 +34,28 @@ public class MillieBookMatcher {
     private final BookMetadataNormalizer normalizer;
 
     public Optional<MatchedMillie> findMatch(
-            AladinSearchResult selected,
+            IdentifiedBook selected,
             List<MillieBookItem> candidates
+    ) {
+        return findMatch(selected, candidates, true);
+    }
+
+    /**
+     * @param allowTitleOnly false면 저자로 확인되지 않은 매칭(후보 저자가 비어 제목만 일치, TITLE_ONLY)을 받지 않는다.
+     *                       힌트 제목 보조 매칭용 — 힌트에는 ISBN 대응 보장이 없어 제목만으로는 다른 책일 수 있다
+     */
+    public Optional<MatchedMillie> findMatch(
+            IdentifiedBook selected,
+            List<MillieBookItem> candidates,
+            boolean allowTitleOnly
     ) {
         BookMatcher.Selected sel = new BookMatcher.Selected(selected.title(), selected.author());
 
         List<Scored> matched = candidates.stream()
                 .map(item -> {
                     MatchResult r = baseMatcher.match(item.contentName(), item.author(), sel);
-                    return r.matched() ? new Scored(item, r.path()) : null;
+                    if (!r.matched() || (!allowTitleOnly && r.path() == MatchPath.TITLE_ONLY)) return null;
+                    return new Scored(item, r.path());
                 })
                 .filter(Objects::nonNull)
                 .toList();
@@ -58,7 +71,7 @@ public class MillieBookMatcher {
         return Optional.of(new MatchedMillie(primary.item(), computeFormat(matched)));
     }
 
-    private Comparator<Scored> comparator(AladinSearchResult selected) {
+    private Comparator<Scored> comparator(IdentifiedBook selected) {
         // 각 키는 "낮은 값이 좋은 후보" 방향. Boolean false < true이므로
         // false가 best일 땐 그대로, true가 best일 땐 부정 또는 매핑.
         return Comparator
@@ -88,7 +101,7 @@ public class MillieBookMatcher {
         return item.isAvailable();
     }
 
-    private boolean brandMatches(MillieBookItem item, AladinSearchResult selected) {
+    private boolean brandMatches(MillieBookItem item, IdentifiedBook selected) {
         if (item.bookBrand() == null || selected.publisher() == null) return false;
         return normalize(item.bookBrand()).equals(normalize(selected.publisher()));
     }

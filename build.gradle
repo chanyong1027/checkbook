@@ -38,6 +38,11 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	// Boot 4: starter-web → starter-webmvc
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	// Boot 4: RestClient.Builder 자동 설정(+ http.client.requests 관측)이 별도 모듈로 분리됨.
+	// 주입 빌더를 쓰는 클라이언트(YES24)가 운영에서 Bean을 받으려면 main 의존성이어야 한다.
+	// TestRestTemplate도 이 모듈을 쓰지만 testImplementation으로 따로 두지 않는다 — 테스트에서만 Bean이 생기면
+	// 운영 기동 실패를 CI가 잡지 못한다
+	implementation 'org.springframework.boot:spring-boot-starter-restclient'
 	implementation 'org.jsoup:jsoup:1.17.2'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'io.micrometer:micrometer-registry-prometheus'
@@ -49,7 +54,6 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'      // @WebMvcTest, TestRestTemplate
 	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'    // @DataJpaTest
 	testImplementation 'org.springframework.boot:spring-boot-starter-micrometer-metrics-test' // @AutoConfigureMetrics
-	testImplementation 'org.springframework.boot:spring-boot-restclient'               // TestRestTemplate 런타임 의존
 	testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
 	mockitoAgent('org.mockito:mockito-core') { transitive = false }
 	testRuntimeOnly 'com.h2database:h2'
