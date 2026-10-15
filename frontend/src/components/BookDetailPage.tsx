@@ -324,30 +324,43 @@ function ELibrarySelector({
   )
 }
 
-// --- 책 정보 없음 (Kakao 후보·서버 식별 모두 책 정보 없음) ---
+// --- 책 정보(제목)를 확보하지 못했을 때의 책 카드 ---
+// '없는 책'과 '조회 실패'를 구분해 이유를 보여 준다. 화면 전체를 막지 않아 받은 도서관·중고 결과는 그대로 보인다
 
-function BookNotFoundView({ isbn13, onReset }: { isbn13: string; onReset: () => void }) {
+function BookInfoUnavailableCard({ isbn13, notice }: { isbn13: string; notice: string }) {
   return (
-    <div className="text-center py-12">
-      <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#fdba74" strokeWidth="1.5" strokeLinecap="round">
-          <circle cx="11" cy="11" r="8" />
-          <path d="m21 21-4.35-4.35" />
-        </svg>
+    <div className="bg-white rounded-2xl border border-orange-50 p-4 mb-5 shadow-sm shadow-orange-50">
+      <div className="flex gap-4 items-center">
+        <div className="w-[72px] h-[100px] bg-orange-50 rounded-xl shrink-0 flex items-center justify-center">
+          <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fdba74" strokeWidth="1.5">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          {/* 책 카드의 제목 자리라 제목 수준으로 둔다(BookDetailCard의 h2와 같은 위치) */}
+          <h2 className="text-sm font-semibold text-slate-700 leading-snug">{notice}</h2>
+          <span className="mt-2 inline-block text-xs font-mono bg-orange-50 text-orange-700 px-2 py-0.5 rounded-lg">
+            {isbn13}
+          </span>
+        </div>
       </div>
-      <h2 className="text-base font-semibold text-slate-800 mb-1">책 정보를 찾을 수 없습니다</h2>
-      <p className="text-sm text-slate-500 mb-1">입력하신 ISBN으로 등록된 책이 없어요</p>
-      <p className="text-xs font-mono text-slate-400 mb-6">{isbn13}</p>
-      <button
-        onClick={onReset}
-        className="px-5 py-2.5 bg-primary text-white rounded-2xl text-sm font-semibold
-          hover:bg-primary-dark active:scale-[0.98] transition cursor-pointer
-          shadow-sm shadow-orange-200"
-      >
-        검색으로 돌아가기
-      </button>
     </div>
   )
+}
+
+/**
+ * 책 정보를 못 받았을 때 책 카드 문구. 서버의 YES24 조회 결과(identification.yes24)로 고른다.
+ * 검색 요청 자체가 실패했거나 모르는 값이면 일반 문구.
+ */
+function bookInfoNoticeText(yes24?: string): string {
+  switch (yes24) {
+    case 'NOT_FOUND': return 'YES24에 등록되지 않은 책이에요'
+    case 'SKIPPED': return '표준 ISBN이 없는 상품이라 책 정보를 확인할 수 없어요'
+    case 'RATE_LIMITED':
+    case 'DAILY_LIMIT': return '요청이 많아 책 정보를 잠시 불러오지 못했어요'
+    default: return '책 정보를 잠시 불러오지 못했어요'
+  }
 }
 
 // --- Header skeleton (cold-entry: book metadata not yet loaded) ---
@@ -620,18 +633,19 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
 
   const hasSavedElibs = savedElibIds.length > 0
 
-  // 통합검색·Kakao cold-fetch 모두 settle 되었는데도 책 메타가 없으면 = 존재하지 않는 ISBN
-  const bookNotFound = !searchLoading && coldFetchDone && !displayBook
-
-  if (bookNotFound) {
-    return <BookNotFoundView isbn13={isbn13} onReset={onReset} />
-  }
+  // 통합 검색·카카오 조회가 모두 끝났는데도 책 제목이 없을 때. '없는 책'으로 단정하지 않는다 —
+  // 호출 제한·장애·YES24 미등록을 구분해 책 카드에 이유를 보이고, 나머지 칸(도서관·중고 등)은 그대로 보여 준다
+  const bookInfoNotice = !searchLoading && coldFetchDone && !displayBook
+    ? bookInfoNoticeText(searchError ? undefined : searchResult?.metadata.identification?.yes24)
+    : null
 
   return (
     <div>
       {/* Book detail card */}
       {displayBook ? (
         <BookDetailCard book={displayBook} />
+      ) : bookInfoNotice ? (
+        <BookInfoUnavailableCard isbn13={isbn13} notice={bookInfoNotice} />
       ) : (
         <BookDetailCardSkeleton />
       )}
@@ -1034,6 +1048,22 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                 ))}
               </div>
             )}
+          </SectionCard>
+        ) : !displayBook ? (
+          // 전자도서관 검색은 제목·저자로 한다. 책 정보가 없으면 설정해도 검색할 수 없으므로 설정 버튼을 띄우지 않는다.
+          // 아직 불러오는 중이면 비워 두고, 끝났는데도 없으면 이유를 보여 준다
+          bookInfoNotice && <SectionCard
+            icon={
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+              </svg>
+            }
+            title="전자도서관"
+          >
+            <p className="text-sm text-slate-600 text-center py-2">
+              책 정보를 확인하지 못해 전자도서관을 검색할 수 없어요
+            </p>
           </SectionCard>
         ) : !hasSavedElibs ? (
           // No saved libraries — empty state
