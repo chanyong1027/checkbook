@@ -94,7 +94,7 @@ export function OffStoreList({ isbn13, lat, lon, onRequestLocation, locationLoad
               {isSafeUrl(store.link) && (
                 <a href={store.link} target="_blank" rel="noopener noreferrer"
                   aria-label={`${store.storeName} 재고 확인 (알라딘 매장 페이지, 새 창)`}
-                  className="shrink-0 px-2.5 py-1.5 rounded-lg bg-brand-aladin/10 text-xs text-brand-aladin font-medium hover:bg-brand-aladin/20 transition">
+                  className="shrink-0 px-2.5 py-1.5 rounded-lg bg-brand-aladin/10 text-xs text-brand-aladin-dark font-medium hover:bg-brand-aladin/20 transition">
                   재고 확인
                 </a>
               )}
