@@ -200,7 +200,7 @@ export function BookSearchStep({ onSelect }: Props) {
       <div className="mb-5">
         <h1 className="text-2xl font-bold text-slate-900 tracking-tight">책, 어디 있을까?</h1>
         <p className="text-sm text-slate-600 mt-1 leading-relaxed">
-          알라딘 가격 · 우리 동네 도서관 · 전자도서관 · 밀리,
+          YES24 가격 · 우리 동네 도서관 · 전자도서관 · 밀리,
           <br />
           <span className="text-slate-800 font-medium">한 번에 확인</span>하세요.
         </p>

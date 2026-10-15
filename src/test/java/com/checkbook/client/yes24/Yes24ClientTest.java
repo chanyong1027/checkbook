@@ -291,7 +291,7 @@ class Yes24ClientTest {
     @Test
     void propertiesToStringMasksApiKey() {
         Yes24Properties properties = new Yes24Properties("https://apis.yes24.com", "secret-key",
-                Duration.ofMillis(200), Duration.ofMillis(700));
+                Duration.ofMillis(200), Duration.ofMillis(700), Duration.ofSeconds(3));
 
         assertThat(properties.toString()).doesNotContain("secret-key").contains("****");
     }
@@ -351,7 +351,8 @@ class Yes24ClientTest {
                 server.url("/").toString().replaceAll("/$", ""),
                 "test-key",
                 Duration.ofMillis(200),
-                Duration.ofMillis(300));
+                Duration.ofMillis(300),
+                Duration.ofSeconds(3));
         return new Yes24Client(RestClient.builder(), properties, rateLimiter, meterRegistry, clock);
     }
 
