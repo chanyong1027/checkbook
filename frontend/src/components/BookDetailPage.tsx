@@ -63,6 +63,9 @@ const elibStatusLabel: Record<string, string> = {
   TIMEOUT: '타임아웃',
 }
 
+/** 공유 링크 첫 진입 때 카카오 후보 조회를 기다리는 최대 시간. 넘기면 힌트 없이 통합 검색을 시작한다 */
+const COLD_FETCH_TIMEOUT_MS = 3000
+
 /**
  * 새책 칸 안내 문구. 가격을 보여 줄 수 없는 경우만 문구를 돌려준다(null이면 가격 행 또는 숨김).
  * 모르는 사유는 status로 처리한다.
@@ -493,6 +496,13 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
     coldBookAbort.current?.abort()
     const controller = new AbortController()
     coldBookAbort.current = controller
+    // 통합 검색이 이 조회의 완료를 기다리므로 제한 시간을 둔다. 넘기면 힌트 없이 검색을 시작한다
+    // (서버의 카카오 호출은 연결·읽기 각 1초 — 정상이면 이 안에 끝난다)
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, COLD_FETCH_TIMEOUT_MS)
     searchBooks(isbn13, 1, 1, controller.signal)
       .then(res => {
         if (controller.signal.aborted) return
@@ -504,9 +514,14 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
         // Kakao 실패 → 힌트 없이 검색, searchResult.book(YES24) 폴백
       })
       .finally(() => {
-        if (!controller.signal.aborted) setColdFetchDone(true)
+        clearTimeout(timer)
+        // 화면 이탈로 취소된 경우만 완료로 치지 않는다. 제한 시간 초과는 '실패로 완료'
+        if (!controller.signal.aborted || timedOut) setColdFetchDone(true)
       })
-    return () => controller.abort()
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
   }, [initialBook, isbn13])
 
   // --- 통합 검색: warm은 즉시, cold는 Kakao 조회 '완료' 뒤 1회 ---
