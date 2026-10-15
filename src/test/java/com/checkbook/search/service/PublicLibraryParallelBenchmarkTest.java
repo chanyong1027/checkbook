@@ -2,7 +2,6 @@ package com.checkbook.search.service;
 
 import com.checkbook.search.dto.IdentificationResult;
 import com.checkbook.search.dto.IdentifiedBook;
-import com.checkbook.client.aladin.dto.AladinUsedBookResult;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
 import com.checkbook.publiclibrary.service.PublicLibraryAvailabilityService;
@@ -44,8 +43,6 @@ class PublicLibraryParallelBenchmarkTest {
     private static final int LIBRARY_COUNT = 20;
     private static final String TEST_ISBN = "9788936439743";
 
-    @Mock
-    private AladinBookService aladinBookService;
     @Mock
     private BookIdentificationService identificationService;
 
@@ -115,7 +112,7 @@ class PublicLibraryParallelBenchmarkTest {
             ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
             ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
             SearchService service = new SearchService(
-                    identificationService, aladinBookService,
+                    identificationService,
                     millieBookService,
                     availabilityService,
                     searchExecutor
@@ -133,10 +130,6 @@ class PublicLibraryParallelBenchmarkTest {
                         IdentificationResult.Yes24Status.FOUND, true,
                         new IdentifiedBook("혼자가 혼자에게", "성해나", TEST_ISBN, "창비", null),
                         16800, "https://www.yes24.com/product/goods/1"));
-
-        // 중고가격
-        when(aladinBookService.getUsedBooks(TEST_ISBN))
-                .thenReturn(new AladinUsedBookResult(5000, 6000, 7000, "url1", "url2", "url3"));
 
         // 도서관 20곳 목록
         List<PublicLibrary> libraries = IntStream.rangeClosed(1, LIBRARY_COUNT)

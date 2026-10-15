@@ -25,14 +25,8 @@ public record SearchResponse(
     ) {
     }
 
-    public record UsedBookInfo(
-            Integer userUsedPrice,
-            Integer aladinUsedPrice,
-            Integer spaceUsedPrice,
-            String userUsedUrl,
-            String aladinUsedUrl,
-            String spaceUsedUrl
-    ) {
+    /** 알라딘 중고 목록 링크 하나. 가격은 조회하지 않는다(API 10-30 종료, robots.txt 전면 차단). */
+    public record UsedBookInfo(String productUrl) {
     }
 
     public record NewBookInfo(

@@ -626,6 +626,8 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   }
 
   // Get section statuses from metadata
+  const usedBookProductUrl = searchResult?.usedBook?.productUrl
+  const usedSection = searchResult?.metadata.sectionStatuses.find(s => s.section === 'USED_BOOK')
   const libSection = searchResult?.metadata.sectionStatuses.find(s => s.section === 'PUBLIC_LIBRARY')
   const libSectionStatus = libSection?.status
   const newBookSection = searchResult?.metadata.sectionStatuses.find(s => s.section === 'NEW_BOOK')
@@ -849,58 +851,33 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
               )
             })()}
 
-            {/* ==================== USED BOOK SECTION ==================== */}
-            {searchResult.usedBook && (
-              <SectionCard
-                icon={
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
-                    <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8M16 6l-4-4-4 4M12 2v13" />
-                  </svg>
-                }
-                title="중고도서"
-              >
-                <div className="space-y-0">
-                  {([
-                    { label: '개인 판매', price: searchResult.usedBook.userUsedPrice, url: searchResult.usedBook.userUsedUrl },
-                    { label: '알라딘 온라인', price: searchResult.usedBook.aladinUsedPrice, url: searchResult.usedBook.aladinUsedUrl },
-                  ] as const).map(({ label, price, url }) => (
-                    <div key={label} className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
-                      <p className="text-sm text-slate-600">{label}</p>
-                      <div className="flex items-center gap-2">
-                        {price != null ? (
-                          <>
-                            <span className="font-semibold text-slate-800 text-sm">{price.toLocaleString()}원</span>
-                            {isSafeUrl(url) && (
-                              <a
-                                href={url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-aladin/10
-                                  text-xs text-brand-aladin font-medium hover:bg-brand-aladin/20 transition"
-                              >
-                                알라딘
-                                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
-                                </svg>
-                              </a>
-                            )}
-                          </>
-                        ) : (
-                          <span className="text-sm text-slate-500">재고 없음</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+            {/* ==================== USED BOOK / NEARBY STORE SECTIONS ==================== */}
+            {usedSection?.reason !== 'NON_STANDARD_ISBN' && (
+              <>
+                <SectionCard title="중고도서" icon={<span aria-hidden="true" className="text-slate-400">↗</span>}>
+                  <div className="flex items-center justify-between gap-3 py-1">
+                    <p className="text-sm text-slate-600">중고 가격과 판매 정보를 확인해보세요</p>
+                    <a href={isSafeUrl(usedBookProductUrl) ? usedBookProductUrl : `https://www.aladin.co.kr/shop/UsedShop/wuseditemall.aspx?ISBN=${encodeURIComponent(searchResult.book.isbn13 ?? isbn13)}`}
+                      target="_blank" rel="noopener noreferrer"
+                      aria-label="알라딘에서 확인 (중고 목록, 새 창)"
+                      className="shrink-0 px-3 py-2 rounded-lg bg-brand-aladin/10 text-xs text-brand-aladin font-medium">
+                      알라딘에서 확인
+                    </a>
+                  </div>
+                </SectionCard>
+                <SectionCard title="가까운 알라딘 매장" icon={<span aria-hidden="true" className="text-slate-400">⌖</span>}>
+                  {/* ISBN·위치가 바뀌면 다시 마운트 — 이전 목록이 새 조건에서 한 프레임이라도 보이지 않게 */}
                   <OffStoreList
+                    key={`${searchResult.book.isbn13 ?? isbn13}:${userLatRef.current}:${userLonRef.current}`}
                     isbn13={searchResult.book.isbn13 ?? isbn13}
                     lat={userLatRef.current}
                     lon={userLonRef.current}
-                    spaceUsedPrice={searchResult.usedBook.spaceUsedPrice}
-                    spaceUsedUrl={searchResult.usedBook.spaceUsedUrl}
                     onRequestLocation={handleGetLocation}
+                    locationLoading={locLoading}
+                    locationError={locError}
                   />
-                </div>
-              </SectionCard>
+                </SectionCard>
+              </>
             )}
 
             {/* ==================== NEW BOOK SECTION ==================== */}
