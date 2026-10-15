@@ -24,7 +24,6 @@ aladin:
   ttb-key: ${ALADIN_TTB_KEY:}
   base-url: https://www.aladin.co.kr/ttb/api
   identification-timeout: 500
-  timeout: 2000
   # ItemList(featured 배치 전용) — 사용자 응답 예산과 무관. BESTSELLER 실측 2s 초과(07-12)
   list-timeout: 10000
 
@@ -62,7 +61,7 @@ search:
   public-library-page-size: 5    # 최초 조회와 더보기 1회당 fan-out 수
   public-library-max-count: 20   # 더보기로 접근 가능한 최대 후보 수 = findNearest 상한
   public-library-fanout-timeout: 2200
-  # 3태스크/요청(usedBook·publicLibrary부모·millie) × 목표 동시 요청 4건.
+  # PR-2: 최대 2태스크/요청(publicLibrary부모·millie). 중고는 로컬 링크 생성만 하므로 제출하지 않는다.
   # baseline 실측(2026-07-03, 하네스 v2): 이 풀(구 3)이 1차 병목 —
   # FAILED율 절벽 VU8(0.8%)↔VU12(97.8%), VU15 종료 시점 유령 큐 470 (notes/todo/benchmark-results.md §4)
   executor-pool-size: 12

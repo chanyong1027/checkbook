@@ -28,6 +28,7 @@ import org.springframework.validation.beanvalidation.MethodValidationPostProcess
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
@@ -37,6 +38,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -84,7 +86,7 @@ class SearchControllerTest {
                 .thenReturn(new SearchResponse(
                         new SearchResponse.BookInfo("자바의 정석", "남궁성", "9788994492032", "도우출판", null),
                         List.of(),
-                        null,
+                        new SearchResponse.UsedBookInfo("https://www.aladin.co.kr/shop/UsedShop/wuseditemall.aspx?ISBN=9788994492032"),
                         new SearchResponse.NewBookInfo(32000, "https://www.yes24.com/product/goods/1"),
                         new SearchResponse.SubscriptionInfo(MillieAvailability.unavailable()),
                         new SearchResponse.SearchMetadata(
@@ -103,6 +105,12 @@ class SearchControllerTest {
                 .andExpect(jsonPath("$.book.title").value("자바의 정석"))
                 .andExpect(jsonPath("$.publicLibraries").isArray())
                 .andExpect(jsonPath("$.newBook.price").value(32000))
+                .andExpect(jsonPath("$.usedBook.productUrl").value(
+                        "https://www.aladin.co.kr/shop/UsedShop/wuseditemall.aspx?ISBN=9788994492032"))
+                // PR-2: 중고 칸은 링크 하나만 — 옛 가격·채널 링크 필드 6개는 응답에서 빠진다
+                .andExpect(jsonPath("$.usedBook.*", hasSize(1)))
+                .andExpect(jsonPath("$.usedBook.userUsedPrice").doesNotExist())
+                .andExpect(jsonPath("$.usedBook.spaceUsedUrl").doesNotExist())
                 // 계약 2절: reason은 기계용 코드(nullable), identification{source, yes24}
                 .andExpect(jsonPath("$.metadata.sectionStatuses[0].reason").value("NO_LOCATION"))
                 .andExpect(jsonPath("$.metadata.sectionStatuses[1].reason").value(nullValue()))
@@ -201,7 +209,12 @@ class SearchControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.stores").isArray())
                 .andExpect(jsonPath("$.stores[0].storeName").value("종로점"))
-                .andExpect(jsonPath("$.stores[0].distance").value(0.5));
+                .andExpect(jsonPath("$.stores[0].distance").value(0.5))
+                .andExpect(jsonPath("$.stores[0].link").value("https://link"))
+                // 재고는 조회하지 않는다(robots 전면 차단) — 재고 필드가 없어야 화면이 있음·없음으로 오해하지 않는다
+                .andExpect(jsonPath("$.stores[0].stockStatus").doesNotExist())
+                .andExpect(jsonPath("$.stores[0].stockCount").doesNotExist())
+                .andExpect(jsonPath("$.stores[0].checkedAt").doesNotExist());
     }
 
     @Test
@@ -211,6 +224,16 @@ class SearchControllerTest {
                         .param("lon", "126.9780"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("ISBN_REQUIRED"));
+    }
+
+    @Test
+    void offStoresWithNon13DigitIsbnReturns400WithoutCallingService() throws Exception {
+        mockMvc.perform(get("/api/off-stores")
+                        .param("isbn13", "978893643412")
+                        .param("lat", "37.5665")
+                        .param("lon", "126.9780"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(aladinBookService);
     }
 
     @Test
@@ -224,7 +247,7 @@ class SearchControllerTest {
     @Test
     void offStoresApiFailureReturns500() throws Exception {
         when(aladinBookService.getOffStoreList("9788936439743", 37.5665, 126.9780))
-                .thenThrow(new IllegalStateException("알라딘 매장 재고 조회 오류"));
+                .thenThrow(new IllegalStateException("매장 목록 조회 오류"));
 
         mockMvc.perform(get("/api/off-stores")
                         .param("isbn13", "9788936439743")

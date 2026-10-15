@@ -49,8 +49,6 @@ class PoolRejectionFallbackTest {
     private static final String TEST_ISBN = "9788936439743";
 
     @Mock
-    private AladinBookService aladinBookService;
-    @Mock
     private BookIdentificationService identificationService;
     @Mock
     private LibraryAvailabilitySnapshotService snapshotService;
@@ -89,7 +87,7 @@ class PoolRejectionFallbackTest {
             ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
             ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
             SearchService service = new SearchService(
-                    identificationService, aladinBookService, millieBookService, availabilityService, saturated);
+                    identificationService, millieBookService, availabilityService, saturated);
 
             // 헬퍼가 없으면 여기서 RejectedExecutionException이 그대로 터진다
             SearchResponse response = service.search(TEST_ISBN, 37.5665, 126.9780, null);
@@ -102,7 +100,7 @@ class PoolRejectionFallbackTest {
                             SearchResponse.SectionStatusDetail::section,
                             SearchResponse.SectionStatusDetail::status));
             assertThat(statuses.get(SearchSection.PUBLIC_LIBRARY)).isEqualTo(SearchSectionStatus.FAILED);
-            assertThat(statuses.get(SearchSection.USED_BOOK)).isEqualTo(SearchSectionStatus.FAILED);
+            assertThat(statuses.get(SearchSection.USED_BOOK)).isEqualTo(SearchSectionStatus.SUCCESS);
             assertThat(statuses.get(SearchSection.SUBSCRIPTION)).isEqualTo(SearchSectionStatus.FAILED);
 
             // 거절 사유는 TPE 원문이 아니라 정규화된 문구로 노출
@@ -150,7 +148,7 @@ class PoolRejectionFallbackTest {
             ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
             ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
             SearchService service = new SearchService(
-                    identificationService, aladinBookService, millieBookService, availabilityService, healthyParents);
+                    identificationService, millieBookService, availabilityService, healthyParents);
 
             SearchResponse response = service.search(TEST_ISBN, 37.5665, 126.9780, null);
 

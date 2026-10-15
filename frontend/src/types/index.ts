@@ -53,12 +53,7 @@ export interface PublicLibraryInfo {
 }
 
 export interface UsedBookInfo {
-  userUsedPrice: number | null
-  aladinUsedPrice: number | null
-  spaceUsedPrice: number | null
-  userUsedUrl: string | null
-  aladinUsedUrl: string | null
-  spaceUsedUrl: string | null
+  productUrl: string | null
 }
 
 export interface OffStoreInfo {

@@ -54,7 +54,7 @@ public class SearchController {
 
     @GetMapping("/off-stores")
     public ResponseEntity<OffStoreResponse> getOffStores(
-            @RequestParam @NotBlank String isbn13,
+            @RequestParam @NotBlank @Pattern(regexp = "\\d{13}") String isbn13,
             @RequestParam Double lat,
             @RequestParam Double lon
     ) {

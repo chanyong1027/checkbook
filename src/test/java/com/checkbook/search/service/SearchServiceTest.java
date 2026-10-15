@@ -1,6 +1,5 @@
 package com.checkbook.search.service;
 
-import com.checkbook.client.aladin.dto.AladinUsedBookResult;
 import com.checkbook.client.millie.MillieClientException;
 import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
@@ -71,8 +70,6 @@ class SearchServiceTest {
     @Mock
     private BookIdentificationService identificationService;
     @Mock
-    private AladinBookService aladinBookService;
-    @Mock
     private MillieBookService millieBookService;
     @Mock
     private PublicLibraryAvailabilityService publicLibraryAvailabilityService;
@@ -84,8 +81,7 @@ class SearchServiceTest {
     void setUp() {
         searchExecutor = Executors.newFixedThreadPool(3);
         searchService = new SearchService(
-                identificationService, aladinBookService, millieBookService, publicLibraryAvailabilityService, searchExecutor);
-        when(aladinBookService.getUsedBooks(ISBN)).thenReturn(new AladinUsedBookResult(6500, null, null, "https://u", null, null));
+                identificationService, millieBookService, publicLibraryAvailabilityService, searchExecutor);
         when(millieBookService.findAvailability(any(), any())).thenReturn(MillieAvailability.unavailable());
         when(publicLibraryAvailabilityService.fetch(ISBN, LAT, LON, 0)).thenReturn(libraryPage());
     }
@@ -192,7 +188,7 @@ class SearchServiceTest {
         assertThat(r.metadata().failures()).isEmpty();
         // F1: ISBN 기반 호출을 하지 않는다 (거짓 "미보유" 방지)
         verify(identificationService, never()).identify(anyString(), any());
-        verifyNoInteractions(publicLibraryAvailabilityService, aladinBookService, millieBookService);
+        verifyNoInteractions(publicLibraryAvailabilityService, millieBookService);
     }
 
     // YES24가 찾았고 힌트도 있으면 힌트는 밀리 보조 매칭에만 넘긴다(책 정보·가격은 YES24) — 결정 E8
@@ -221,7 +217,7 @@ class SearchServiceTest {
         assertStatus(r, SearchSection.SUBSCRIPTION, SearchSectionStatus.SUCCESS, null);
         assertThat(r.subscription().millie().available()).isTrue();
         assertThat(r.metadata().identification().source()).isEqualTo(Source.HINT);
-        verifyNoInteractions(aladinBookService, publicLibraryAvailabilityService);
+        verifyNoInteractions(publicLibraryAvailabilityService);
     }
 
     // ===== NEW_BOOK 매핑표 =====
@@ -364,26 +360,31 @@ class SearchServiceTest {
     }
 
     @Test
-    void usedBookFailureIsFailedUnavailable() {
-        when(identificationService.identify(ISBN, null)).thenReturn(found(13500, YES24_URL));
-        when(aladinBookService.getUsedBooks(ISBN)).thenThrow(new RuntimeException("알라딘 오류"));
+    void usedLinkWithNoMetadataOrLocationDoesNotUseExecutor() {
+        when(identificationService.identify(ISBN, null)).thenReturn(miss(Yes24Status.NOT_FOUND, true));
+        ExecutorService unusedExecutor = org.mockito.Mockito.mock(ExecutorService.class);
+        SearchService service = new SearchService(
+                identificationService, millieBookService, publicLibraryAvailabilityService, unusedExecutor);
 
-        SearchResponse r = assertConsistent(searchService.search(ISBN, null, null, null));
+        SearchResponse response = assertConsistent(service.search(ISBN, null, null, null));
 
-        assertStatus(r, SearchSection.USED_BOOK, SearchSectionStatus.FAILED, SearchSectionReason.UNAVAILABLE);
-        assertThat(r.usedBook()).isNull();
-        assertThat(r.metadata().failures()).containsExactly(
-                new SearchResponse.FailureDetail(SearchSection.USED_BOOK, "알라딘 오류"));
+        assertStatus(response, SearchSection.USED_BOOK, SearchSectionStatus.SUCCESS, null);
+        assertThat(response.usedBook().productUrl()).endsWith("ISBN=" + ISBN);
+        verifyNoInteractions(unusedExecutor, millieBookService, publicLibraryAvailabilityService);
     }
 
     @Test
-    void usedBookSuccessCarriesPrices() {
+    void usedBookSuccessCarriesOnlyOneLink() {
         when(identificationService.identify(ISBN, null)).thenReturn(found(13500, YES24_URL));
 
         SearchResponse r = assertConsistent(searchService.search(ISBN, null, null, null));
 
         assertStatus(r, SearchSection.USED_BOOK, SearchSectionStatus.SUCCESS, null);
-        assertThat(r.usedBook().userUsedPrice()).isEqualTo(6500);
+        assertThat(r.usedBook().productUrl()).isEqualTo(
+                "https://www.aladin.co.kr/shop/UsedShop/wuseditemall.aspx?ISBN=" + ISBN);
+        // 옛 가격·채널 링크 필드 6개는 삭제(PR-2b 크롤러 중단으로 남길 이유 없음)
+        assertThat(java.util.Arrays.stream(SearchResponse.UsedBookInfo.class.getRecordComponents())
+                .map(java.lang.reflect.RecordComponent::getName)).containsExactly("productUrl");
     }
 
     // executor 거절(풀 포화)도 FAILED — reason은 UNAVAILABLE, 원인은 failures 문구로 구분 (결정 E5)
@@ -394,10 +395,12 @@ class SearchServiceTest {
 
         SearchResponse r = assertConsistent(searchService.search(ISBN, LAT, LON, null));
 
-        for (SearchSection section : List.of(SearchSection.PUBLIC_LIBRARY, SearchSection.USED_BOOK, SearchSection.SUBSCRIPTION)) {
+        for (SearchSection section : List.of(SearchSection.PUBLIC_LIBRARY, SearchSection.SUBSCRIPTION)) {
             assertStatus(r, section, SearchSectionStatus.FAILED, SearchSectionReason.UNAVAILABLE);
             assertThat(r.metadata().failures()).contains(new SearchResponse.FailureDetail(section, "검색 풀 포화"));
         }
+        assertStatus(r, SearchSection.USED_BOOK, SearchSectionStatus.SUCCESS, null);
+        assertThat(r.usedBook().productUrl()).endsWith("ISBN=" + ISBN);
         // 식별은 풀을 거치지 않으므로 새 책은 그대로
         assertStatus(r, SearchSection.NEW_BOOK, SearchSectionStatus.SUCCESS, null);
     }

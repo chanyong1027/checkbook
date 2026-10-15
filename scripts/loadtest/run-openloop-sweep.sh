@@ -73,10 +73,19 @@ m=json.load(open(sys.argv[1]))["metrics"]
 def rate(n): return f"{m[n]['value']*100:.2f}%" if n in m else "n/a"
 d=m["http_req_duration"]
 print(f"http rps={m['http_reqs']['rate']:.2f}  p95={d['p(95)']:.0f}ms  med={d['med']:.0f}ms")
-for n in ["public_library_failed","public_library_incomplete","used_book_failed",
+for n in ["public_library_failed","public_library_incomplete",
           "subscription_failed","identification_failed","search_available","http_req_failed"]:
     print(f"{n}={rate(n)}", end="  ")
 print()
+# PR-2: searchExecutor 작업은 도서관·밀리 둘뿐 — 거절 증분과 대조할 FAILED 건수(비율 역산 금지: 밀리 분모가 흔들림)
+fp=m.get("public_library_failed",{}).get("passes",0); fs=m.get("subscription_failed",{}).get("passes",0)
+print(f"FAILED 건수 publib={fp:.0f} sub={fs:.0f} 합={fp+fs:.0f}  (searchExecutor 거절 증분과 대조)")
+# HTTP는 성공했는데 불가용인 건수 — 도서관 섹션 SKIPPED(비표준 ISBN·위치 누락 = 하네스 오류) 또는 응답 계약 붕괴.
+# 비율이 아니라 건수로 비교: 전송 실패가 섞여도 하네스 고장을 놓치지 않게
+sa=m.get("search_available",{}); hf=m.get("http_req_failed",{})
+extra=sa.get("fails",0)-hf.get("passes",0)
+if extra>0:
+    print(f"경고: HTTP 성공인데 불가용 {extra:.0f}건 — 하네스 무효 의심(비표준 ISBN·위치 누락) 또는 응답 계약 붕괴(k6 로그 '응답 계약 붕괴' 확인)")
 di=m.get("dropped_iterations",{}).get("count",0)
 print(f"dropped_iterations={di}  vus_max={m.get('vus_max',{}).get('max','?')}")
 EOF

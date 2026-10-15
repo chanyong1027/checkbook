@@ -2,7 +2,6 @@ package com.checkbook.search.service;
 
 import com.checkbook.search.dto.IdentificationResult;
 import com.checkbook.search.dto.IdentifiedBook;
-import com.checkbook.client.aladin.dto.AladinUsedBookResult;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
 import com.checkbook.publiclibrary.service.PublicLibraryAvailabilityService;
@@ -50,8 +49,6 @@ class ConcurrentRequestContentionTest {
     private static final int API_LATENCY_MS = 1500;
 
     @Mock
-    private AladinBookService aladinBookService;
-    @Mock
     private BookIdentificationService identificationService;
     @Mock
     private LibraryAvailabilitySnapshotService snapshotService;
@@ -90,7 +87,7 @@ class ConcurrentRequestContentionTest {
             ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
             ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
             SearchService service = new SearchService(
-                    identificationService, aladinBookService, millieBookService, availabilityService, searchPool);
+                    identificationService, millieBookService, availabilityService, searchPool);
 
             Callable<SearchResponse> call = () -> service.search(TEST_ISBN, 37.5665, 126.9780, null);
             List<Future<SearchResponse>> futures = callers.invokeAll(List.of(call, call));
@@ -113,8 +110,6 @@ class ConcurrentRequestContentionTest {
                         IdentificationResult.Yes24Status.FOUND, true,
                         new IdentifiedBook("혼자가 혼자에게", "성해나", TEST_ISBN, "창비", null),
                         16800, "https://www.yes24.com/product/goods/1"));
-        when(aladinBookService.getUsedBooks(TEST_ISBN))
-                .thenReturn(new AladinUsedBookResult(5000, 6000, 7000, "url1", "url2", "url3"));
         when(millieBookService.findAvailability(any(), any()))
                 .thenReturn(MillieAvailability.unavailable());
 

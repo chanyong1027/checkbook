@@ -2,134 +2,124 @@ package com.checkbook.search.service;
 
 import com.checkbook.aladinstore.domain.AladinStore;
 import com.checkbook.aladinstore.repository.AladinStoreRepository;
-import com.checkbook.client.aladin.AladinClient;
-import com.checkbook.client.aladin.dto.AladinOffStoreResponse;
-import com.checkbook.client.aladin.dto.AladinUsedBookResult;
+import com.checkbook.common.exception.BusinessException;
+import com.checkbook.common.exception.ErrorCode;
 import com.checkbook.search.dto.OffStoreResponse;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.lang.reflect.RecordComponent;
+import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+/**
+ * 가까운 매장 목록. robots.txt 전면 차단(10-15)으로 재고는 조회하지 않고 매장별 확인 링크만 준다.
+ */
 @ExtendWith(MockitoExtension.class)
 class AladinBookServiceTest {
 
-    @Mock
-    private AladinClient aladinClient;
+    private static final String ISBN = "9788936434120";
 
     @Mock
     private AladinStoreRepository aladinStoreRepository;
 
-    @InjectMocks
     private AladinBookService aladinBookService;
 
-    @Test
-    void getUsedBooksDelegatesToAladinClient() {
-        AladinUsedBookResult expected = new AladinUsedBookResult(
-                6500, 7000, 6000,
-                "https://url1", "https://url2", "https://url3");
-        when(aladinClient.getUsedBooks("9788936439743")).thenReturn(expected);
-
-        AladinUsedBookResult result = aladinBookService.getUsedBooks("9788936439743");
-
-        assertThat(result).isEqualTo(expected);
-        verify(aladinClient).getUsedBooks("9788936439743");
+    @BeforeEach
+    void setUp() {
+        // 외부 클라이언트 없이 저장소만으로 만들어진다 — 알라딘 웹·API를 부르지 않는다
+        aladinBookService = new AladinBookService(aladinStoreRepository);
     }
 
     @Test
-    void getUsedBooksReturnsNullWhenClientReturnsNull() {
-        when(aladinClient.getUsedBooks("9788936439743")).thenReturn(null);
+    void returnsNearestFiveWithStoreLinks() {
+        List<AladinStore> stores = IntStream.rangeClosed(1, 7)
+                .mapToObj(number -> AladinStore.builder().offCode("store" + number)
+                        .name("매장" + number).address("주소")
+                        .lat(37.5 + number * 0.01).lon(127.0).build())
+                .toList().reversed();
+        when(aladinStoreRepository.findAll()).thenReturn(stores);
 
-        assertThat(aladinBookService.getUsedBooks("9788936439743")).isNull();
+        OffStoreResponse result = aladinBookService.getOffStoreList(ISBN, 37.5, 127.0);
+
+        assertThat(result.stores()).extracting(OffStoreResponse.StoreInfo::storeName)
+                .containsExactly("매장1", "매장2", "매장3", "매장4", "매장5");
+        assertThat(result.stores().get(0).link()).isEqualTo(
+                "https://www.aladin.co.kr/usedstore/wproduct.aspx?ISBN=" + ISBN + "&OffCode=store1");
+        assertThat(result.stores().get(0).distance()).isEqualTo(1.1);
     }
 
     @Test
-    void getOffStoreListReturnsSortedByDistance() {
-        List<AladinOffStoreResponse.OffStoreInfo> apiStores = List.of(
-                new AladinOffStoreResponse.OffStoreInfo("Jongno", "종로점", "https://link1"),
-                new AladinOffStoreResponse.OffStoreInfo("Geondae", "건대점", "https://link3")
-        );
-        when(aladinClient.getOffStoreList("9788936439743")).thenReturn(apiStores);
-        when(aladinClient.lookupItemId("9788936439743")).thenReturn(Optional.of(123L));
-
-        AladinStore jongro = AladinStore.builder()
-                .offCode("Jongno").name("종로점").address("서울 종로구").lat(37.5700).lon(126.9920).build();
-        AladinStore kondae = AladinStore.builder()
-                .offCode("Geondae").name("건대점").address("서울 광진구").lat(37.5407).lon(127.0700).build();
-        when(aladinStoreRepository.findByOffCodeIn(List.of("Jongno", "Geondae")))
-                .thenReturn(List.of(jongro, kondae));
-
-        OffStoreResponse result = aladinBookService.getOffStoreList("9788936439743", 37.5665, 126.9780);
-
-        assertThat(result.stores()).hasSize(2);
-        assertThat(result.stores().get(0).storeName()).isEqualTo("종로점");
-        assertThat(result.stores().get(0).distance()).isEqualTo(1.3);
-        assertThat(result.stores().get(0).link())
-                .isEqualTo("https://www.aladin.co.kr/usedstore/wproduct.aspx?ItemId=123&OffCode=Jongno&partner=openAPI");
-        assertThat(result.stores().get(1).storeName()).isEqualTo("건대점");
-        assertThat(result.stores().get(1).distance()).isGreaterThan(result.stores().get(0).distance());
-        assertThat(result.stores().get(1).link())
-                .isEqualTo("https://www.aladin.co.kr/usedstore/wproduct.aspx?ItemId=123&OffCode=Geondae&partner=openAPI");
+    void storeInfoCarriesNoStockFields() {
+        // 재고를 확인하지 않으므로 응답에도 재고 필드를 두지 않는다(있음·없음으로 오해될 여지 제거)
+        assertThat(Arrays.stream(OffStoreResponse.StoreInfo.class.getRecordComponents()).map(RecordComponent::getName))
+                .containsExactly("storeName", "address", "distance", "link", "latitude", "longitude");
     }
 
     @Test
-    void getOffStoreListEmptyReturnsEmptyList() {
-        when(aladinClient.getOffStoreList("9788936439743")).thenReturn(List.of());
+    void newLocationChangesSelectedStores() {
+        AladinStore north = AladinStore.builder().offCode("north").name("북쪽").address("주소")
+                .lat(38.0).lon(127.0).build();
+        AladinStore south = AladinStore.builder().offCode("south").name("남쪽").address("주소")
+                .lat(37.0).lon(127.0).build();
+        when(aladinStoreRepository.findAll()).thenReturn(List.of(north, south));
 
-        OffStoreResponse result = aladinBookService.getOffStoreList("9788936439743", 37.5665, 126.9780);
-
-        assertThat(result.stores()).isEmpty();
+        assertThat(aladinBookService.getOffStoreList(ISBN, 37.0, 127.0).stores().get(0).storeName())
+                .isEqualTo("남쪽");
+        assertThat(aladinBookService.getOffStoreList(ISBN, 38.0, 127.0).stores().get(0).storeName())
+                .isEqualTo("북쪽");
     }
 
     @Test
-    void getOffStoreListUnmatchedOffCodeReturnsStoreWithoutLocation() {
-        List<AladinOffStoreResponse.OffStoreInfo> apiStores = List.of(
-                new AladinOffStoreResponse.OffStoreInfo("NewStore", "신규점", "https://link-new")
-        );
-        when(aladinClient.getOffStoreList("9788936439743")).thenReturn(apiStores);
-        when(aladinClient.lookupItemId("9788936439743")).thenReturn(Optional.of(456L));
-        when(aladinStoreRepository.findByOffCodeIn(List.of("NewStore"))).thenReturn(List.of());
+    void storesWithoutValidCoordinatesAreSkipped() {
+        AladinStore noCoordinates = AladinStore.builder().offCode("none").name("좌표없음").address("주소").build();
+        AladinStore valid = AladinStore.builder().offCode("ok").name("정상").address("주소")
+                .lat(37.5).lon(127.0).build();
+        when(aladinStoreRepository.findAll()).thenReturn(List.of(noCoordinates, valid));
 
-        OffStoreResponse result = aladinBookService.getOffStoreList("9788936439743", 37.5665, 126.9780);
-
-        assertThat(result.stores()).hasSize(1);
-        assertThat(result.stores().get(0).storeName()).isEqualTo("신규점");
-        assertThat(result.stores().get(0).distance()).isNull();
-        assertThat(result.stores().get(0).address()).isNull();
-        assertThat(result.stores().get(0).link())
-                .isEqualTo("https://www.aladin.co.kr/usedstore/wproduct.aspx?ItemId=456&OffCode=NewStore&partner=openAPI");
+        assertThat(aladinBookService.getOffStoreList(ISBN, 37.5, 127.0).stores())
+                .extracting(OffStoreResponse.StoreInfo::storeName).containsExactly("정상");
     }
 
     @Test
-    void getOffStoreListFallsBackToApiLinkWhenItemIdLookupFails() {
-        List<AladinOffStoreResponse.OffStoreInfo> apiStores = List.of(
-                new AladinOffStoreResponse.OffStoreInfo("Jongno", "종로점", "https://fallback-link")
-        );
-        when(aladinClient.getOffStoreList("9788936439743")).thenReturn(apiStores);
-        when(aladinClient.lookupItemId("9788936439743")).thenReturn(Optional.empty());
-        when(aladinStoreRepository.findByOffCodeIn(List.of("Jongno"))).thenReturn(List.of());
+    void sameDistanceIsOrderedByStoreCode() {
+        // 같은 거리면 매장 코드 순 — 요청마다 순서가 흔들리지 않게
+        AladinStore b = AladinStore.builder().offCode("b").name("비").address("주소").lat(37.6).lon(127.0).build();
+        AladinStore a = AladinStore.builder().offCode("a").name("에이").address("주소").lat(37.6).lon(127.0).build();
+        when(aladinStoreRepository.findAll()).thenReturn(List.of(b, a));
 
-        OffStoreResponse result = aladinBookService.getOffStoreList("9788936439743", 37.5665, 126.9780);
-
-        assertThat(result.stores()).hasSize(1);
-        assertThat(result.stores().get(0).link()).isEqualTo("https://fallback-link");
+        assertThat(aladinBookService.getOffStoreList(ISBN, 37.5, 127.0).stores())
+                .extracting(OffStoreResponse.StoreInfo::storeName).containsExactly("에이", "비");
     }
 
     @Test
-    void getOffStoreListApiFailureThrows() {
-        when(aladinClient.getOffStoreList("9788936439743"))
-                .thenThrow(new IllegalStateException("알라딘 매장 재고 조회 오류"));
+    void noStoresReturnsEmptyList() {
+        when(aladinStoreRepository.findAll()).thenReturn(List.of());
+        assertThat(aladinBookService.getOffStoreList(ISBN, 37.5, 127.0).stores()).isEmpty();
+    }
 
-        assertThatThrownBy(() -> aladinBookService.getOffStoreList("9788936439743", 37.5665, 126.9780))
-                .isInstanceOf(IllegalStateException.class);
+    @Test
+    void invalidIsbnAndNonFiniteOrOutOfRangeLocationAreRejectedBeforeLookup() {
+        assertThatThrownBy(() -> aladinBookService.getOffStoreList("2004566000649", 37.5, 127.0))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.NON_STANDARD_ISBN);
+        for (double latitude : new double[] {Double.NaN, Double.POSITIVE_INFINITY, 91}) {
+            assertThatThrownBy(() -> aladinBookService.getOffStoreList(ISBN, latitude, 127.0))
+                    .isInstanceOf(BusinessException.class)
+                    .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_LOCATION);
+        }
+        assertThatThrownBy(() -> aladinBookService.getOffStoreList(ISBN, 37.5, -181))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", ErrorCode.INVALID_LOCATION);
+        verifyNoInteractions(aladinStoreRepository);
     }
 }

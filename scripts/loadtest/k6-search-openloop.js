@@ -1,10 +1,10 @@
 import http from 'k6/http';
 import { check } from 'k6';
 import { Rate } from 'k6/metrics';
+import exec from 'k6/execution';
 // SLI 정의·분모·시그니처: notes/decisions/2026-07-07-sli-slo-체계-정의.md §6
 const publicLibraryFailed = new Rate('public_library_failed');
 const publicLibraryIncomplete = new Rate('public_library_incomplete');
-const usedBookFailed = new Rate('used_book_failed');
 const subscriptionFailed = new Rate('subscription_failed');
 const identificationFailed = new Rate('identification_failed');
 const searchAvailable = new Rate('search_available');
@@ -26,9 +26,13 @@ export const options = {
     'http_req_failed': ['rate<0.01'],
   },
 };
+// 요청마다 처음 보는 ISBN(캐시 적중 방지). 978 + RUN(2) + 시나리오 전체 반복 번호(7) + 체크 숫자.
+// VU별 반복 번호(__ITER)를 쓰면 체크 숫자 때문에 자리가 모자라 긴 실행에서 반복된다 — 시나리오 전체 번호는 1천만 개까지 고유.
+// iterationInTest는 시나리오마다 0부터 다시 센다: 시나리오를 추가하면 접두를 나눌 것
 function uniqueIsbn13() {
-  const tail = RUN + String(__VU % 1000).padStart(3, '0') + String(__ITER % 100000).padStart(5, '0');
-  return '978' + tail;
+  const base = '978' + RUN + String(exec.scenario.iterationInTest % 10000000).padStart(7, '0');
+  const sum = [...base].reduce((total, digit, index) => total + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
+  return base + String((10 - sum % 10) % 10);
 }
 function sectionStatus(statuses, section) {
   const found = statuses.find((s) => s && s.section === section);
@@ -55,11 +59,14 @@ export default function () {
       console.warn(`응답 계약 붕괴: status=${res.status} JSON 파싱 실패`); // 조용한 all-green 방지
     }
   }
-  const usedStatus = statuses ? sectionStatus(statuses, 'USED_BOOK') : null;
-
-  // availability — 분모는 전체 요청: 5xx·전송 실패·파싱 실패도 add(false)가 찍혀야 sanity 역할이 성립.
-  // usedStatus === null(sectionStatuses 부재·USED_BOOK 누락)도 계약 위반이므로 불가용
-  searchAvailable.add(res.status === 200 && statuses !== null && usedStatus !== null && usedStatus !== 'SKIPPED');
+  // PR-2: USED_BOOK은 외부 호출 없는 링크라 가용성 판단에서 뺀다. 가용 = HTTP 200 + 남은 세 섹션 존재
+  // + 도서관 섹션이 건너뛰지 않음(SLI §2 '비스킵'). k6는 항상 위치를 보내므로 PUBLIC_LIBRARY==SKIPPED는
+  // 비표준 ISBN(생성기 고장)이나 위치 누락 = 하네스 오류다. 이 조건이 없으면 고장 난 하네스가 빠르고 FAILED 없는
+  // 응답만 받아 모든 지표가 초록으로 통과한다(옛 usedStatus!=='SKIPPED' 조건이 하던 역할)
+  const contractValid = statuses !== null && ['PUBLIC_LIBRARY', 'NEW_BOOK', 'SUBSCRIPTION']
+    .every(section => sectionStatus(statuses, section) !== null);
+  const libraryAttempted = statuses !== null && sectionStatus(statuses, 'PUBLIC_LIBRARY') !== 'SKIPPED';
+  searchAvailable.add(res.status === 200 && contractValid && libraryAttempted);
 
   if (statuses === null) {
     return;
@@ -71,10 +78,10 @@ export default function () {
   const libs = body.publicLibraries || [];
   publicLibraryIncomplete.add(pubStatus === 'SUCCESS' && libs.length < 5);
 
-  // quality 신규 2종 — SKIPPED(미시도)는 분모에서 제외: availability 문제의 quality 이중 계상 방지
-  addFailedIfAttempted(usedBookFailed, usedStatus);
+  // subscription quality — SKIPPED(미시도)는 분모에서 제외. 중고 외부 조회 실패율은 PR-2에서 폐기.
   addFailedIfAttempted(subscriptionFailed, sectionStatus(statuses, 'SUBSCRIPTION'));
 
-  // availability 보조 — NEW_BOOK==FAILED가 식별 실패 시그니처(키워드 스킵·ISBN 우회 양쪽 커버)
+  // availability 보조 — NEW_BOOK==FAILED = YES24 식별 호출이 나갔다가 실패(타임아웃·오류·429).
+  // 찾지 못함(NOT_FOUND)은 SUCCESS, 우리 쪽 선제한으로 안 보낸 경우는 SKIPPED라 여기 잡히지 않는다
   identificationFailed.add(sectionStatus(statuses, 'NEW_BOOK') === 'FAILED');
 }

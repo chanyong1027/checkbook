@@ -118,8 +118,13 @@ closed-loop(VU)은 시스템이 느려지면 유입도 줄어드는 coordinated 
 
 ```bash
 # <RATE> <TIMEUNIT> <RUN(고유)> <라벨(효과rps)> <코드상태>  — 소수 도착률은 TIMEUNIT으로: 14.5 = RATE 29/2s
-./scripts/loadtest/run-openloop-sweep.sh 29 2s 71 14.5 lazy5
+./scripts/loadtest/run-openloop-sweep.sh 29 2s 81 14.5 pr2
 ```
+`RUN`·코드상태가 같으면 기존 결과 JSON을 덮어쓴다 — 런마다 새 값을 쓸 것. 스크립트 자체 검사(ISBN 생성·가용성 판정)는
+`node --test scripts/loadtest/k6-search-openloop.test.cjs`로 돌린다(CI에 없음, k6 스크립트를 고치면 직접 실행).
+
+> ⚠️ `k6-search-fault.js`·`k6-search-probe.js`·`k6-search-rampup.js`는 아직 검증 숫자 없는 ISBN을 만든다. 앱이 ISBN 형식을
+> 검사한 뒤로(#31) 대부분 비표준 코드로 처리돼 외부 호출을 건너뛰므로, 고치기 전 측정은 무효다.
 
 런 직후 판정 게이트(스크립트 출력에서 순서대로 확인):
 1. **http rps ≈ 목표 도착률(±2%)** — 괴리 시 결과 폐기하고 하네스부터 의심(§7 시계 표류 사례:

@@ -1,6 +1,5 @@
 package com.checkbook.search.service;
 
-import com.checkbook.client.aladin.dto.AladinUsedBookResult;
 import com.checkbook.common.concurrent.AsyncSubmit;
 import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
@@ -41,7 +40,7 @@ import java.util.concurrent.TimeoutException;
  * 통합 검색. ISBN만 받는다(키워드는 400).
  * <ol>
  *   <li>식별(순차): YES24 1회, 실패·미발견이면 프런트 힌트. 비표준 코드는 YES24·도서관·중고를 부르지 않는다</li>
- *   <li>fan-out(전체 데드라인): 도서관(위치 있을 때), 중고, 밀리(책 정보가 있을 때)</li>
+ *   <li>fan-out(전체 데드라인): 도서관(위치 있을 때), 밀리(책 정보가 있을 때). 중고는 외부 호출 없는 링크만 제공</li>
  * </ol>
  * 섹션 상태와 failures는 데드라인 뒤 각 작업의 상태를 한 번씩 읽어 함께 만든다. 그래서 FAILED 섹션에는
  * failures가 정확히 하나, SUCCESS·SKIPPED에는 없다(계약 2절). 늦게 끝난 작업이 목록을 바꾸지 못한다.
@@ -54,7 +53,6 @@ public class SearchService {
     private static final String POOL_SATURATED_MESSAGE = "검색 풀 포화";
 
     private final BookIdentificationService identificationService;
-    private final AladinBookService aladinBookService;
     private final MillieBookService millieBookService;
     private final PublicLibraryAvailabilityService publicLibraryAvailabilityService;
     private final ExecutorService searchExecutor;
@@ -64,13 +62,11 @@ public class SearchService {
 
     public SearchService(
             BookIdentificationService identificationService,
-            AladinBookService aladinBookService,
             MillieBookService millieBookService,
             PublicLibraryAvailabilityService publicLibraryAvailabilityService,
             @Qualifier("searchExecutor") ExecutorService searchExecutor
     ) {
         this.identificationService = identificationService;
-        this.aladinBookService = aladinBookService;
         this.millieBookService = millieBookService;
         this.publicLibraryAvailabilityService = publicLibraryAvailabilityService;
         this.searchExecutor = searchExecutor;
@@ -94,9 +90,6 @@ public class SearchService {
                 code, standard, identification.source(), identification.yes24());
 
         // ---- fan-out (ISBN 기반 호출은 표준 ISBN일 때만) ----
-        CompletableFuture<AladinUsedBookResult> usedFuture = standard
-                ? AsyncSubmit.submitSafely(() -> aladinBookService.getUsedBooks(code), searchExecutor)
-                : null;
         CompletableFuture<PublicLibraryAvailabilityPage> publicFuture = standard && hasLocation
                 ? AsyncSubmit.submitSafely(() -> publicLibraryAvailabilityService.fetch(code, lat, lon, 0), searchExecutor)
                 : null;
@@ -106,14 +99,16 @@ public class SearchService {
                         () -> millieBookService.findAvailability(book, identification.hintBook()), searchExecutor)
                 : null;
 
-        awaitDeadline(usedFuture, publicFuture, millieFuture);
+        awaitDeadline(publicFuture, millieFuture);
 
         // ---- 섹션별 결과: 각 작업 상태를 한 번만 읽는다 ----
         Section<PublicLibraryAvailabilityPage> library = !standard
                 ? Section.skipped(SearchSectionReason.NON_STANDARD_ISBN)
                 : !hasLocation ? Section.skipped(SearchSectionReason.NO_LOCATION) : Section.of(publicFuture);
-        Section<AladinUsedBookResult> used = standard
-                ? Section.of(usedFuture)
+        Section<SearchResponse.UsedBookInfo> used = standard
+                ? Section.success(new SearchResponse.UsedBookInfo(
+                        "https://www.aladin.co.kr/shop/UsedShop/wuseditemall.aspx?ISBN=" + code
+                ), null)
                 : Section.skipped(SearchSectionReason.NON_STANDARD_ISBN);
         Section<MillieAvailability> millie = millieFuture != null
                 ? Section.of(millieFuture)
@@ -129,19 +124,12 @@ public class SearchService {
 
         PublicLibraryAvailabilityPage publicPage = library.value();
         List<PublicLibraryInfo> publicResults = publicPage != null ? publicPage.libraries() : List.of();
-        AladinUsedBookResult usedResult = used.value();
         MillieAvailability millieResult = millie.value() != null ? millie.value() : MillieAvailability.unavailable();
 
         return new SearchResponse(
                 new SearchResponse.BookInfo(book.title(), book.author(), book.isbn13(), book.publisher(), book.coverUrl()),
                 publicResults,
-                usedResult == null ? null : new SearchResponse.UsedBookInfo(
-                        usedResult.userUsedPrice(),
-                        usedResult.aladinUsedPrice(),
-                        usedResult.spaceUsedPrice(),
-                        usedResult.userUsedUrl(),
-                        usedResult.aladinUsedUrl(),
-                        usedResult.spaceUsedUrl()),
+                used.value(),
                 newBook.value(),
                 new SearchResponse.SubscriptionInfo(millieResult),
                 new SearchResponse.SearchMetadata(
