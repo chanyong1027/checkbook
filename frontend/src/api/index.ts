@@ -10,7 +10,8 @@ import type {
 } from '../types'
 import { toApiError } from './errors.ts'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
+// import.meta.env는 Vite가 채운다. Vite 없이 도는 단위 테스트(node --test)에서는 없으므로 같은 출처('')로 둔다
+const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
 
 function apiUrl(path: string): string {
   return `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
