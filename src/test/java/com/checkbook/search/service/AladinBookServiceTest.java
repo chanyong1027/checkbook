@@ -4,9 +4,7 @@ import com.checkbook.aladinstore.domain.AladinStore;
 import com.checkbook.aladinstore.repository.AladinStoreRepository;
 import com.checkbook.client.aladin.AladinClient;
 import com.checkbook.client.aladin.dto.AladinOffStoreResponse;
-import com.checkbook.client.aladin.dto.AladinSearchResult;
 import com.checkbook.client.aladin.dto.AladinUsedBookResult;
-import com.checkbook.common.util.InputNormalizer;
 import com.checkbook.search.dto.OffStoreResponse;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,7 +18,6 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -34,54 +31,6 @@ class AladinBookServiceTest {
 
     @InjectMocks
     private AladinBookService aladinBookService;
-
-    @Test
-    void identifyKeywordDelegatesToSearchBook() {
-        AladinSearchResult expected = new AladinSearchResult(
-                "9788936439743", "혼자가 혼자에게", "성해나", "창비", null, 16800);
-        when(aladinClient.searchBook("혼모노")).thenReturn(Optional.of(expected));
-
-        InputNormalizer.NormalizedQuery query =
-                new InputNormalizer.NormalizedQuery("혼모노", InputNormalizer.QueryType.KEYWORD);
-        Optional<AladinSearchResult> result = aladinBookService.identify(query);
-
-        assertThat(result).contains(expected);
-        verify(aladinClient).searchBook("혼모노");
-    }
-
-    @Test
-    void identifyIsbnDelegatesToLookupBook() {
-        AladinSearchResult expected = new AladinSearchResult(
-                "9788936439743", "혼자가 혼자에게", "성해나", "창비", null, 16800);
-        when(aladinClient.lookupBook("9788936439743")).thenReturn(Optional.of(expected));
-
-        InputNormalizer.NormalizedQuery query =
-                new InputNormalizer.NormalizedQuery("9788936439743", InputNormalizer.QueryType.ISBN);
-        Optional<AladinSearchResult> result = aladinBookService.identify(query);
-
-        assertThat(result).contains(expected);
-        verify(aladinClient).lookupBook("9788936439743");
-    }
-
-    // 비표준 코드를 키워드 검색에 넣으면 엉뚱한 책으로 식별될 수 있다 (YES24 전환 전 임시 가드)
-    @Test
-    void identifyNonStandardIsbnSkipsAladin() {
-        InputNormalizer.NormalizedQuery query =
-                new InputNormalizer.NormalizedQuery("2004566000649", InputNormalizer.QueryType.NON_STANDARD_ISBN);
-
-        assertThat(aladinBookService.identify(query)).isEmpty();
-        verifyNoInteractions(aladinClient);
-    }
-
-    @Test
-    void identifyReturnsEmptyWhenClientFails() {
-        when(aladinClient.searchBook("없는책")).thenReturn(Optional.empty());
-
-        InputNormalizer.NormalizedQuery query =
-                new InputNormalizer.NormalizedQuery("없는책", InputNormalizer.QueryType.KEYWORD);
-
-        assertThat(aladinBookService.identify(query)).isEmpty();
-    }
 
     @Test
     void getUsedBooksDelegatesToAladinClient() {

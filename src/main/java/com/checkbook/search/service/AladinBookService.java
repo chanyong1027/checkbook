@@ -4,10 +4,8 @@ import com.checkbook.aladinstore.domain.AladinStore;
 import com.checkbook.aladinstore.repository.AladinStoreRepository;
 import com.checkbook.client.aladin.AladinClient;
 import com.checkbook.client.aladin.dto.AladinOffStoreResponse;
-import com.checkbook.client.aladin.dto.AladinSearchResult;
 import com.checkbook.client.aladin.dto.AladinUsedBookResult;
 import com.checkbook.common.util.DistanceCalculator;
-import com.checkbook.common.util.InputNormalizer;
 import com.checkbook.search.dto.OffStoreResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -25,17 +23,6 @@ public class AladinBookService {
 
     private final AladinClient aladinClient;
     private final AladinStoreRepository aladinStoreRepository;
-
-    public Optional<AladinSearchResult> identify(InputNormalizer.NormalizedQuery normalized) {
-        if (normalized.type() == InputNormalizer.QueryType.ISBN) {
-            return aladinClient.lookupBook(normalized.value());
-        }
-        // 비표준 코드를 키워드 검색에 넣으면 엉뚱한 책으로 식별될 수 있다 (YES24 전환 전까지의 가드)
-        if (normalized.type() == InputNormalizer.QueryType.NON_STANDARD_ISBN) {
-            return Optional.empty();
-        }
-        return aladinClient.searchBook(normalized.value());
-    }
 
     public AladinUsedBookResult getUsedBooks(String isbn13) {
         return aladinClient.getUsedBooks(isbn13);
