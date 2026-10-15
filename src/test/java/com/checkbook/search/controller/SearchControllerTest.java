@@ -47,6 +47,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ExtendWith(MockitoExtension.class)
 class SearchControllerTest {
 
+    private static final String NON_STANDARD_ISBN_MESSAGE = "표준 ISBN이 아니라 조회할 수 없습니다.";
+
     @Mock
     private SearchService searchService;
 
@@ -326,9 +328,25 @@ class SearchControllerTest {
                         .param("lat", "37.5665")
                         .param("lon", "126.9780"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("NON_STANDARD_ISBN"));
+                .andExpect(jsonPath("$.code").value("NON_STANDARD_ISBN"))
+                .andExpect(jsonPath("$.message").value(NON_STANDARD_ISBN_MESSAGE));
 
         verify(publicLibraryAvailabilityService, never()).fetch(anyString(), anyDouble(), anyDouble(), anyInt());
+    }
+
+    // PR-2 F5: 매장 API도 같은 오류 코드를 쓰므로 문구가 '도서관'에 묶이면 안 된다
+    @Test
+    void offStoresNonStandardIsbnReturns400WithNeutralMessage() throws Exception {
+        when(aladinBookService.getOffStoreList("2004566000649", 37.5665, 126.9780))
+                .thenThrow(new BusinessException(ErrorCode.NON_STANDARD_ISBN));
+
+        mockMvc.perform(get("/api/off-stores")
+                        .param("isbn13", "2004566000649")
+                        .param("lat", "37.5665")
+                        .param("lon", "126.9780"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("NON_STANDARD_ISBN"))
+                .andExpect(jsonPath("$.message").value(NON_STANDARD_ISBN_MESSAGE));
     }
 
     @Test

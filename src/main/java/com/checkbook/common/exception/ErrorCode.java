@@ -14,7 +14,7 @@ public enum ErrorCode {
     INVALID_LOCATION(HttpStatus.BAD_REQUEST, "올바른 위치 정보를 입력해주세요."),
     ISBN_REQUIRED(HttpStatus.BAD_REQUEST, "ISBN 정보가 필요합니다."),
     KEYWORD_NOT_SUPPORTED(HttpStatus.BAD_REQUEST, "ISBN으로만 조회할 수 있습니다. 책 후보 검색(/api/books/search)을 이용해주세요."),
-    NON_STANDARD_ISBN(HttpStatus.BAD_REQUEST, "표준 ISBN이 아니라 도서관 소장을 확인할 수 없습니다."),
+    NON_STANDARD_ISBN(HttpStatus.BAD_REQUEST, "표준 ISBN이 아니라 조회할 수 없습니다."),
 
     LIBRARY_IDS_REQUIRED(HttpStatus.BAD_REQUEST, "도서관을 선택해주세요."),
     LIBRARY_IDS_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "도서관은 최대 20개까지 선택할 수 있습니다."),

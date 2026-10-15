@@ -833,8 +833,8 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                             href={millie.detailUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-aladin/10
-                              text-xs text-brand-aladin font-medium hover:bg-brand-aladin/20 transition"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-millie/20
+                              text-xs text-slate-800 font-medium hover:bg-brand-millie/30 transition"
                           >
                             밀리
                             <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -860,7 +860,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                     <a href={isSafeUrl(usedBookProductUrl) ? usedBookProductUrl : `https://www.aladin.co.kr/shop/UsedShop/wuseditemall.aspx?ISBN=${encodeURIComponent(searchResult.book.isbn13 ?? isbn13)}`}
                       target="_blank" rel="noopener noreferrer"
                       aria-label="알라딘에서 확인 (중고 목록, 새 창)"
-                      className="shrink-0 px-3 py-2 rounded-lg bg-brand-aladin/10 text-xs text-brand-aladin font-medium">
+                      className="shrink-0 px-3 py-2 rounded-lg bg-brand-aladin/10 text-xs text-brand-aladin-dark font-medium">
                       알라딘에서 확인
                     </a>
                   </div>
@@ -914,8 +914,8 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                       href={searchResult.newBook.productUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-aladin/10
-                        text-xs text-brand-aladin font-medium hover:bg-brand-aladin/20 transition"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-yes24/10
+                        text-xs text-brand-yes24-dark font-medium hover:bg-brand-yes24/20 transition"
                     >
                       YES24
                       <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">

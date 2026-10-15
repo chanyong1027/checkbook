@@ -14,7 +14,7 @@
 |---|---|---|---|
 | 1 | `collect_kakao_seed_isbns.py` | `kakao-seed-keywords.csv`의 검색어로 카카오 후보를 받아 상위 ISBN 추출 → `isbns-from-kakao.csv` | `KAKAO_BOOK_REST_API_KEY` |
 | 2 | `build_isbn_set.py` | 카카오 묶음 + 밀리 PoC 책 + 정보나루 인기 대출 + `tricky-isbns.csv`를 합쳐 `isbns.csv` | 카카오, `DATANARU_AUTH_KEY` |
-| 3 | `collect_aladin.py` | 앱의 `AladinClient`와 같은 요청으로 알라딘 수집 (10/30 이전에만 가능) | `ALADIN_TTB_KEY` |
+| 3 | `collect_aladin.py` | 2026-10-13 당시 앱의 `AladinClient`(지금은 삭제됨)와 같은 요청으로 알라딘 수집 (10/30 이전에만 가능) | `ALADIN_TTB_KEY` |
 | 4 | `collect_yes24.py` | 같은 입력으로 YES24 수집 + 호출 한도·오류 형식 탐침 | `YES24_KEY` |
 
 ```bash

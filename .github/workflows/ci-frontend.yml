@@ -1,6 +1,7 @@
 name: CI Frontend
 
-# PR마다 프런트 타입 검사 + 빌드(`npm run build` = tsc && vite build)를 돌린다. 배포는 하지 않는다.
+# PR마다 프런트 단위 테스트(`npm test` = node --test) + 타입 검사 + 빌드(`npm run build` = tsc && vite build)를 돌린다.
+# 화면 테스트(Playwright)는 CI에 넣지 않는다. 배포는 하지 않는다.
 on:
   pull_request:
     paths:
@@ -41,6 +42,9 @@ jobs:
 
       - name: 의존성 설치
         run: npm ci
+
+      - name: 단위 테스트
+        run: npm test
 
       - name: 타입 검사 + 빌드
         run: npm run build
