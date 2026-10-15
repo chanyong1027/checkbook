@@ -106,7 +106,7 @@ class PublicLibraryParallelBenchmarkTest {
         ExecutorService searchExecutor = Executors.newFixedThreadPool(3);
         try {
             MillieBookService millieBookService = Mockito.mock(MillieBookService.class);
-            when(millieBookService.findAvailability(any()))
+            when(millieBookService.findAvailability(any(), any()))
                     .thenReturn(MillieAvailability.unavailable());
 
             PublicLibraryAvailabilityService availabilityService = new PublicLibraryAvailabilityService(

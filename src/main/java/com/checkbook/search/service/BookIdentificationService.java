@@ -42,7 +42,7 @@ public class BookIdentificationService {
         try {
             Optional<Yes24Book> found = yes24Client.lookupByIsbn(isbn13);
             if (found.isPresent()) {
-                return record(fromYes24(isbn13, found.get()));
+                return record(fromYes24(isbn13, found.get(), hintBook.orElse(null)));
             }
             status = Yes24Status.NOT_FOUND;
         } catch (Yes24Exception e) {
@@ -69,7 +69,7 @@ public class BookIdentificationService {
         return record(fallback(code, validHint(code, hint), Yes24Status.SKIPPED, false));
     }
 
-    private static IdentificationResult fromYes24(String isbn13, Yes24Book book) {
+    private static IdentificationResult fromYes24(String isbn13, Yes24Book book, IdentifiedBook hintBook) {
         return new IdentificationResult(
                 Source.YES24,
                 Yes24Status.FOUND,
@@ -77,7 +77,8 @@ public class BookIdentificationService {
                 new IdentifiedBook(book.title(), blankToNull(book.author()), isbn13, blankToNull(book.publisher()),
                         httpUrlOrNull(book.coverUrl())),
                 book.salePrice(),
-                httpUrlOrNull(book.link()));
+                httpUrlOrNull(book.link()),
+                hintBook);
     }
 
     private static IdentificationResult fallback(

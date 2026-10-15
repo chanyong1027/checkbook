@@ -102,7 +102,8 @@ public class SearchService {
                 : null;
         IdentifiedBook book = identification.book();
         CompletableFuture<MillieAvailability> millieFuture = identification.source() != Source.NONE
-                ? AsyncSubmit.submitSafely(() -> millieBookService.findAvailability(book), searchExecutor)
+                ? AsyncSubmit.submitSafely(
+                        () -> millieBookService.findAvailability(book, identification.hintBook()), searchExecutor)
                 : null;
 
         awaitDeadline(usedFuture, publicFuture, millieFuture);

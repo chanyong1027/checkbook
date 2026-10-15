@@ -121,7 +121,7 @@ class SharedPoolStarvationTest {
                         16800, "https://www.yes24.com/product/goods/1"));
         when(aladinBookService.getUsedBooks(TEST_ISBN))
                 .thenReturn(new AladinUsedBookResult(5000, 6000, 7000, "url1", "url2", "url3"));
-        when(millieBookService.findAvailability(any()))
+        when(millieBookService.findAvailability(any(), any()))
                 .thenReturn(MillieAvailability.unavailable());
 
         List<PublicLibrary> libraries = IntStream.rangeClosed(1, LIBRARY_COUNT)

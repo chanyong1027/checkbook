@@ -86,7 +86,7 @@ class SearchServiceTest {
         searchService = new SearchService(
                 identificationService, aladinBookService, millieBookService, publicLibraryAvailabilityService, searchExecutor);
         when(aladinBookService.getUsedBooks(ISBN)).thenReturn(new AladinUsedBookResult(6500, null, null, "https://u", null, null));
-        when(millieBookService.findAvailability(any())).thenReturn(MillieAvailability.unavailable());
+        when(millieBookService.findAvailability(any(), any())).thenReturn(MillieAvailability.unavailable());
         when(publicLibraryAvailabilityService.fetch(ISBN, LAT, LON, 0)).thenReturn(libraryPage());
     }
 
@@ -128,7 +128,7 @@ class SearchServiceTest {
     @Test
     void exampleA_foundWithLocation() {
         when(identificationService.identify(ISBN, null)).thenReturn(found(13500, YES24_URL));
-        when(millieBookService.findAvailability(YES24_BOOK)).thenReturn(millieAvailable());
+        when(millieBookService.findAvailability(YES24_BOOK, null)).thenReturn(millieAvailable());
 
         SearchResponse r = assertConsistent(searchService.search(ISBN, LAT, LON, null));
 
@@ -167,7 +167,7 @@ class SearchServiceTest {
         assertThat(r.metadata().failures()).containsExactly(
                 new SearchResponse.FailureDetail(SearchSection.NEW_BOOK, "타임아웃"));
         // 힌트 기반 밀리 조회
-        verify(millieBookService).findAvailability(HINT_BOOK);
+        verify(millieBookService).findAvailability(HINT_BOOK, null);
         verify(publicLibraryAvailabilityService, never()).fetch(anyString(), anyDouble(), anyDouble(), anyInt());
     }
 
@@ -195,13 +195,25 @@ class SearchServiceTest {
         verifyNoInteractions(publicLibraryAvailabilityService, aladinBookService, millieBookService);
     }
 
+    // YES24가 찾았고 힌트도 있으면 힌트는 밀리 보조 매칭에만 넘긴다(책 정보·가격은 YES24) — 결정 E8
+    @Test
+    void foundWithHintPassesHintAsMillieFallback() {
+        when(identificationService.identify(ISBN, HINT)).thenReturn(new IdentificationResult(
+                Source.YES24, Yes24Status.FOUND, true, YES24_BOOK, 13500, YES24_URL, HINT_BOOK));
+
+        SearchResponse r = assertConsistent(searchService.search(ISBN, null, null, HINT));
+
+        verify(millieBookService).findAvailability(YES24_BOOK, HINT_BOOK);
+        assertThat(r.book().title()).isEqualTo("YES24 제목");
+    }
+
     // 비표준 코드라도 힌트가 있으면 밀리는 조회한다 (source=HINT로 '검증되지 않은 힌트 기반'임이 남는다)
     @Test
     void nonStandardWithHintStillQueriesMillie() {
         IdentifiedBook hintForCode = new IdentifiedBook("힌트 제목", "힌트 저자", CODE, "힌트출판", "https://k.example/1.jpg");
         when(identificationService.identifyWithoutLookup(CODE, HINT)).thenReturn(
                 new IdentificationResult(Source.HINT, Yes24Status.SKIPPED, false, hintForCode, null, null));
-        when(millieBookService.findAvailability(hintForCode)).thenReturn(millieAvailable());
+        when(millieBookService.findAvailability(hintForCode, null)).thenReturn(millieAvailable());
 
         SearchResponse r = assertConsistent(searchService.search(CODE, null, null, HINT));
 
@@ -266,7 +278,7 @@ class SearchServiceTest {
         assertStatus(r, SearchSection.SUBSCRIPTION, SearchSectionStatus.SKIPPED, SearchSectionReason.NO_METADATA);
         assertThat(r.subscription().millie().available()).isFalse();
         assertThat(r.book()).isEqualTo(new SearchResponse.BookInfo(null, null, ISBN, null, null));
-        verify(millieBookService, never()).findAvailability(any());
+        verify(millieBookService, never()).findAvailability(any(), any());
     }
 
     @Test
@@ -282,7 +294,7 @@ class SearchServiceTest {
     @Test
     void subscriptionClientFailureIsFailedUnavailable() {
         when(identificationService.identify(ISBN, null)).thenReturn(found(13500, YES24_URL));
-        when(millieBookService.findAvailability(any())).thenThrow(new MillieClientException("밀리 HTTP 500"));
+        when(millieBookService.findAvailability(any(), any())).thenThrow(new MillieClientException("밀리 HTTP 500"));
 
         SearchResponse r = assertConsistent(searchService.search(ISBN, null, null, null));
 
@@ -294,7 +306,7 @@ class SearchServiceTest {
     @Test
     void subscriptionClientTimeoutIsFailedTimeout() {
         when(identificationService.identify(ISBN, null)).thenReturn(found(13500, YES24_URL));
-        when(millieBookService.findAvailability(any())).thenThrow(
+        when(millieBookService.findAvailability(any(), any())).thenThrow(
                 new MillieClientException("밀리 호출 실패", new RuntimeException(new SocketTimeoutException("Read timed out"))));
 
         SearchResponse r = assertConsistent(searchService.search(ISBN, null, null, null));
@@ -306,7 +318,7 @@ class SearchServiceTest {
     void subscriptionSlowerThanDeadlineIsFailedTimeout() {
         ReflectionTestUtils.setField(searchService, "totalDeadlineMs", 200L);
         when(identificationService.identify(ISBN, null)).thenReturn(found(13500, YES24_URL));
-        when(millieBookService.findAvailability(any())).thenAnswer(invocation -> {
+        when(millieBookService.findAvailability(any(), any())).thenAnswer(invocation -> {
             Thread.sleep(1000);
             return millieAvailable();
         });
@@ -324,7 +336,7 @@ class SearchServiceTest {
     void lateFailureAfterDeadlineDoesNotChangeResponse() throws Exception {
         ReflectionTestUtils.setField(searchService, "totalDeadlineMs", 100L);
         when(identificationService.identify(ISBN, null)).thenReturn(found(13500, YES24_URL));
-        when(millieBookService.findAvailability(any())).thenAnswer(invocation -> {
+        when(millieBookService.findAvailability(any(), any())).thenAnswer(invocation -> {
             Thread.sleep(300);
             throw new MillieClientException("늦은 실패");
         });

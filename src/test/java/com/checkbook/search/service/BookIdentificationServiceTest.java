@@ -38,6 +38,9 @@ class BookIdentificationServiceTest {
             "힌트 제목", "힌트 저자", "힌트출판", "https://search1.kakaocdn.net/thumb/1.jpg");
     private static final BookHint INVALID_HINT = new BookHint(" ", "힌트 저자", null, null);
 
+    private static final IdentifiedBook HINT_BOOK_FOR_FALLBACK = new IdentifiedBook(
+            "힌트 제목", "힌트 저자", ISBN, "힌트출판", "https://search1.kakaocdn.net/thumb/1.jpg");
+
     private Yes24Client yes24Client;
     private SimpleMeterRegistry meterRegistry;
     private BookIdentificationService service;
@@ -101,10 +104,13 @@ class BookIdentificationServiceTest {
                     "YES24 제목", "홍길동 저/김번역 역", ISBN, "YES24출판", "https://image.yes24.com/goods/1001/XL"));
             assertThat(result.price()).isEqualTo(13500);
             assertThat(result.productUrl()).isEqualTo("https://www.yes24.com/product/goods/1001");
+            // 유효한 힌트는 밀리 보조 매칭용으로만 함께 둔다 (결정 E8)
+            assertThat(result.hintBook()).isEqualTo(hintCase == HintCase.VALID ? HINT_BOOK_FOR_FALLBACK : null);
         } else if (hintCase == HintCase.VALID) {
             assertThat(result.source()).isEqualTo(Source.HINT);
             assertThat(result.book()).isEqualTo(new IdentifiedBook(
                     "힌트 제목", "힌트 저자", ISBN, "힌트출판", "https://search1.kakaocdn.net/thumb/1.jpg"));
+            assertThat(result.hintBook()).as("이미 힌트가 주 정보라 보조로 두지 않는다").isNull();
             // 힌트는 가격·링크에 쓰지 않는다
             assertThat(result.price()).isNull();
             assertThat(result.productUrl()).isNull();
