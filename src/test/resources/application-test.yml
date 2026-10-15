@@ -11,11 +11,6 @@ spring:
       ddl-auto: create-drop
     show-sql: false
 
-aladin:
-  ttb-key: test-key
-  base-url: https://www.aladin.co.kr/ttb/api
-  identification-timeout: 500
-
 datanaru:
   auth-key: test-key
   base-url: https://data4library.kr/api

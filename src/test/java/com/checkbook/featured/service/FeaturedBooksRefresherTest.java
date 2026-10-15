@@ -1,89 +1,96 @@
 package com.checkbook.featured.service;
 
-import com.checkbook.client.aladin.AladinClient;
-import com.checkbook.client.aladin.AladinListQueryType;
-import com.checkbook.client.aladin.dto.AladinItemResponse.Item;
 import com.checkbook.client.datanaru.DatanaruClient;
 import com.checkbook.client.datanaru.dto.DatanaruLoanBookResult;
+import com.checkbook.client.yes24.Yes24CategoryList;
+import com.checkbook.client.yes24.Yes24Client;
+import com.checkbook.client.yes24.Yes24Exception;
+import com.checkbook.client.yes24.dto.Yes24CategoryListResponse.Item;
 import com.checkbook.featured.snapshot.domain.FeaturedBook;
 import com.checkbook.featured.snapshot.domain.FeaturedSectionType;
 import com.checkbook.featured.snapshot.domain.FeaturedSource;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class FeaturedBooksRefresherTest {
 
-    @Mock AladinClient aladinClient;
+    // 체크섬이 맞는 합성 ISBN (InputNormalizer 규칙)
+    private static final String ISBN_A = "9788936434120";
+    private static final String ISBN_B = "9791161571188";
+
+    @Mock Yes24Client yes24Client;
     @Mock DatanaruClient datanaruClient;
     @Mock FeaturedBooksWriter writer;
 
     private FeaturedBooksRefresher refresher() {
-        return new FeaturedBooksRefresher(aladinClient, datanaruClient, writer,
-                15, 168, 84, 168);
+        return new FeaturedBooksRefresher(yes24Client, datanaruClient, writer,
+                15, 30, 168, 84, 168);
+    }
+
+    private static Item item(String isbn13, String title, String adultYn, String publishDate) {
+        return new Item(1, title, "홍길동 저", "테스트출판", isbn13,
+                "https://image.yes24.com/goods/1/L", publishDate, adultYn, "https://www.yes24.com/product/goods/1");
+    }
+
+    private List<FeaturedBook> capturedBooks(FeaturedSectionType type, Duration ttl) {
+        ArgumentCaptor<List<FeaturedBook>> booksCap = ArgumentCaptor.forClass(List.class);
+        verify(writer).replaceSection(eq(type), eq(FeaturedSource.YES24), booksCap.capture(), eq(ttl));
+        return booksCap.getValue();
     }
 
     @Test
-    void refreshSection_bestseller_callsAladinAndWriter() {
-        List<Item> items = List.of(
-                new Item("9788936434120", "소년이 온다", "한강", "창비",
-                        "https://cover/1.jpg", "2014-05-19", 12345L, 13500, null)
-        );
-        when(aladinClient.itemList(AladinListQueryType.BESTSELLER, 15)).thenReturn(items);
+    void refreshSection_bestseller_callsYes24BestsellerAndMapsFields() {
+        when(yes24Client.categoryList(Yes24CategoryList.BESTSELLER, "001", 30))
+                .thenReturn(List.of(item(ISBN_A, "소년이 온다", "N", "20140519")));
 
         refresher().refreshSection(FeaturedSectionType.BESTSELLER);
 
-        ArgumentCaptor<List<FeaturedBook>> booksCap = ArgumentCaptor.forClass(List.class);
-        verify(writer).replaceSection(
-                eq(FeaturedSectionType.BESTSELLER),
-                eq(FeaturedSource.ALADIN),
-                booksCap.capture(),
-                eq(Duration.ofHours(168))
-        );
-        assertThat(booksCap.getValue()).hasSize(1);
-        FeaturedBook book = booksCap.getValue().get(0);
+        List<FeaturedBook> books = capturedBooks(FeaturedSectionType.BESTSELLER, Duration.ofHours(168));
+        assertThat(books).hasSize(1);
+        FeaturedBook book = books.get(0);
+        assertThat(book.getSectionType()).isEqualTo(FeaturedSectionType.BESTSELLER);
         assertThat(book.getRank()).isEqualTo(1);
-        assertThat(book.getIsbn13()).isEqualTo("9788936434120");
+        assertThat(book.getIsbn13()).isEqualTo(ISBN_A);
+        assertThat(book.getTitle()).isEqualTo("소년이 온다");
+        assertThat(book.getAuthor()).isEqualTo("홍길동 저");
+        assertThat(book.getPublisher()).isEqualTo("테스트출판");
+        assertThat(book.getCoverUrl()).isEqualTo("https://image.yes24.com/goods/1/L");
+        // 알라딘 때와 같은 yyyy-MM-dd로 맞춘다(상세 카드에 그대로 보임)
         assertThat(book.getPublishedAt()).isEqualTo("2014-05-19");
     }
 
     @Test
-    void refreshSection_new_usesItemNewSpecialQueryTypeAndNewTtl() {
-        // 빈 응답은 실패로 취급되므로 1건이라도 정상 응답을 주입해 QueryType/TTL을 검증
-        when(aladinClient.itemList(AladinListQueryType.ITEM_NEW_SPECIAL, 15))
-                .thenReturn(List.of(
-                        new Item("9788900000002", "신간A", "저자", "출판사",
-                                "https://cover/a.jpg", "2026-05-01", 1L, 10000, null)
-                ));
+    void refreshSection_new_usesNewAttentionListAndNewTtl() {
+        when(yes24Client.categoryList(Yes24CategoryList.NEW_ATTENTION, "001", 30))
+                .thenReturn(List.of(item(ISBN_A, "신간A", "N", "20261016")));
 
         refresher().refreshSection(FeaturedSectionType.NEW);
 
-        verify(writer).replaceSection(
-                eq(FeaturedSectionType.NEW),
-                eq(FeaturedSource.ALADIN),
-                anyList(),
-                eq(Duration.ofHours(84))
-        );
+        assertThat(capturedBooks(FeaturedSectionType.NEW, Duration.ofHours(84))).hasSize(1);
     }
 
     @Test
-    void refreshSection_aladinEmptyResponse_callsMarkFailed_doesNotReplace() {
-        when(aladinClient.itemList(AladinListQueryType.BESTSELLER, 15))
-                .thenReturn(List.of());
+    void refreshSection_yes24EmptyResponse_callsMarkFailed_doesNotReplace() {
+        when(yes24Client.categoryList(Yes24CategoryList.BESTSELLER, "001", 30)).thenReturn(List.of());
 
         refresher().refreshSection(FeaturedSectionType.BESTSELLER);
 
@@ -92,35 +99,123 @@ class FeaturedBooksRefresherTest {
         verify(writer, never()).replaceSection(any(), any(), anyList(), any());
     }
 
+    // ISBN 없음·ISBN이 아닌 상품 코드(달력 880…)·체크섬 틀림·제목 없음·성인 상품은 빼고, 순위는 남은 순서로 1부터
     @Test
-    void refreshSection_aladinFiltersInvalidItems_keepsRest() {
-        // 1건은 isbn13 null (invalid), 1건은 title blank (invalid), 1건은 정상
-        when(aladinClient.itemList(AladinListQueryType.BESTSELLER, 15)).thenReturn(List.of(
-                new Item(null,            "이상치1", "저자", "출판사", "c", "2026-01-01", 1L, 100, null),
-                new Item("9780000000010", "  ",     "저자", "출판사", "c", "2026-01-02", 2L, 100, null),
-                new Item("9780000000020", "정상책",  "저자", "출판사", "c", "2026-01-03", 3L, 100, null)
+    void refreshSection_filtersInvalidAndAdultItems_keepsRestInOrder() {
+        when(yes24Client.categoryList(Yes24CategoryList.NEW_ATTENTION, "001", 30)).thenReturn(List.of(
+                item(null,             "굿즈 세트",   "N", "20261020"),
+                item("8809529018884",  "탁상달력",    "N", "20261030"),
+                item("9788936434121",  "체크섬 틀림", "N", "20261001"),
+                item(ISBN_A,           "  ",          "N", "20261002"),
+                item(ISBN_B,           "성인 상품",   "Y", "20261003"),
+                item(" " + ISBN_A + " ", "정상 1",    "N", "20261004"),
+                item(ISBN_B,           "정상 2",      null, "20261005")
         ));
+
+        refresher().refreshSection(FeaturedSectionType.NEW);
+
+        List<FeaturedBook> books = capturedBooks(FeaturedSectionType.NEW, Duration.ofHours(84));
+        assertThat(books).extracting(FeaturedBook::getTitle).containsExactly("정상 1", "정상 2");
+        assertThat(books).extracting(FeaturedBook::getRank).containsExactly(1, 2);
+        assertThat(books.get(0).getIsbn13()).isEqualTo(ISBN_A);
+    }
+
+    // 30권을 받아 걸러도 화면에는 page-size(15)권까지만
+    @Test
+    void refreshSection_keepsAtMostPageSizeValidItems() {
+        List<Item> thirty = IntStream.rangeClosed(1, 30)
+                .mapToObj(i -> item(ISBN_A, "책 " + i, "N", "20261001"))
+                .toList();
+        when(yes24Client.categoryList(Yes24CategoryList.BESTSELLER, "001", 30)).thenReturn(thirty);
 
         refresher().refreshSection(FeaturedSectionType.BESTSELLER);
 
-        ArgumentCaptor<List<FeaturedBook>> booksCap = ArgumentCaptor.forClass(List.class);
-        verify(writer).replaceSection(eq(FeaturedSectionType.BESTSELLER),
-                eq(FeaturedSource.ALADIN), booksCap.capture(), eq(Duration.ofHours(168)));
-        assertThat(booksCap.getValue()).hasSize(1);
-        assertThat(booksCap.getValue().get(0).getIsbn13()).isEqualTo("9780000000020");
-        assertThat(booksCap.getValue().get(0).getRank()).isEqualTo(1); // rank는 valid 순서로 1부터
+        List<FeaturedBook> books = capturedBooks(FeaturedSectionType.BESTSELLER, Duration.ofHours(168));
+        assertThat(books).hasSize(15);
+        assertThat(books.get(14).getTitle()).isEqualTo("책 15");
+        assertThat(books.get(14).getRank()).isEqualTo(15);
     }
 
     @Test
-    void refreshSection_aladinAllItemsInvalid_callsMarkFailed() {
-        when(aladinClient.itemList(AladinListQueryType.BESTSELLER, 15)).thenReturn(List.of(
-                new Item(null, "이상치", "저자", "출판사", "c", "2026-01-01", 1L, 100, null)
+    void refreshSection_allItemsInvalid_callsMarkFailed() {
+        when(yes24Client.categoryList(Yes24CategoryList.BESTSELLER, "001", 30)).thenReturn(List.of(
+                item("8809529018884", "탁상달력", "N", "20261030")
         ));
 
         refresher().refreshSection(FeaturedSectionType.BESTSELLER);
 
         verify(writer).markFailed(eq(FeaturedSectionType.BESTSELLER),
                 org.mockito.ArgumentMatchers.contains("비었거나 필수 필드"));
+        verify(writer, never()).replaceSection(any(), any(), anyList(), any());
+    }
+
+    // 출간일이 8자리 숫자가 아니면 보이지 않게(null) — 열 길이(20)를 넘는 값으로 교체 전체가 실패하지 않게
+    @Test
+    void refreshSection_unexpectedPublishDate_keepsBookWithoutDate() {
+        when(yes24Client.categoryList(Yes24CategoryList.BESTSELLER, "001", 30)).thenReturn(List.of(
+                item(ISBN_A, "날짜 없음", "N", null),
+                item(ISBN_B, "이상한 날짜", "N", "2026년 10월 16일 예정 (예약판매)"),
+                item(ISBN_A, "이미 형식", "N", "2026-10-16")
+        ));
+
+        refresher().refreshSection(FeaturedSectionType.BESTSELLER);
+
+        assertThat(capturedBooks(FeaturedSectionType.BESTSELLER, Duration.ofHours(168)))
+                .extracting(FeaturedBook::getPublishedAt)
+                .containsExactly(null, null, "2026-10-16");
+    }
+
+    // 재시작 직후 JVM의 첫 TLS 연결은 연결 제한(200ms)을 넘을 수 있다. 첫 시도로 JVM이 데워지므로 시간 초과만 1번 바로 다시 부른다(카드 7)
+    @Test
+    void refreshSection_timeoutOnce_retriesImmediatelyAndReplaces() {
+        when(yes24Client.categoryList(Yes24CategoryList.BESTSELLER, "001", 30))
+                .thenThrow(new Yes24Exception(Yes24Exception.Kind.TIMEOUT, true, "YES24 타임아웃"))
+                .thenReturn(List.of(item(ISBN_A, "소년이 온다", "N", "20140519")));
+
+        refresher().refreshSection(FeaturedSectionType.BESTSELLER);
+
+        verify(yes24Client, times(2)).categoryList(Yes24CategoryList.BESTSELLER, "001", 30);
+        assertThat(capturedBooks(FeaturedSectionType.BESTSELLER, Duration.ofHours(168))).hasSize(1);
+        verify(writer, never()).markFailed(any(), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void refreshSection_timeoutTwice_marksFailedAfterOneRetry() {
+        when(yes24Client.categoryList(Yes24CategoryList.NEW_ATTENTION, "001", 30))
+                .thenThrow(new Yes24Exception(Yes24Exception.Kind.TIMEOUT, true, "YES24 타임아웃"));
+
+        refresher().refreshSection(FeaturedSectionType.NEW);
+
+        verify(yes24Client, times(2)).categoryList(Yes24CategoryList.NEW_ATTENTION, "001", 30);
+        verify(writer).markFailed(eq(FeaturedSectionType.NEW),
+                org.mockito.ArgumentMatchers.contains("YES24 타임아웃"));
+        verify(writer, never()).replaceSection(any(), any(), anyList(), any());
+    }
+
+    // 시간 초과가 아닌 실패는 다시 해도 같다(한도·제한·429·형식 오류·5xx) — 재시도 없이 실패 기록
+    @ParameterizedTest
+    @EnumSource(value = Yes24Exception.Kind.class, names = {"RATE_LIMITED", "FAILED"})
+    void refreshSection_nonTimeoutFailure_doesNotRetry(Yes24Exception.Kind kind) {
+        when(yes24Client.categoryList(Yes24CategoryList.BESTSELLER, "001", 30))
+                .thenThrow(new Yes24Exception(kind, true, "YES24 " + kind));
+
+        refresher().refreshSection(FeaturedSectionType.BESTSELLER);
+
+        verify(yes24Client, times(1)).categoryList(Yes24CategoryList.BESTSELLER, "001", 30);
+        verify(writer).markFailed(eq(FeaturedSectionType.BESTSELLER), org.mockito.ArgumentMatchers.anyString());
+    }
+
+    // 선제한·일일 중단 등 YES24 실패는 재시도 없이 실패 기록, 기존 행은 그대로(교체 안 함)
+    @Test
+    void refreshSection_yes24Failure_marksFailedWithoutRetry() {
+        when(yes24Client.categoryList(Yes24CategoryList.BESTSELLER, "001", 30))
+                .thenThrow(new Yes24Exception(Yes24Exception.Kind.DAILY_LIMIT, false, "YES24 일일 한도 소진으로 호출 중단 중"));
+
+        refresher().refreshSection(FeaturedSectionType.BESTSELLER);
+
+        verify(yes24Client, times(1)).categoryList(Yes24CategoryList.BESTSELLER, "001", 30);
+        verify(writer).markFailed(eq(FeaturedSectionType.BESTSELLER),
+                org.mockito.ArgumentMatchers.contains("Yes24Exception: YES24 일일 한도"));
         verify(writer, never()).replaceSection(any(), any(), anyList(), any());
     }
 
@@ -175,7 +270,7 @@ class FeaturedBooksRefresherTest {
 
         refresher().refreshSection(FeaturedSectionType.LOAN);
 
-        verify(datanaruClient, org.mockito.Mockito.times(2)).loanItemSrch(15);
+        verify(datanaruClient, times(2)).loanItemSrch(15);
         verify(writer).replaceSection(
                 eq(FeaturedSectionType.LOAN),
                 eq(FeaturedSource.DATANARU),

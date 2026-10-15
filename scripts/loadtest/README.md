@@ -126,6 +126,10 @@ closed-loop(VU)은 시스템이 느려지면 유입도 줄어드는 coordinated 
 > ⚠️ `k6-search-fault.js`·`k6-search-probe.js`·`k6-search-rampup.js`는 아직 검증 숫자 없는 ISBN을 만든다. 앱이 ISBN 형식을
 > 검사한 뒤로(#31) 대부분 비표준 코드로 처리돼 외부 호출을 건너뛰므로, 고치기 전 측정은 무효다.
 
+> ⚠️ 메인 추천(베스트셀러·신간)이 YES24 목록으로 바뀌고 알라딘 스텁을 지운 뒤로(PR-3) `loadtest` 프로필에는 YES24 목록 스텁이 없어
+> 기동 워밍업에서 두 섹션이 FAILED가 된다(k6는 `/api/featured`를 부르지 않아 측정에는 영향 없음). `measure-external-latency.sh`의
+> 알라딘 호출은 10/30 API 종료 뒤 무효다.
+
 런 직후 판정 게이트(스크립트 출력에서 순서대로 확인):
 1. **http rps ≈ 목표 도착률(±2%)** — 괴리 시 결과 폐기하고 하네스부터 의심(§7 시계 표류 사례:
    -10% 괴리가 W32Time 문제의 첫 신호였다).

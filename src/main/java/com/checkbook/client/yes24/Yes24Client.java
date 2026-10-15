@@ -2,6 +2,7 @@ package com.checkbook.client.yes24;
 
 import com.checkbook.client.yes24.Yes24Exception.Kind;
 import com.checkbook.client.yes24.dto.Yes24Book;
+import com.checkbook.client.yes24.dto.Yes24CategoryListResponse;
 import com.checkbook.client.yes24.dto.Yes24ItemDetailResponse;
 import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.micrometer.core.instrument.Gauge;
@@ -23,15 +24,18 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * YES24 OpenAPI ISBN 조회. 재시도하지 않는다.
+ * YES24 OpenAPI: ISBN 조회(식별)와 카테고리 목록 조회(메인 추천 배치). 재시도하지 않는다.
  * <ul>
- *   <li>찾음 → 검증된 {@link Yes24Book}, '책 없음'(404 GOODS_002만) → 빈 결과</li>
+ *   <li>ISBN 조회: 찾음 → 검증된 {@link Yes24Book}, '책 없음'(404 GOODS_002만) → 빈 결과</li>
+ *   <li>목록 조회: 항목 목록, '결과 없음'(404 BEST_001·ATTN_001) → 빈 목록</li>
  *   <li>그 밖의 결과는 {@link Yes24Exception}: 타임아웃, 한도(초당·일일), 오류·응답 검증 실패</li>
  * </ul>
  * 우리 쪽 선제한(100ms당 1건)과 일일 중단은 이 클라이언트 경계에 둔다. 식별과 추천 배치가 같은 한도를 나눠 쓰기 때문이다.
+ * 식별은 허가를 기다리지 않고, 배치(목록)만 최대 {@link #LIST_PERMIT_MAX_WAIT} 기다린다(PR-3 결정 카드 3).
  */
 @Slf4j
 public class Yes24Client {
@@ -42,12 +46,17 @@ public class Yes24Client {
     // 해제 시각 헤더가 이보다 멀면(단위 오류 등) 믿지 않는다 — 일일 한도는 길어야 다음 자정에 풀린다
     private static final Duration MAX_TRUSTED_RESET = Duration.ofHours(48);
     private static final String USER_AGENT = "CheckBook/1.0 (+https://github.com/chanyong1027/checkbook)";
+    // 배치가 식별 요청과 같은 100ms 주기에 걸려 거절되면 섹션이 다음 cron까지(최대 7일) 지난 목록으로 남는다
+    private static final Duration LIST_PERMIT_MAX_WAIT = Duration.ofSeconds(1);
+    private static final long LIST_PERMIT_POLL_MILLIS = 100;
 
     private final RestClient restClient;
+    private final RestClient listRestClient;
     private final RateLimiter rateLimiter;
     private final MeterRegistry meterRegistry;
     private final Clock clock;
     private final Duration callDeadline;
+    private final Duration listCallDeadline;
     private final Yes24DailyStop dailyStop = new Yes24DailyStop();
     // 마지막 응답 시점의 관측치. 재시작 직후에는 값이 없다(NaN)
     private final AtomicReference<Double> remainingDay = new AtomicReference<>(Double.NaN);
@@ -69,17 +78,21 @@ public class Yes24Client {
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(properties.readTimeout());
         this.callDeadline = properties.readTimeout();
+        // 목록은 배치 전용이라 사용자 응답 예산과 무관하다. 연결(HttpClient)은 식별과 같이 쓰고 전체 마감만 다르게 둔다
+        JdkClientHttpRequestFactory listRequestFactory = new JdkClientHttpRequestFactory(httpClient);
+        listRequestFactory.setReadTimeout(properties.listReadTimeout());
+        this.listCallDeadline = properties.listReadTimeout();
         if (properties.apiKey() == null || properties.apiKey().isBlank()) {
             log.warn("YES24 API 키(YES24_KEY)가 비어 있습니다. 모든 식별이 실패(FAILED)하고 힌트로만 표시됩니다");
         }
 
-        this.restClient = builder
+        RestClient.Builder common = builder
                 .baseUrl(properties.baseUrl())
                 .defaultHeader("X-Api-Key", properties.apiKey() == null ? "" : properties.apiKey())
                 .defaultHeader(HttpHeaders.ACCEPT, "application/json")
-                .defaultHeader(HttpHeaders.USER_AGENT, USER_AGENT)
-                .requestFactory(requestFactory)
-                .build();
+                .defaultHeader(HttpHeaders.USER_AGENT, USER_AGENT);
+        this.listRestClient = common.clone().requestFactory(listRequestFactory).build();
+        this.restClient = common.requestFactory(requestFactory).build();
         this.rateLimiter = rateLimiter;
         this.meterRegistry = meterRegistry;
         this.clock = clock;
@@ -90,31 +103,94 @@ public class Yes24Client {
     }
 
     public Optional<Yes24Book> lookupByIsbn(String isbn13) {
+        checkDailyStop();
+        if (!rateLimiter.acquirePermission()) {
+            throw selfRateLimited();
+        }
+
+        Instant sentAt = clock.instant();
+        // URI 템플릿을 유지해야 http.client.requests의 uri 태그가 ISBN 실값으로 늘어나지 않는다
+        RawResponse<Yes24ItemDetailResponse> raw = exchange(restClient, callDeadline, Yes24ItemDetailResponse.class,
+                "/v1/goods/itemDetail?searchType=ISBN13&query={isbn}&detail=N", isbn13);
+        return classify(isbn13, raw, sentAt);
+    }
+
+    /**
+     * 메인 추천 배치용 카테고리 목록. 식별과 같은 선제한·일일 중단을 쓰되 허가는 최대 1초 기다린다.
+     * 항목 단위 검증은 하지 않는다(ISBN 없는 굿즈가 섞여 온다) — 호출자가 거른다.
+     */
+    public List<Yes24CategoryListResponse.Item> categoryList(Yes24CategoryList list, String categoryId, int pageSize) {
+        checkDailyStop();
+        acquireForList();
+        // 기다리는 동안 이미 나간 식별 요청이 RATE_002를 받았을 수 있다 — 허가를 얻었어도 보내지 않는다
+        checkDailyStop();
+
+        Instant sentAt = clock.instant();
+        RawResponse<Yes24CategoryListResponse> raw = exchange(listRestClient, listCallDeadline,
+                Yes24CategoryListResponse.class,
+                // detail은 보내지 않는다(문서상 기본 N). 10-15 실측 표본과 같은 요청
+                "/v1/category/{list}?categoryId={categoryId}&pageSize={pageSize}",
+                list.path(), categoryId, pageSize);
+
+        if (raw.status() == 200) {
+            Yes24CategoryListResponse body = raw.body();
+            if (raw.parseFailed() || body == null || !Boolean.TRUE.equals(body.success())
+                    || body.data() == null || body.data().items() == null) {
+                throw new Yes24Exception(Kind.FAILED, true, "YES24 목록 응답 검증 실패: 본문 형식 (" + list + ")");
+            }
+            return body.data().items();
+        }
+        String errorCode = raw.body() != null ? raw.body().errorCode() : null;
+        if (raw.status() == 404 && list.noResultCode().equals(errorCode)) {
+            return List.of();
+        }
+        throw rateLimitedOrFailed(raw.status(), raw.headers(), errorCode, sentAt);
+    }
+
+    private void checkDailyStop() {
         if (dailyStop.isActive(clock.instant())) {
             countRateLimited("self", "day");
             throw new Yes24Exception(Kind.DAILY_LIMIT, false, "YES24 일일 한도 소진으로 호출 중단 중 (해제 " + dailyStop.until() + ")");
         }
-        if (!rateLimiter.acquirePermission()) {
-            countRateLimited("self", "second");
-            throw new Yes24Exception(Kind.RATE_LIMITED, false, "YES24 선제한 거절");
-        }
+    }
 
-        Instant sentAt = clock.instant();
+    private Yes24Exception selfRateLimited() {
+        countRateLimited("self", "second");
+        return new Yes24Exception(Kind.RATE_LIMITED, false, "YES24 선제한 거절");
+    }
+
+    // 같은 제한기에서 100ms 간격으로 허가를 다시 시도한다. 식별 경로의 '대기 0'은 그대로 둔다
+    private void acquireForList() {
+        long deadlineNanos = System.nanoTime() + LIST_PERMIT_MAX_WAIT.toNanos();
+        while (!rateLimiter.acquirePermission()) {
+            if (System.nanoTime() >= deadlineNanos) {
+                throw selfRateLimited();
+            }
+            try {
+                TimeUnit.MILLISECONDS.sleep(LIST_PERMIT_POLL_MILLIS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw selfRateLimited();
+            }
+        }
+    }
+
+    private <T> RawResponse<T> exchange(RestClient client, Duration deadline, Class<T> bodyType,
+                                        String uriTemplate, Object... uriVariables) {
         long startedNanos = System.nanoTime();
-        RawResponse raw;
+        RawResponse<T> raw;
         try {
-            // URI 템플릿을 유지해야 http.client.requests의 uri 태그가 ISBN 실값으로 늘어나지 않는다
-            raw = restClient.get()
-                    .uri("/v1/goods/itemDetail?searchType=ISBN13&query={isbn}&detail=N", isbn13)
+            raw = client.get()
+                    .uri(uriTemplate, uriVariables)
                     .exchange((request, response) -> {
-                        Yes24ItemDetailResponse body = null;
+                        T body = null;
                         boolean parseFailed = false;
                         try {
-                            body = response.bodyTo(Yes24ItemDetailResponse.class);
+                            body = response.bodyTo(bodyType);
                         } catch (RestClientException e) {
                             parseFailed = true;
                         }
-                        return new RawResponse(response.getStatusCode().value(), response.getHeaders(), body, parseFailed);
+                        return new RawResponse<>(response.getStatusCode().value(), response.getHeaders(), body, parseFailed);
                     });
         } catch (RestClientException e) {
             if (isTimeout(e)) {
@@ -128,13 +204,13 @@ public class Yes24Client {
         // 200인데 본문을 읽는 중에 마감이 지나면 스트림이 닫혀 '파싱 실패'로 보인다 → 타임아웃으로 분류.
         // 200이 아닌 응답은 상태 코드·헤더만으로 판정하므로(예: HTML 429 + 일일 잔량 0) 덮어쓰지 않는다
         if (raw.status() == 200 && raw.parseFailed()
-                && Duration.ofNanos(System.nanoTime() - startedNanos).compareTo(callDeadline) >= 0) {
+                && Duration.ofNanos(System.nanoTime() - startedNanos).compareTo(deadline) >= 0) {
             throw new Yes24Exception(Kind.TIMEOUT, true, "YES24 타임아웃(본문 수신 중)");
         }
-        return classify(isbn13, raw, sentAt);
+        return raw;
     }
 
-    private Optional<Yes24Book> classify(String isbn13, RawResponse raw, Instant sentAt) {
+    private Optional<Yes24Book> classify(String isbn13, RawResponse<Yes24ItemDetailResponse> raw, Instant sentAt) {
         String errorCode = raw.body() != null ? raw.body().errorCode() : null;
 
         if (raw.status() == 200) {
@@ -143,25 +219,30 @@ public class Yes24Client {
         if (raw.status() == 404 && NOT_FOUND_CODE.equals(errorCode)) {
             return Optional.empty();
         }
-        if (raw.status() == 429) {
+        throw rateLimitedOrFailed(raw.status(), raw.headers(), errorCode, sentAt);
+    }
+
+    // 200도 '결과 없음'도 아닌 응답. 429는 일일(중단 시작)·초당으로 나누고 나머지는 실패다
+    private Yes24Exception rateLimitedOrFailed(int status, HttpHeaders headers, String errorCode, Instant sentAt) {
+        if (status == 429) {
             // 본문이 JSON이 아니어도(게이트웨이 HTML 등) 일일 잔량 0이면 일일 한도로 본다
-            if (DAILY_LIMIT_CODE.equals(errorCode) || isZero(raw.headers().getFirst("x-ratelimit-remaining-day"))) {
-                Instant until = resetDay(raw.headers(), sentAt);
+            if (DAILY_LIMIT_CODE.equals(errorCode) || isZero(headers.getFirst("x-ratelimit-remaining-day"))) {
+                Instant until = resetDay(headers, sentAt);
                 dailyStop.stopUntil(until);
                 countRateLimited("remote", "day");
                 log.warn("YES24 일일 한도 소진(RATE_002): {}까지 호출 중단", until);
-                throw new Yes24Exception(Kind.DAILY_LIMIT, true, "YES24 일일 한도 초과");
+                return new Yes24Exception(Kind.DAILY_LIMIT, true, "YES24 일일 한도 초과");
             }
             // RATE_001 또는 코드 없는 429는 초당 한도로 본다
             countRateLimited("remote", "second");
-            throw new Yes24Exception(Kind.RATE_LIMITED, true, "YES24 초당 한도 초과");
+            return new Yes24Exception(Kind.RATE_LIMITED, true, "YES24 초당 한도 초과");
         }
-        throw new Yes24Exception(Kind.FAILED, true,
-                "YES24 오류 응답: HTTP " + raw.status() + (errorCode != null ? " " + errorCode : ""));
+        return new Yes24Exception(Kind.FAILED, true,
+                "YES24 오류 응답: HTTP " + status + (errorCode != null ? " " + errorCode : ""));
     }
 
     // 200이어도 정상 결과를 확보하지 못했으면 실패다 (점검 페이지, success=false, 다른 책 등)
-    private Yes24Book validate(String isbn13, RawResponse raw) {
+    private Yes24Book validate(String isbn13, RawResponse<Yes24ItemDetailResponse> raw) {
         Yes24ItemDetailResponse body = raw.body();
         if (raw.parseFailed() || body == null || !Boolean.TRUE.equals(body.success()) || body.data() == null) {
             throw new Yes24Exception(Kind.FAILED, true, "YES24 응답 검증 실패: 본문 형식");
@@ -251,6 +332,6 @@ public class Yes24Client {
         return false;
     }
 
-    private record RawResponse(int status, HttpHeaders headers, Yes24ItemDetailResponse body, boolean parseFailed) {
+    private record RawResponse<T>(int status, HttpHeaders headers, T body, boolean parseFailed) {
     }
 }

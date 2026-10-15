@@ -67,6 +67,25 @@ class FeaturedBooksWriterTest {
     }
 
     @Test
+    void replaceSection_sourceChanged_updatesSnapshotSource() {
+        // V5 시드는 BESTSELLER·NEW가 ALADIN — 공급자를 바꾼 뒤 첫 갱신이 실패하면 섹션이 영영 갱신되지 않는다
+        FeaturedSectionSnapshot snapshot = FeaturedSectionSnapshot.builder()
+                .sectionType(FeaturedSectionType.BESTSELLER)
+                .source(FeaturedSource.ALADIN)
+                .status(SnapshotStatus.SUCCESS)
+                .build();
+        when(snapshotRepository.findByIdForUpdate(FeaturedSectionType.BESTSELLER))
+                .thenReturn(Optional.of(snapshot));
+
+        writer.replaceSection(FeaturedSectionType.BESTSELLER, FeaturedSource.YES24,
+                List.of(book(1)), Duration.ofDays(7));
+
+        verify(bookRepository).deleteBySectionType(FeaturedSectionType.BESTSELLER);
+        assertThat(snapshot.getStatus()).isEqualTo(SnapshotStatus.SUCCESS);
+        assertThat(snapshot.getSource()).isEqualTo(FeaturedSource.YES24);
+    }
+
+    @Test
     void markFailed_preservesBooks_updatesSnapshotOnly() {
         FeaturedSectionSnapshot snapshot = FeaturedSectionSnapshot.builder()
                 .sectionType(FeaturedSectionType.LOAN)

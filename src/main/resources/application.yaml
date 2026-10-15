@@ -20,13 +20,6 @@ server:
   port: 8080
   forward-headers-strategy: framework
 
-aladin:
-  ttb-key: ${ALADIN_TTB_KEY:}
-  base-url: https://www.aladin.co.kr/ttb/api
-  identification-timeout: 500
-  # ItemList(featured 배치 전용) — 사용자 응답 예산과 무관. BESTSELLER 실측 2s 초과(07-12)
-  list-timeout: 10000
-
 kakao:
   book:
     rest-api-key: ${KAKAO_BOOK_REST_API_KEY:}
@@ -55,6 +48,9 @@ yes24:
   # 실제 분포는 http.client.requests로 관측하고 OCI 오사카에서 다시 재서 조정
   connect-timeout: 200ms
   read-timeout: 700ms
+  # 메인 추천 배치(베스트셀러·신간 목록) 전용 전체 마감. 사용자 응답 예산과 무관하다.
+  # 로컬 실측 0.21~0.48s(4건, pageSize=30)의 약 6배. 짧아서 실패하면 다음 cron까지 지난 목록이 남는다(PR-3 결정 카드 4)
+  list-read-timeout: 3s
 
 search:
   total-deadline: 2800

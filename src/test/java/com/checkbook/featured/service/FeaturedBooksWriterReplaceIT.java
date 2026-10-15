@@ -11,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
@@ -37,6 +38,7 @@ class FeaturedBooksWriterReplaceIT {
     @Autowired FeaturedBooksWriter writer;
     @Autowired FeaturedBookRepository bookRepository;
     @Autowired FeaturedSectionSnapshotRepository snapshotRepository;
+    @Autowired TestEntityManager entityManager;
 
     @BeforeEach
     void seedSnapshotRow() {
@@ -71,6 +73,27 @@ class FeaturedBooksWriterReplaceIT {
         assertThat(snapshot.getStatus()).isEqualTo(SnapshotStatus.SUCCESS);
         assertThat(snapshot.getLastFetchedAt()).isNotNull();
         assertThat(snapshot.getExpiresAt()).isAfter(snapshot.getLastFetchedAt());
+    }
+
+    @Test
+    void replaceSection_newSource_replacesBooksAndPersistsSource() {
+        writer.replaceSection(FeaturedSectionType.BESTSELLER, FeaturedSource.ALADIN,
+                books("aladin"), Duration.ofDays(7));
+
+        // 공급자 전환 후 첫 교체 — 시드·기존 행의 source(ALADIN)와 달라도 교체가 커밋돼야 한다
+        writer.replaceSection(FeaturedSectionType.BESTSELLER, FeaturedSource.YES24,
+                books("yes24"), Duration.ofDays(7));
+        // 테스트 전체가 한 트랜잭션이라 1차 캐시가 같은 객체를 돌려준다 — DB에 쓴 값을 다시 읽어 확인
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(bookRepository.findBySectionTypeOrderByRankAsc(FeaturedSectionType.BESTSELLER))
+                .hasSize(3)
+                .allMatch(b -> b.getTitle().startsWith("yes24"));
+        FeaturedSectionSnapshot snapshot = snapshotRepository
+                .findById(FeaturedSectionType.BESTSELLER).orElseThrow();
+        assertThat(snapshot.getSource()).isEqualTo(FeaturedSource.YES24);
+        assertThat(snapshot.getStatus()).isEqualTo(SnapshotStatus.SUCCESS);
     }
 
     private List<FeaturedBook> books(String titlePrefix) {

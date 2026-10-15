@@ -1,10 +1,12 @@
 package com.checkbook.featured.service;
 
-import com.checkbook.client.aladin.AladinClient;
-import com.checkbook.client.aladin.AladinListQueryType;
-import com.checkbook.client.aladin.dto.AladinItemResponse.Item;
 import com.checkbook.client.datanaru.DatanaruClient;
 import com.checkbook.client.datanaru.dto.DatanaruLoanBookResult;
+import com.checkbook.client.yes24.Yes24CategoryList;
+import com.checkbook.client.yes24.Yes24Client;
+import com.checkbook.client.yes24.Yes24Exception;
+import com.checkbook.client.yes24.dto.Yes24CategoryListResponse.Item;
+import com.checkbook.common.util.InputNormalizer;
 import com.checkbook.featured.snapshot.domain.FeaturedBook;
 import com.checkbook.featured.snapshot.domain.FeaturedSectionType;
 import com.checkbook.featured.snapshot.domain.FeaturedSource;
@@ -20,27 +22,34 @@ import java.util.stream.IntStream;
 @Component
 public class FeaturedBooksRefresher {
 
-    private final AladinClient aladinClient;
+    // YES24 추천 목록은 categoryId가 필수다. 001 = 국내도서 전체
+    private static final String YES24_DOMESTIC_BOOKS = "001";
+
+    private final Yes24Client yes24Client;
     private final DatanaruClient datanaruClient;
     private final FeaturedBooksWriter writer;
     private final int pageSize;
+    private final int yes24FetchSize;
     private final Duration bestsellerTtl;
     private final Duration newTtl;
     private final Duration loanTtl;
 
     public FeaturedBooksRefresher(
-            AladinClient aladinClient,
+            Yes24Client yes24Client,
             DatanaruClient datanaruClient,
             FeaturedBooksWriter writer,
             @Value("${featured.page-size:15}") int pageSize,
+            // 굿즈·상품 코드·성인 상품을 걸러도 page-size를 채우도록 더 받아 둔다(호출 수는 같다)
+            @Value("${featured.yes24-fetch-size:30}") int yes24FetchSize,
             @Value("${featured.bestseller.ttl-hours:168}") long bestsellerTtlHours,
             @Value("${featured.new.ttl-hours:84}") long newTtlHours,
             @Value("${featured.loan.ttl-hours:168}") long loanTtlHours
     ) {
-        this.aladinClient = aladinClient;
+        this.yes24Client = yes24Client;
         this.datanaruClient = datanaruClient;
         this.writer = writer;
         this.pageSize = pageSize;
+        this.yes24FetchSize = yes24FetchSize;
         this.bestsellerTtl = Duration.ofHours(bestsellerTtlHours);
         this.newTtl = Duration.ofHours(newTtlHours);
         this.loanTtl = Duration.ofHours(loanTtlHours);
@@ -54,8 +63,8 @@ public class FeaturedBooksRefresher {
     public void refreshSection(FeaturedSectionType type) {
         try {
             switch (type) {
-                case BESTSELLER -> refreshFromAladin(type, AladinListQueryType.BESTSELLER, bestsellerTtl);
-                case NEW        -> refreshFromAladin(type, AladinListQueryType.ITEM_NEW_SPECIAL, newTtl);
+                case BESTSELLER -> refreshFromYes24(type, Yes24CategoryList.BESTSELLER, bestsellerTtl);
+                case NEW        -> refreshFromYes24(type, Yes24CategoryList.NEW_ATTENTION, newTtl);
                 case LOAN       -> refreshFromDatanaru(type, loanTtl);
             }
             log.info("featured 섹션 갱신 성공: type={}", type);
@@ -71,22 +80,38 @@ public class FeaturedBooksRefresher {
         }
     }
 
-    private void refreshFromAladin(FeaturedSectionType type, AladinListQueryType qt, Duration ttl) {
-        List<Item> raw = aladinClient.itemList(qt, pageSize);
-        // 필수 필드 가드: isbn13/title 둘 다 non-blank인 항목만 통과 (DB NOT NULL 보호)
+    // 우리 쪽 선제한은 클라이언트가 최대 1초 기다려 준다(PR-3 결정 카드 3).
+    // 재시작 직후 JVM의 첫 TLS 연결은 연결 제한(200ms)을 넘을 수 있는데, 첫 시도로 JVM이 데워져 두 번째는 빠르다.
+    // 그래서 시간 초과만 1번 바로 다시 부른다. 한도·제한·429·형식 오류·5xx는 다시 해도 같아 재시도하지 않는다(카드 7)
+    private void refreshFromYes24(FeaturedSectionType type, Yes24CategoryList list, Duration ttl) {
+        List<Item> raw;
+        try {
+            raw = yes24Client.categoryList(list, YES24_DOMESTIC_BOOKS, yes24FetchSize);
+        } catch (Yes24Exception e) {
+            if (e.kind() != Yes24Exception.Kind.TIMEOUT) {
+                throw e;
+            }
+            log.warn("YES24 목록 시간 초과, 1회 재시도: list={}", list);
+            raw = yes24Client.categoryList(list, YES24_DOMESTIC_BOOKS, yes24FetchSize);
+        }
+        // 필수 필드 가드(DB NOT NULL 보호) + 눌렀을 때 상세 화면이 쓸모 있는 항목만:
+        // ISBN이 아닌 상품 코드(달력 880… 등)는 '비표준 코드' 카드만 보이고, 메인 화면에는 나이 확인이 없다
         List<Item> valid = raw.stream()
-                .filter(it -> isNonBlank(it.isbn13()) && isNonBlank(it.title()))
+                .filter(it -> InputNormalizer.isValidIsbn13(trimmed(it.isbn13())))
+                .filter(it -> isNonBlank(it.title()))
+                .filter(it -> !"Y".equalsIgnoreCase(it.adultYn()))
+                .limit(pageSize)
                 .toList();
         if (valid.isEmpty()) {
             // 외부 API가 빈 응답 또는 모두 invalid → 책 row 보존하기 위해 실패로 처리
             throw new IllegalStateException(
-                    "알라딘 ItemList 응답이 비었거나 필수 필드 누락: queryType=" + qt
+                    "YES24 목록 응답이 비었거나 필수 필드 누락: list=" + list
                             + ", raw=" + raw.size());
         }
         List<FeaturedBook> books = IntStream.range(0, valid.size())
-                .mapToObj(i -> toBookFromAladin(type, i + 1, valid.get(i)))
+                .mapToObj(i -> toBookFromYes24(type, i + 1, valid.get(i)))
                 .toList();
-        writer.replaceSection(type, FeaturedSource.ALADIN, books, ttl);
+        writer.replaceSection(type, FeaturedSource.YES24, books, ttl);
     }
 
     private void refreshFromDatanaru(FeaturedSectionType type, Duration ttl) {
@@ -117,17 +142,31 @@ public class FeaturedBooksRefresher {
         return s != null && !s.isBlank();
     }
 
-    private FeaturedBook toBookFromAladin(FeaturedSectionType type, int rank, Item item) {
+    private FeaturedBook toBookFromYes24(FeaturedSectionType type, int rank, Item item) {
         return FeaturedBook.builder()
                 .sectionType(type)
                 .rank(rank)
-                .isbn13(item.isbn13())
-                .title(item.title())
+                .isbn13(trimmed(item.isbn13()))
+                .title(item.title().strip())
                 .author(item.author())
                 .publisher(item.publisher())
                 .coverUrl(item.cover())
-                .publishedAt(item.pubDate())
+                .publishedAt(publishedAt(item.publishDate()))
                 .build();
+    }
+
+    // YES24는 yyyyMMdd. 알라딘 때와 같은 yyyy-MM-dd로 맞추고, 모르는 형식은 버린다(열 길이 20을 넘으면 교체 전체가 실패한다)
+    private static String publishedAt(String yes24Date) {
+        if (yes24Date == null) return null;
+        String value = yes24Date.strip();
+        if (value.matches("\\d{8}")) {
+            return value.substring(0, 4) + "-" + value.substring(4, 6) + "-" + value.substring(6, 8);
+        }
+        return value.matches("\\d{4}-\\d{2}-\\d{2}") ? value : null;
+    }
+
+    private static String trimmed(String s) {
+        return s == null ? null : s.strip();
     }
 
     private FeaturedBook toBookFromDatanaru(FeaturedSectionType type, int rank,

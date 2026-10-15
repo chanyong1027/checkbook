@@ -60,7 +60,9 @@ public class FeaturedSectionSnapshot {
         this.failureReason = failureReason;
     }
 
-    public void markSuccess(Instant fetchedAt, Instant expiresAt) {
+    /** 출처는 방금 교체한 책 행의 출처로 함께 바꾼다 — 공급자 전환(알라딘 → YES24) 후 표기가 데이터와 어긋나지 않게 */
+    public void markSuccess(FeaturedSource source, Instant fetchedAt, Instant expiresAt) {
+        this.source = source;
         this.status = SnapshotStatus.SUCCESS;
         this.lastFetchedAt = fetchedAt;
         this.expiresAt = expiresAt;

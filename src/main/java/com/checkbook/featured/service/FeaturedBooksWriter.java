@@ -39,14 +39,9 @@ public class FeaturedBooksWriter {
         bookRepository.saveAll(books);
 
         Instant now = Instant.now();
-        snapshot.markSuccess(now, now.plus(ttl));
-        // source가 바뀌었을 가능성에 대비 (현재는 고정이지만 향후 확장 여지)
-        if (snapshot.getSource() != source) {
-            // reflection 없이 처리하려면 setter 필요 — 현재 정책상 source는 고정이므로
-            // 불일치 시 명시적 예외로 처리. 향후 source 변경이 필요해지면 도메인 메서드 추가.
-            throw new IllegalStateException(
-                    "source 불일치: snapshot=" + snapshot.getSource() + ", input=" + source);
-        }
+        // source도 같은 트랜잭션에서 바꾼다. 예전에는 불일치를 예외로 막아서 시드(ALADIN)와 다른 공급자로
+        // 바꾸면 교체가 매번 롤백됐다(PR-3 결정 카드 0)
+        snapshot.markSuccess(source, now, now.plus(ttl));
     }
 
     @Transactional

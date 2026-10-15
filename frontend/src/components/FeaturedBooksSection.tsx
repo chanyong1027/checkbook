@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getFeatured } from '../api'
 import { toUserMessage } from '../api/errors.ts'
-import type { BookCandidate, FeaturedSectionType } from '../types'
+import type { BookCandidate, FeaturedSectionType, FeaturedSource } from '../types'
 
 interface Props {
   onSelect: (book: BookCandidate) => void
@@ -10,6 +10,13 @@ interface Props {
 interface TabSpec {
   type: FeaturedSectionType
   label: string
+}
+
+// YES24 약관: 제공받은 도서 정보를 표시하는 화면에 출처를 적는다(상품 링크는 상세 화면의 새 책 칸)
+const SOURCE_LABELS: Record<FeaturedSource, string> = {
+  YES24: 'YES24',
+  DATANARU: '도서관 정보나루',
+  ALADIN: '알라딘',
 }
 
 const TABS: TabSpec[] = [
@@ -34,6 +41,7 @@ function CardSkeleton() {
 export function FeaturedBooksSection({ onSelect }: Props) {
   const [activeTab, setActiveTab] = useState<FeaturedSectionType>('BESTSELLER')
   const [items, setItems] = useState<BookCandidate[]>([])
+  const [source, setSource] = useState<FeaturedSource | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -42,8 +50,12 @@ export function FeaturedBooksSection({ onSelect }: Props) {
     setLoading(true)
     setError(null)
     setItems([])
+    setSource(null)
     getFeatured(activeTab, controller.signal)
-      .then(res => setItems(res.items))
+      .then(res => {
+        setItems(res.items)
+        setSource(res.source)
+      })
       .catch(err => {
         if (controller.signal.aborted) return
         setError(toUserMessage(err, '추천 도서를 불러오지 못했습니다.'))
@@ -137,6 +149,13 @@ export function FeaturedBooksSection({ onSelect }: Props) {
             </button>
           ))}
         </div>
+      )}
+
+      {/* 서버가 새 출처를 보내도(타입에 없는 값) 화면이 깨지지 않게 아는 출처만 적는다 */}
+      {!error && !loading && items.length > 0 && source && SOURCE_LABELS[source] && (
+        <p className="text-[11px] text-slate-500 mt-2 text-right">
+          정보 제공: {SOURCE_LABELS[source]}
+        </p>
       )}
     </section>
   )
