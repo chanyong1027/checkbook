@@ -53,7 +53,8 @@ public class MillieBookService {
         String via = "primary";
         Optional<MatchedMillie> matched = matcher.findMatch(book, candidates);
         if (matched.isEmpty() && fallbackHint != null && fallbackHint.hasTitle()) {
-            matched = matcher.findMatch(titleFromHint(book, fallbackHint), candidates);
+            // 저자로 확인된 매칭만 받는다(제목만 일치하는 TITLE_ONLY 제외) — 힌트에는 ISBN 대응 보장이 없다
+            matched = matcher.findMatch(titleFromHint(book, fallbackHint), candidates, false);
             via = "hint_fallback";
         }
         if (matched.isEmpty()) {

@@ -61,6 +61,29 @@ class MillieHintFallbackMatchingTest {
         assertThat(result.available()).isFalse();
     }
 
+    // 보조 매칭은 저자로 확인된 후보만 받는다. 저자가 비어 있는 후보는 제목만으로 맞을 수 있어 다른 책일 위험이 있다
+    // (PR #31 리뷰 지적: 힌트에는 ISBN 대응이 없으므로 제목만 일치하는 매칭은 보조 경로에서 허용하지 않는다)
+    @Test
+    void hintFallbackRejectsTitleOnlyMatchOnAuthorlessCandidate() {
+        MillieBookItem noAuthor = new MillieBookItem(
+                "SEQ8", "모두가 부자 되는 투자 공부", "", null, "경제경영", "테스트출판", true, true);
+        when(millieClient.searchByTitle("투자 공부")).thenReturn(List.of(noAuthor));
+
+        MillieAvailability result = service.findAvailability(book("투자 공부"), book("모두가 부자 되는 투자 공부"));
+
+        assertThat(result.available()).isFalse();
+    }
+
+    // 주 경로(YES24 제목)는 기존 정책 그대로 — 저자 없는 후보도 제목이 같으면 매칭한다
+    @Test
+    void primaryPathStillAllowsTitleOnlyMatch() {
+        MillieBookItem noAuthor = new MillieBookItem(
+                "SEQ8", "투자 공부", "", null, "경제경영", "테스트출판", true, true);
+        when(millieClient.searchByTitle("투자 공부")).thenReturn(List.of(noAuthor));
+
+        assertThat(service.findAvailability(book("투자 공부"), null).available()).isTrue();
+    }
+
     private static IdentifiedBook book(String title) {
         return new IdentifiedBook(title, "홍길동 저", "9788900000009", "테스트출판", null);
     }

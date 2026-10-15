@@ -37,12 +37,25 @@ public class MillieBookMatcher {
             IdentifiedBook selected,
             List<MillieBookItem> candidates
     ) {
+        return findMatch(selected, candidates, true);
+    }
+
+    /**
+     * @param allowTitleOnly false면 저자로 확인되지 않은 매칭(후보 저자가 비어 제목만 일치, TITLE_ONLY)을 받지 않는다.
+     *                       힌트 제목 보조 매칭용 — 힌트에는 ISBN 대응 보장이 없어 제목만으로는 다른 책일 수 있다
+     */
+    public Optional<MatchedMillie> findMatch(
+            IdentifiedBook selected,
+            List<MillieBookItem> candidates,
+            boolean allowTitleOnly
+    ) {
         BookMatcher.Selected sel = new BookMatcher.Selected(selected.title(), selected.author());
 
         List<Scored> matched = candidates.stream()
                 .map(item -> {
                     MatchResult r = baseMatcher.match(item.contentName(), item.author(), sel);
-                    return r.matched() ? new Scored(item, r.path()) : null;
+                    if (!r.matched() || (!allowTitleOnly && r.path() == MatchPath.TITLE_ONLY)) return null;
+                    return new Scored(item, r.path());
                 })
                 .filter(Objects::nonNull)
                 .toList();

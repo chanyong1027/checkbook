@@ -71,7 +71,7 @@ class MillieBookServiceTest {
         List<MillieBookItem> candidates = List.of(item(true, true));
         when(millieClient.searchByTitle("투자")).thenReturn(candidates);
         when(matcher.findMatch(primary, candidates)).thenReturn(Optional.empty());
-        when(matcher.findMatch(argThat(b -> b != null && "부자가 되는 투자".equals(b.title())), eq(candidates)))
+        when(matcher.findMatch(argThat(b -> b != null && "부자가 되는 투자".equals(b.title())), eq(candidates), eq(false)))
                 .thenReturn(Optional.of(new MatchedMillie(item(true, true), Format.EBOOK)));
 
         MillieAvailability result = service.findAvailability(primary, hint);
@@ -93,8 +93,8 @@ class MillieBookServiceTest {
         service.findAvailability(primary, hint);
 
         ArgumentCaptor<IdentifiedBook> captor = ArgumentCaptor.forClass(IdentifiedBook.class);
-        verify(matcher, times(2)).findMatch(captor.capture(), eq(candidates));
-        assertThat(captor.getAllValues().get(1)).isEqualTo(
+        verify(matcher).findMatch(captor.capture(), eq(candidates), eq(false));
+        assertThat(captor.getValue()).isEqualTo(
                 new IdentifiedBook("부자가 되는 투자", "YES24 저자", "9788900000009", "YES24출판", null));
     }
 
@@ -109,9 +109,9 @@ class MillieBookServiceTest {
         service.findAvailability(primary, hint);
 
         ArgumentCaptor<IdentifiedBook> captor = ArgumentCaptor.forClass(IdentifiedBook.class);
-        verify(matcher, times(2)).findMatch(captor.capture(), eq(candidates));
-        assertThat(captor.getAllValues().get(1).author()).isEqualTo("힌트 저자");
-        assertThat(captor.getAllValues().get(1).publisher()).isEqualTo("힌트출판");
+        verify(matcher).findMatch(captor.capture(), eq(candidates), eq(false));
+        assertThat(captor.getValue().author()).isEqualTo("힌트 저자");
+        assertThat(captor.getValue().publisher()).isEqualTo("힌트출판");
     }
 
     @Test
@@ -134,7 +134,7 @@ class MillieBookServiceTest {
         MillieAvailability result = service.findAvailability(primary, hint);
 
         assertThat(result.available()).isTrue();
-        verify(matcher, never()).findMatch(eq(hint), any());
+        verify(matcher, never()).findMatch(any(), any(), eq(false));
         assertThat(meterRegistry.counter("millie.match", "via", "primary").count()).isEqualTo(1.0);
     }
 
@@ -145,6 +145,7 @@ class MillieBookServiceTest {
         List<MillieBookItem> candidates = List.of(item(true, true));
         when(millieClient.searchByTitle("투자")).thenReturn(candidates);
         when(matcher.findMatch(any(), any())).thenReturn(Optional.empty());
+        when(matcher.findMatch(any(), any(), eq(false))).thenReturn(Optional.empty());
 
         MillieAvailability result = service.findAvailability(primary, hint);
 
@@ -161,7 +162,7 @@ class MillieBookServiceTest {
         when(matcher.findMatch(primary, candidates)).thenReturn(Optional.empty());
 
         assertThat(service.findAvailability(primary, hint).available()).isFalse();
-        verify(matcher, never()).findMatch(eq(hint), any());
+        verify(matcher, never()).findMatch(any(), any(), eq(false));
     }
 
     @Test

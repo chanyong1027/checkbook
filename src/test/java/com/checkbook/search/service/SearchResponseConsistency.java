@@ -4,6 +4,7 @@ import com.checkbook.search.dto.SearchResponse;
 import com.checkbook.search.dto.SearchResponse.FailureDetail;
 import com.checkbook.search.dto.SearchResponse.SectionStatusDetail;
 import com.checkbook.search.dto.SearchSection;
+import com.checkbook.search.dto.SearchSectionReason;
 import com.checkbook.search.dto.SearchSectionStatus;
 
 import java.util.List;
@@ -16,7 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   <li>네 섹션이 모두 정확히 한 번 나온다</li>
  *   <li>FAILED 섹션에는 같은 섹션의 failures 항목이 정확히 하나</li>
  *   <li>SUCCESS·SKIPPED 섹션은 failures에 없다</li>
- *   <li>FAILED·SKIPPED에는 reason이 있다 (SUCCESS는 null 또는 NOT_FOUND·PRICE_UNAVAILABLE)</li>
+ *   <li>FAILED·SKIPPED에는 reason이 있다. SUCCESS의 reason은 null·NOT_FOUND·PRICE_UNAVAILABLE만</li>
  * </ul>
  */
 final class SearchResponseConsistency {
@@ -42,6 +43,10 @@ final class SearchResponseConsistency {
             }
             if (status.status() == SearchSectionStatus.SKIPPED) {
                 assertThat(status.reason()).as("%s SKIPPED → reason 필수", status.section()).isNotNull();
+            }
+            if (status.status() == SearchSectionStatus.SUCCESS) {
+                assertThat(status.reason()).as("%s SUCCESS → reason은 없음·NOT_FOUND·PRICE_UNAVAILABLE만", status.section())
+                        .isIn(null, SearchSectionReason.NOT_FOUND, SearchSectionReason.PRICE_UNAVAILABLE);
             }
         }
         assertThat(failures).extracting(FailureDetail::section)
