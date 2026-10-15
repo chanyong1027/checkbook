@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """알라딘 기준 데이터를 수집한다 (작업 지시서 T0-1). 알라딘 OpenAPI는 2026-10-30에 종료된다.
 
-지금 앱(AladinClient)과 똑같은 요청을 보낸다.
+2026-10-13 당시 앱(AladinClient, 지금은 삭제됨)과 똑같은 요청을 보낸다.
   1. ISBN 조회   — isbns.csv의 전체 ISBN에 ItemLookUp (ItemIdType=ISBN13)
   2. 키워드 식별 — kakao-seed-keywords.csv의 검색어에 ItemSearch (MaxResults=1, SearchTarget=Book). 보조 경로
   3. 중고가·매장 — 카카오 묶음에서 찾은 책 앞쪽 N권에 ItemLookUp+OptResult=usedList, ItemOffStoreList
@@ -211,7 +211,7 @@ def write_summary(results, raw_path, stamp, args, rebuilt=False):
         "",
         f"- 수집 시각: {stamp:%Y-%m-%d %H:%M:%S} (로컬 WSL에서 호출, 지연은 EC2 기준이 아님)",
         f"- 원문: `{raw_path.relative_to(REPO_ROOT)}` (커밋 금지)",
-        f"- 요청 형식: 앱 `AladinClient`와 동일 (ItemLookUp ItemIdType=ISBN13 / ItemSearch MaxResults=1 SearchTarget=Book)",
+        f"- 요청 형식: 2026-10-13 당시 앱 `AladinClient`(지금은 삭제됨)와 동일 (ItemLookUp ItemIdType=ISBN13 / ItemSearch MaxResults=1 SearchTarget=Book)",
         (f"- 원문에서 요약만 재생성함 (원 실행의 호출 간격·타임아웃은 원문에 기록되지 않음)" if rebuilt
          else f"- 호출 간격 {args.sleep}s, 타임아웃 {args.timeout}s"),
         "",
