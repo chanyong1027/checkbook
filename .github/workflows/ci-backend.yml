@@ -1,6 +1,6 @@
 name: CI Backend
 
-# PR마다 백엔드 테스트를 돌린다. 배포는 하지 않는다(배포는 backend-deploy.yml, 수동 실행).
+# PR마다 백엔드 테스트를 돌린다. 배포는 하지 않는다(이미지는 backend-image.yml, 서버 배포는 deploy/deploy.sh).
 # 기본 test는 타이밍 의존 재현 테스트(diagnosis)와 출력 전용 벤치마크(benchmark)를 제외한다.
 # diagnosisTest는 위양성 가능성이 있어 수동 실행(workflow_dispatch)에서만 돈다.
 on:
