@@ -1,6 +1,7 @@
 package com.checkbook.client;
 
 import com.checkbook.client.kakao.KakaoBookClient;
+import com.checkbook.client.kakao.KakaoBookProperties;
 import com.checkbook.client.kakao.dto.KakaoBookResponse;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
@@ -37,12 +38,20 @@ class KakaoBookClientTest {
                         }
                         """));
         server.start();
-        KakaoBookClient client = new KakaoBookClient(server.url("/").toString().replaceAll("/$", ""), "test-key", 1000);
+        KakaoBookClient client = new KakaoBookClient(
+                new KakaoBookProperties(server.url("/").toString().replaceAll("/$", ""), "test-key", 1000));
 
         KakaoBookResponse response = client.searchBooks("혼모노", 1, 10);
 
         assertThat(response.documents()).hasSize(1);
         assertThat(response.meta().totalCount()).isEqualTo(1);
         assertThat(response.meta().isEnd()).isNull();
+    }
+
+    @Test
+    void propertiesToStringMasksRestApiKey() {
+        KakaoBookProperties properties = new KakaoBookProperties("https://dapi.kakao.com", "secret-key", 1000);
+
+        assertThat(properties.toString()).doesNotContain("secret-key").contains("****");
     }
 }

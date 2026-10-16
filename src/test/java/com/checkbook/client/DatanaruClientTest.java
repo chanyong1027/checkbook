@@ -1,6 +1,7 @@
 package com.checkbook.client;
 
 import com.checkbook.client.datanaru.DatanaruClient;
+import com.checkbook.client.datanaru.DatanaruProperties;
 import com.checkbook.client.datanaru.dto.DatanaruBookExistResult;
 import com.checkbook.client.datanaru.dto.DatanaruLibSrchResult;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -47,7 +48,8 @@ class DatanaruClientTest {
         server.start();
 
         DatanaruClient client = new DatanaruClient(
-                baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000, new SimpleMeterRegistry());
+                new DatanaruProperties(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000),
+                new SimpleMeterRegistry());
 
         DatanaruBookExistResult result = client.bookExist("9788936439743", "111111");
 
@@ -94,7 +96,8 @@ class DatanaruClientTest {
         server.start();
 
         DatanaruClient client = new DatanaruClient(
-                baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000, new SimpleMeterRegistry());
+                new DatanaruProperties(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000),
+                new SimpleMeterRegistry());
 
         List<DatanaruLibSrchResult> result = client.libSrch(1, 100);
 
@@ -106,7 +109,7 @@ class DatanaruClientTest {
     @Test
     void bookExistThrowsOnNetworkFailure() {
         DatanaruClient client = new DatanaruClient(
-                "http://127.0.0.1:1/api", "test-key", 50, 50, new SimpleMeterRegistry());
+                new DatanaruProperties("http://127.0.0.1:1/api", "test-key", 50, 50), new SimpleMeterRegistry());
 
         assertThatThrownBy(() -> client.bookExist("9788936439743", "111111"))
                 .isInstanceOf(Exception.class);
@@ -115,7 +118,7 @@ class DatanaruClientTest {
     @Test
     void libSrchThrowsOnNetworkFailure() {
         DatanaruClient client = new DatanaruClient(
-                "http://127.0.0.1:1/api", "test-key", 50, 50, new SimpleMeterRegistry());
+                new DatanaruProperties("http://127.0.0.1:1/api", "test-key", 50, 50), new SimpleMeterRegistry());
 
         assertThatThrownBy(() -> client.libSrch(1, 100))
                 .isInstanceOf(DatanaruResponseException.class);
@@ -129,11 +132,19 @@ class DatanaruClientTest {
 
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         DatanaruClient client = new DatanaruClient(
-                baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000, registry);
+                new DatanaruProperties(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000), registry);
 
         assertThatThrownBy(() -> client.bookExist("9788936439743", "111111"))
                 .isInstanceOf(DatanaruResponseException.class);
         assertThat(registry.get("datanaru.rate_limited").counter().count()).isEqualTo(1.0);
+    }
+
+    @Test
+    void propertiesToStringMasksAuthKey() {
+        DatanaruProperties properties =
+                new DatanaruProperties("https://data4library.kr/api", "secret-key", 2000, 10000);
+
+        assertThat(properties.toString()).doesNotContain("secret-key").contains("****");
     }
 
     private String baseUrl(String path) {

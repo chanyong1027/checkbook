@@ -1,6 +1,7 @@
 package com.checkbook.client;
 
 import com.checkbook.client.kakao.KakaoBookClient;
+import com.checkbook.client.kakao.KakaoBookProperties;
 import com.checkbook.client.kakao.dto.KakaoBookResponse;
 import org.junit.jupiter.api.Test;
 
@@ -20,11 +21,11 @@ class KakaoBookClientSmokeTest {
         assumeTrue(restApiKey != null && !restApiKey.isBlank(),
                 "KAKAO_BOOK_REST_API_KEY is not configured");
 
-        KakaoBookClient client = new KakaoBookClient(
+        KakaoBookClient client = new KakaoBookClient(new KakaoBookProperties(
                 "https://dapi.kakao.com",
                 restApiKey,
                 5000
-        );
+        ));
 
         KakaoBookResponse response = client.searchBooks("자바", 1, 5);
 
