@@ -16,7 +16,7 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties("datanaru")
 public record DatanaruProperties(
         @NotBlank String baseUrl,
-        String authKey,
+        @NotBlank String authKey,
         @Positive int timeout,
         @Positive int listTimeout
 ) {

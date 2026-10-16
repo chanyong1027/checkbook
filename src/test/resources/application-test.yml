@@ -11,6 +11,14 @@ spring:
       ddl-auto: create-drop
     show-sql: false
 
+# 외부 API 키는 비면 기동이 멈춘다(@NotBlank). 테스트는 실제 호출을 하지 않으니 더미 값을 둔다
+kakao:
+  book:
+    rest-api-key: test-key
+
+yes24:
+  api-key: test-key
+
 datanaru:
   auth-key: test-key
   base-url: https://data4library.kr/api

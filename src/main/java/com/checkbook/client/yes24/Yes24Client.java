@@ -82,13 +82,10 @@ public class Yes24Client {
         JdkClientHttpRequestFactory listRequestFactory = new JdkClientHttpRequestFactory(httpClient);
         listRequestFactory.setReadTimeout(properties.listReadTimeout());
         this.listCallDeadline = properties.listReadTimeout();
-        if (properties.apiKey() == null || properties.apiKey().isBlank()) {
-            log.warn("YES24 API 키(YES24_KEY)가 비어 있습니다. 모든 식별이 실패(FAILED)하고 힌트로만 표시됩니다");
-        }
 
         RestClient.Builder common = builder
                 .baseUrl(properties.baseUrl())
-                .defaultHeader("X-Api-Key", properties.apiKey() == null ? "" : properties.apiKey())
+                .defaultHeader("X-Api-Key", properties.apiKey())
                 .defaultHeader(HttpHeaders.ACCEPT, "application/json")
                 .defaultHeader(HttpHeaders.USER_AGENT, USER_AGENT);
         this.listRestClient = common.clone().requestFactory(listRequestFactory).build();

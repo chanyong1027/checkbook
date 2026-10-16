@@ -15,7 +15,7 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties("kakao.book")
 public record KakaoBookProperties(
         @NotBlank String baseUrl,
-        String restApiKey,
+        @NotBlank String restApiKey,
         @Positive int timeout
 ) {
 

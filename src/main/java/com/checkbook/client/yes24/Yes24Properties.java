@@ -20,7 +20,7 @@ import java.time.Duration;
 @ConfigurationProperties("yes24")
 public record Yes24Properties(
         @NotBlank String baseUrl,
-        String apiKey,
+        @NotBlank String apiKey,
         @NotNull Duration connectTimeout,
         @NotNull Duration readTimeout,
         @NotNull Duration listReadTimeout

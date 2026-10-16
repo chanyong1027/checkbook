@@ -22,6 +22,7 @@ server:
 
 kakao:
   book:
+    # 필수 키. 비면 기동이 멈춘다(@NotBlank). 빈 기본값은 지우지 않는다 — 이유는 yes24.api-key 주석
     rest-api-key: ${KAKAO_BOOK_REST_API_KEY:}
     base-url: https://dapi.kakao.com
     # EC2 4세션 실측(n=400): p99 173ms, max 250ms — 구 3000ms의 근거("가끔 1.5~2s")는 미재현으로
@@ -30,6 +31,7 @@ kakao:
     timeout: 1000
 
 datanaru:
+  # 필수 키. 비면 기동이 멈춘다(@NotBlank). 빈 기본값은 지우지 않는다 — 이유는 yes24.api-key 주석
   auth-key: ${DATANARU_AUTH_KEY:}
   base-url: https://data4library.kr/api
   timeout: 2000
@@ -40,6 +42,8 @@ millie:
   timeout: 2000
 
 yes24:
+  # 필수 키. 비면 기동이 멈춘다(@NotBlank). ${X:}의 빈 기본값은 env가 없을 때 ""를 넣어 @NotBlank가 잡게 하려는 것 —
+  # 지우면 해석 못 한 "${X}"가 글자 그대로 바인딩돼 검증을 통과한다
   api-key: ${YES24_KEY:}
   base-url: https://apis.yes24.com
   # 식별은 fan-out 전에 순차 실행돼 최악 응답 시간에 그대로 더해진다. 재시도 없음.
