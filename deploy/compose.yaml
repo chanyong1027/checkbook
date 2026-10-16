@@ -1,0 +1,73 @@
+# CheckBook 운영 Compose (OCI 서버). 운영 방법은 deploy/README.md
+#
+# - postgres는 항상 떠 있고, 앱은 블루·그린 두 칸(app-blue 8081, app-green 8082) 중 하나만 서비스한다.
+#   앱 칸은 profile "app"이라 `docker compose up -d`로는 뜨지 않고, deploy.sh가 칸 이름을 지정해 띄운다.
+# - 칸별 이미지는 deploy.sh가 환경 변수(BLUE_IMAGE/GREEN_IMAGE, digest 고정)로 넘긴다.
+# - DB는 내부 전용 네트워크(db)에만 있어 호스트·인터넷에서 닿지 않는다. 앱은 127.0.0.1에만 열고 Nginx가 앞에 선다.
+# - 로그는 journald로 보낸다. json-file은 `docker rm` 때 같이 지워져 칸을 지우는 블루·그린과 안 맞는다.
+#   보기: `journalctl CONTAINER_NAME=checkbook-app-green-1 -f` 또는 `docker logs`.
+
+name: checkbook
+
+x-logging: &logging
+  # 서버는 journald. journald가 없는 곳(Docker Desktop 로컬 검증)에서만 CHECKBOOK_LOG_DRIVER=json-file로 바꾼다
+  driver: ${CHECKBOOK_LOG_DRIVER:-journald}
+  options:
+    tag: "{{.Name}}"
+
+x-app: &app
+  profiles: ["app"]
+  env_file:
+    - ${CHECKBOOK_ENV_FILE:-/opt/checkbook/.env}
+  environment:
+    # 컨테이너 안에서 본 DB 주소. .env에는 DB_USERNAME·DB_PASSWORD만 둔다
+    DB_URL: jdbc:postgresql://postgres:5432/checkbook
+  depends_on:
+    postgres:
+      condition: service_healthy
+  networks: [db, egress]
+  restart: unless-stopped
+  # Boot 그레이스풀 종료는 진행 중 요청을 최대 30초(spring.lifecycle.timeout-per-shutdown-phase 기본값) 기다린다.
+  # Docker 기본 10초면 그 전에 SIGKILL로 끊기므로 그보다 길게 준다
+  stop_grace_period: 40s
+  logging: *logging
+
+services:
+  postgres:
+    image: postgres:18.6-alpine
+    environment:
+      POSTGRES_DB: checkbook
+      POSTGRES_USER: ${DB_USERNAME:?DB_USERNAME이 .env에 필요합니다}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD가 .env에 필요합니다}
+    volumes:
+      # PostgreSQL 18 공식 이미지는 PGDATA가 /var/lib/postgresql/18/docker다. 상위 디렉터리에 붙여야 한다
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      # -h 127.0.0.1: 첫 초기화 중 임시 서버(소켓만 열림)가 healthy로 잡히지 않게 TCP로 확인한다
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d checkbook"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [db]
+    restart: unless-stopped
+    logging: *logging
+
+  app-blue:
+    <<: *app
+    image: ${BLUE_IMAGE:-checkbook-image-not-set}
+    ports:
+      - "127.0.0.1:8081:8080"
+
+  app-green:
+    <<: *app
+    image: ${GREEN_IMAGE:-checkbook-image-not-set}
+    ports:
+      - "127.0.0.1:8082:8080"
+
+networks:
+  db:
+    internal: true
+  egress: {}
+
+volumes:
+  pgdata:
