@@ -207,7 +207,7 @@ jobs:
           INPUT_DIGEST: ${{ inputs.digest }}
           SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           SSH_HOST: ${{ secrets.DEPLOY_HOST }}
-          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_USER: ${{ vars.DEPLOY_USER }}   # 비밀이 아니다. 시크릿이면 로그의 모든 "deploy" 글자가 ***로 가려진다
           SSH_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
         run: |
           set -euo pipefail
@@ -216,9 +216,19 @@ jobs:
           umask 077
           dir="$(mktemp -d)"
           trap 'rm -rf "${dir}"' EXIT
-          printf '%s\n' "${SSH_KEY}" >"${dir}/key"
+          # 시크릿을 웹 화면에 붙여 넣으면 앞뒤 공백·줄바꿈(\r 포함)이 섞이기 쉽다. 그러면 호스트 키 확인이
+          # "No ED25519 host key is known"으로만 실패해 원인을 알기 어렵다. 앞뒤를 지우고 형식을 본다(값은 찍지 않는다)
+          SSH_HOST="$(printf '%s' "${SSH_HOST}" | tr -d '[:space:]')"
+          SSH_USER="$(printf '%s' "${SSH_USER}" | tr -d '[:space:]')"
+          read -r key_type key_body _ <<<"$(printf '%s' "${SSH_HOST_KEY}" | tr -d '\r')" || true
+          [[ "${SSH_HOST}" =~ ^[A-Za-z0-9.:-]+$ ]] || { echo "DEPLOY_HOST 시크릿 형식이 아닙니다(IP나 호스트 이름만. 사용자명·포트·따옴표 없이)"; exit 1; }
+          [[ "${SSH_USER}" =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo "DEPLOY_USER 변수가 비었거나 형식이 아닙니다(Environment variables)"; exit 1; }
+          [[ "${key_type:-}" == ssh-ed25519 ]] || { echo "DEPLOY_HOST_KEY 시크릿의 첫 칸이 ssh-ed25519가 아닙니다(서버의 /etc/ssh/ssh_host_ed25519_key.pub 앞 두 칸)"; exit 1; }
+          [[ "${key_body:-}" =~ ^AAAA[A-Za-z0-9+/]+=*$ ]] || { echo "DEPLOY_HOST_KEY 시크릿의 둘째 칸이 키 본문(AAAA…)이 아닙니다"; exit 1; }
+          printf '%s\n' "${SSH_KEY}" | tr -d '\r' >"${dir}/key"
+          grep -q -- '-----BEGIN OPENSSH PRIVATE KEY-----' "${dir}/key" || { echo "DEPLOY_SSH_KEY 시크릿이 OpenSSH 개인 키가 아닙니다(-----BEGIN부터 -----END까지 통째로)"; exit 1; }
           # 서버에서 직접 확인한 호스트 키 한 줄. 매번 ssh-keyscan으로 받으면 확인을 끄는 것과 같다(결정 카드 8)
-          printf '%s %s\n' "${SSH_HOST}" "${SSH_HOST_KEY}" >"${dir}/known_hosts"
+          printf '%s %s %s\n' "${SSH_HOST}" "${key_type}" "${key_body}" >"${dir}/known_hosts"
           echo "backend ${action} ${digest}"
           # 서버 래퍼가 SSH 세션 밖 유닛에서 작업하므로 이 연결이 끊겨도 배포는 끝까지 간다.
           # 그때 이 단계는 실패로 끝나니 서버의 journalctl -u checkbook-deploy-backend 와 장부로 결과를 확인한다
