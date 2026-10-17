@@ -190,7 +190,8 @@ jobs:
       (needs.image.result == 'success' ||
        (needs.image.result == 'skipped' && github.event_name == 'workflow_dispatch' && inputs.digest != ''))
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # 서버 유닛 상한(30분) + 정지 대기(3분) + 여유. 짧으면 job만 먼저 끝나 대기 중인 다음 배포가 "이미 진행 중"으로 빠진다
+    timeout-minutes: 40
     # 배포 브랜치는 main만, 시크릿(SSH 키·주소·사용자·호스트 키)은 이 Environment에만 둔다(결정 카드 7)
     environment: production
     # 백엔드 배포는 한 번에 하나씩, 들어온 순서대로. 기본값(실행 1 + 대기 1)이면 새 실행이 대기 중인 것을 취소한다.
