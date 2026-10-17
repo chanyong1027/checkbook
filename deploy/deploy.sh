@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2317  # 되돌리기 함수들은 EXIT·신호 trap에서만 불린다
+# shellcheck disable=SC2317,SC2329  # 되돌리기 함수들은 EXIT·신호 trap에서만 불린다(0.10은 SC2317, 0.11은 SC2329)
 # CheckBook 블루·그린 배포 (OCI 서버, root로 실행)
 #
 #   sudo ./deploy.sh sha256:<64자리>          # CI 요약 화면의 digest
@@ -8,7 +8,9 @@
 # 순서: 이미지 받기 → 쉬는 칸에 새 버전 기동 → 헬스 확인(최대 90초, 2초 간격) → Nginx upstream 교체
 #       → nginx -t → reload → Nginx를 거쳐 새 칸이 응답하는지 확인 → 옛 칸 종료.
 #       어느 단계에서 실패하거나 중간에 끊겨도(Ctrl-C, SSH 끊김) 새 칸만 지우고 옛 칸과 Nginx 설정을 되돌린다
-#       (OCI 이전 결정 카드 2·7). SSH가 끊길 수 있으니 tmux 안에서 돌리는 것을 권한다.
+#       (OCI 이전 결정 카드 2·7). Nginx 설정을 되돌리지 못하면 두 칸을 모두 남기고 손으로 할 일을 출력하고,
+#       다음 배포는 upstream 파일과 실제 Nginx가 다시 맞을 때까지 시작하지 않는다.
+#       SSH가 끊길 수 있으니 tmux 안에서 돌리는 것을 권한다.
 # 지금 서비스 중인 칸은 상태 파일이 아니라 Nginx upstream 파일로 판단한다(실제로 트래픽이 가는 곳이 기준).
 # 되돌리기: 이전 digest로 다시 실행한다(성공 메시지 마지막 줄).
 set -euo pipefail
@@ -71,6 +73,14 @@ compose() {
   docker compose --project-directory "${SCRIPT_DIR}" -f "${COMPOSE_FILE}" --env-file "${ENV_FILE}" "$@"
 }
 
+# Nginx를 거쳐 1건 불러 지금 적용된 설정의 칸 이름(X-Checkbook-Slot)을 출력한다. 응답이 없으면 빈 줄.
+# 응답 코드는 보지 않는다(헤더는 오류 응답에도 붙어서, 서비스 중인 앱이 죽어 있어도 Nginx가 어디로 보내는지 알 수 있다)
+nginx_slot() {
+  local headers
+  headers="$(bash -c "${NGINX_CHECK_CMD}" 2>/dev/null)" || true
+  awk -F': *' 'tolower($1) == "x-checkbook-slot" && !n { sub(/\r$/, "", $2); print $2; n = 1 }' <<<"${headers}"
+}
+
 usage() {
   echo "사용법: sudo $0 sha256:<64자리 digest> | ${IMAGE_REPO}@sha256:<64자리 digest>" >&2
   exit 2
@@ -118,6 +128,17 @@ if [[ "${OLD}" == blue ]]; then OLD_IMAGE="${BLUE_IMAGE}"; fi
 if [[ "${OLD}" == green ]]; then OLD_IMAGE="${GREEN_IMAGE}"; fi
 log "현재 칸: ${OLD} → 새 칸: ${TARGET}(127.0.0.1:${TARGET_PORT}), 이미지: ${IMAGE}"
 
+# upstream 파일과 실제로 적용된 Nginx 설정이 다르면(지난 배포의 되돌리기가 끝나지 못한 경우 등) 멈춘다.
+# 그대로 가면 지금 서비스 중인 칸을 새 칸으로 알고 다시 만들어 /api가 끊긴다
+if [[ "${OLD}" != none ]]; then
+  live_slot="$(nginx_slot)"
+  if [[ -z "${live_slot}" ]]; then
+    die "Nginx를 거친 응답에서 칸을 확인하지 못했습니다. Nginx가 꺼져 있거나 사이트 설정이 아직 적용되지 않았습니다(첫 배포가 Nginx 전환 전에 실패했다면 sudo nginx -t && sudo systemctl reload nginx 뒤 다시 실행)"
+  fi
+  [[ "${live_slot}" == "${OLD}" ]] \
+    || die "upstream 파일은 ${OLD} 칸인데 Nginx는 ${live_slot} 칸으로 보냅니다. 지난 배포의 되돌리기가 끝나지 않았을 수 있습니다(${LOG_FILE}의 '모두 살려 둡니다'). 둘을 맞춘 뒤 다시 실행해 주세요"
+fi
+
 if [[ "${TARGET}" == blue ]]; then BLUE_IMAGE="${IMAGE}"; else GREEN_IMAGE="${IMAGE}"; fi
 export BLUE_IMAGE GREEN_IMAGE
 
@@ -125,6 +146,7 @@ export BLUE_IMAGE GREEN_IMAGE
 # 실패·중단은 모두 EXIT trap 한 곳에서 단계에 맞게 되돌린다(set -e로 끝나는 경우 포함)
 PHASE=init
 UPSTREAM_BACKUP=""
+KEEP_UPSTREAM_BACKUP=false
 UPSTREAM_TMP=""
 STATE_TMP=""
 
@@ -139,21 +161,49 @@ remove_target() {
   compose rm --stop --force "app-${TARGET}" >/dev/null 2>&1 || true
 }
 
+# Nginx가 옛 칸으로 돌아간 것까지 확인하면 0. 실패하면 1이고, 그때는 Nginx가 어느 칸을 보는지 알 수 없으니
+# 호출한 쪽이 새 칸을 지우면 안 된다
 restore_upstream() {
   if [[ -z "${UPSTREAM_BACKUP}" ]]; then
     # 첫 배포: 되돌릴 이전 칸이 없다. upstream 파일은 남겨 둔다(지우면 사이트 설정의 include가 깨져
     # nginx를 재시작할 수 없게 된다). /api는 다음 배포가 성공할 때까지 502다
     log "첫 배포라 되돌릴 이전 칸이 없습니다. upstream 파일은 그대로 두고 다시 배포하면 됩니다"
-    return
+    return 0
   fi
-  cp -p "${UPSTREAM_BACKUP}" "${UPSTREAM_FILE}" || { log "경고: upstream 복원 실패. ${UPSTREAM_BACKUP}을 ${UPSTREAM_FILE}로 직접 복사해 주세요"; return; }
-  if run_logged "${NGINX_RELOAD_CMD}"; then
-    log "Nginx upstream을 ${OLD} 칸으로 되돌렸습니다"
-    # 아직 새 칸으로 보내던 worker가 마무리할 시간을 준 뒤 새 칸을 지운다
-    sleep "${DRAIN_SECONDS}"
-  else
-    log "경고: 되돌린 upstream으로 reload 실패. 직접 확인해 주세요"
+  local out
+  if ! out="$(cp -p "${UPSTREAM_BACKUP}" "${UPSTREAM_FILE}" 2>&1)"; then
+    log "경고: upstream 파일을 되돌리지 못했습니다: ${out}"
+    return 1
   fi
+  if ! run_logged "${NGINX_RELOAD_CMD}"; then
+    log "경고: 되돌린 upstream으로 reload하지 못했습니다"
+    return 1
+  fi
+  # reload는 신호만 보낸다. 실제로 옛 칸으로 돌아간 것을 본 뒤에야 새 칸을 지운다(6단계와 같은 이유)
+  local deadline=$((SECONDS + NGINX_CHECK_TIMEOUT_SECONDS))
+  until [[ "$(nginx_slot)" == "${OLD}" ]]; do
+    if (( SECONDS >= deadline )); then
+      log "경고: 되돌린 뒤 ${NGINX_CHECK_TIMEOUT_SECONDS}초 안에 Nginx가 ${OLD} 칸으로 보내는 것을 확인하지 못했습니다"
+      return 1
+    fi
+    sleep 1
+  done
+  log "Nginx upstream을 ${OLD} 칸으로 되돌렸습니다"
+  # 아직 새 칸으로 보내던 worker가 마무리할 시간을 준 뒤 새 칸을 지운다
+  sleep "${DRAIN_SECONDS}"
+  return 0
+}
+
+# 되돌리기를 끝내지 못했을 때: Nginx가 지금 어느 칸을 보는지 알 수 없으니 어느 칸도 지우지 않고
+# (지금보다 나빠지지 않게) 손으로 할 일을 남긴다. 각 줄의 'N) ' 뒤부터 그대로 붙여 넣어 실행할 수 있다
+keep_both_slots() {
+  KEEP_UPSTREAM_BACKUP=true
+  log "두 칸(${OLD}, ${TARGET})을 모두 살려 둡니다. 다음 배포 전에 아래를 직접 해 주세요"
+  log "  1) sudo cp $(printf '%q' "${UPSTREAM_BACKUP}") $(printf '%q' "${UPSTREAM_FILE}")"
+  log "  2) sudo ${NGINX_TEST_CMD} && sudo ${NGINX_RELOAD_CMD}"
+  log "  3) ${NGINX_CHECK_CMD}   # 응답 헤더 X-Checkbook-Slot이 ${OLD}여야 한다"
+  log "  4) sudo docker compose --project-directory $(printf '%q' "${SCRIPT_DIR}") -f $(printf '%q' "${COMPOSE_FILE}") --env-file $(printf '%q' "${ENV_FILE}") rm --stop --force app-${TARGET}"
+  log "  5) sudo rm $(printf '%q' "${UPSTREAM_BACKUP}")"
 }
 
 on_exit() {
@@ -166,12 +216,17 @@ on_exit() {
   if [[ "${PHASE}" != committed ]]; then
     case "${PHASE}" in
       prepare) log "되돌립니다(단계 prepare, 종료 코드 ${rc})"; remove_target ;;
-      switched) log "되돌립니다(단계 switched, 종료 코드 ${rc})"; restore_upstream; remove_target ;;
+      switched)
+        log "되돌립니다(단계 switched, 종료 코드 ${rc})"
+        # 복원에 실패했는데 새 칸을 지우면, Nginx가 아직 새 칸을 보는 경우 /api가 전부 502가 된다
+        if restore_upstream; then remove_target; else keep_both_slots; fi
+        ;;
       *) ;;
     esac
   fi
   rm -f "${UPSTREAM_TMP}" "${STATE_TMP}"
-  [[ -n "${UPSTREAM_BACKUP}" ]] && rm -f "${UPSTREAM_BACKUP}"
+  # 손으로 되돌릴 때 쓸 수 있게, 복원에 실패했으면 백업을 남긴다
+  if [[ -n "${UPSTREAM_BACKUP}" && "${KEEP_UPSTREAM_BACKUP}" != true ]]; then rm -f "${UPSTREAM_BACKUP}"; fi
   return "${rc}"
 }
 trap on_exit EXIT
@@ -211,7 +266,9 @@ log "새 칸 헬스 UP"
 log "5/7 Nginx 전환"
 mkdir -p "$(dirname "${UPSTREAM_FILE}")"
 if [[ -f "${UPSTREAM_FILE}" ]]; then
-  UPSTREAM_BACKUP="$(mktemp)"
+  # 대상 옆에 둔다(/tmp는 재부팅·정리로 사라질 수 있는데, 되돌리기에 실패하면 손으로 복원할 때 이 파일을 쓴다).
+  # 사이트 설정은 upstream.conf를 이름으로 include해서 이 파일은 읽히지 않는다
+  UPSTREAM_BACKUP="$(mktemp "${UPSTREAM_FILE}.bak.XXXXXX")"
   cp -p "${UPSTREAM_FILE}" "${UPSTREAM_BACKUP}"
 fi
 UPSTREAM_TMP="$(mktemp "${UPSTREAM_FILE}.XXXXXX")"

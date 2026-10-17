@@ -44,6 +44,7 @@ CORS_ALLOWED_ORIGINS=https://checkbook.site
    ```
    `deploy/nginx/`가 바뀐 커밋이면 `/etc/nginx/`의 복사본도 같이 고친다(첫 배포 3·4단계).
 3. 마지막 줄이 `배포 완료`면 끝이다. 실패하면 새 칸만 지워지고 옛 칸이 계속 서비스한다. 로그 50줄이 같이 나온다.
+   드물게 Nginx 설정을 되돌리는 것까지 실패하면(로그에 `모두 살려 둡니다`) 어느 칸도 지우지 않는다. 출력된 순서대로 손으로 되돌린다. 그 전에는 다음 배포가 `upstream 파일은 … Nginx는 …`로 멈춘다(서비스 중인 칸을 새 칸으로 알고 다시 만들지 않게, 시작할 때 Nginx를 거쳐 실제 칸을 확인한다).
 
 진행 기록은 `/var/log/checkbook-deploy.log`에도 남는다. SSH가 끊겨도 스크립트가 되돌리기는 하지만, 안전하게 `tmux` 안에서 돌린다. 서비스 중인 칸은 `/etc/nginx/checkbook/upstream.conf`가 기준이다(상태 파일은 이미지 기록용).
 
@@ -54,7 +55,7 @@ CORS_ALLOWED_ORIGINS=https://checkbook.site
 1. 저장소 받기: `sudo git clone https://github.com/chanyong1027/checkbook.git /opt/checkbook/app` (root 소유, 실행 권한은 git이 그대로 가져온다).
 2. 인증서: Cloudflare Origin CA 인증서·개인 키가 `/etc/ssl/cloudflare/origin.pem`·`origin.key`(키는 root 600)에 있는지 확인한다(서버 준비 때 넣음).
 3. Nginx 공용 파일: `sudo install -d -m 755 /etc/nginx/checkbook` 후 `nginx/` 안의 include 파일 3개(`cloudflare-realip.conf`, `security-headers.conf`, `proxy-app.conf`)를 거기에 복사.
-4. 사이트 연결(**아직 reload하지 않는다**): `nginx/checkbook.conf`를 `/etc/nginx/sites-available/checkbook`로 복사하고 `sites-enabled`에 링크. `sites-enabled`의 `default`(Ubuntu 기본 사이트, `default_server`가 겹쳐 `nginx -t`가 실패함)와 서버 준비 때 만든 임시 사이트 `checkbook-prepare` 링크는 지운다. 사이트 설정이 include하는 `upstream.conf`는 다음 단계에서 생기므로 지금 `nginx -t`는 실패하는 게 정상이다. 이 상태에서는 nginx를 재시작할 수 없으니 4~6단계를 이어서 한다. 첫 배포를 그만둘 때는 `sites-enabled/checkbook` 링크를 지우고 `checkbook-prepare`를 다시 링크한다. 첫 배포가 Nginx 전환 뒤에 실패하면 `upstream.conf`는 남겨 두고(그래야 nginx가 재시작된다) /api만 502인 상태로 끝나니 다시 실행하면 된다.
+4. 사이트 연결(**아직 reload하지 않는다**): `nginx/checkbook.conf`를 `/etc/nginx/sites-available/checkbook`로 복사하고 `sites-enabled`에 링크. `sites-enabled`의 `default`(Ubuntu 기본 사이트, `default_server`가 겹쳐 `nginx -t`가 실패함)와 서버 준비 때 만든 임시 사이트 `checkbook-prepare` 링크는 지운다. 사이트 설정이 include하는 `upstream.conf`는 다음 단계에서 생기므로 지금 `nginx -t`는 실패하는 게 정상이다. 이 상태에서는 nginx를 재시작할 수 없으니 4~6단계를 이어서 한다. 첫 배포를 그만둘 때는 `sites-enabled/checkbook` 링크를 지우고 `checkbook-prepare`를 다시 링크한다. 첫 배포가 Nginx 전환 뒤에 실패하면 `upstream.conf`는 남겨 두고(그래야 nginx가 재시작된다) /api만 502인 상태로 끝나니 다시 실행하면 된다. 단 `nginx -t`나 reload 단계에서 실패했다면 Nginx에 아직 사이트 설정이 올라가지 않아 다시 실행이 `칸을 확인하지 못했습니다`로 멈춘다. 원인을 고치고 `sudo nginx -t && sudo systemctl reload nginx`를 한 뒤 다시 실행한다.
 5. `.env`에 DB 계정과 키를 채운다.
 6. `sudo ./deploy.sh sha256:<digest>` → postgres가 처음 뜨고, 앱이 Flyway로 스키마를 만든 뒤 blue 칸이 뜬다. 스크립트가 `upstream.conf`를 쓰고 `nginx -t`·reload까지 한다.
 7. 프런트 정적 파일을 `/var/www/checkbook`에 둔다(별도 안내, 자동화는 PR-O2).
