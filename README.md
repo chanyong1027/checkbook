@@ -51,10 +51,10 @@
 
 ![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
 ![GitHub Actions](https://img.shields.io/badge/github%20actions-%232088FF.svg?style=for-the-badge&logo=githubactions&logoColor=white)
-![AWS EC2](https://img.shields.io/badge/ec2-%23FF9900.svg?style=for-the-badge&logo=amazonec2&logoColor=white)
-![AWS RDS](https://img.shields.io/badge/rds-%23527FFF.svg?style=for-the-badge&logo=amazonrds&logoColor=white)
-![AWS S3](https://img.shields.io/badge/s3-%23569A31.svg?style=for-the-badge&logo=amazons3&logoColor=white)
-![CloudFront](https://img.shields.io/badge/cloudfront-%238C4FFF.svg?style=for-the-badge&logo=amazonaws&logoColor=white)
+![Oracle Cloud](https://img.shields.io/badge/oracle%20cloud-%23F80000.svg?style=for-the-badge&logo=oracle&logoColor=white)
+![Cloudflare](https://img.shields.io/badge/cloudflare-%23F38020.svg?style=for-the-badge&logo=cloudflare&logoColor=white)
+![Nginx](https://img.shields.io/badge/nginx-%23009639.svg?style=for-the-badge&logo=nginx&logoColor=white)
+![GHCR](https://img.shields.io/badge/ghcr-%23181717.svg?style=for-the-badge&logo=github&logoColor=white)
 
 <br>
 
@@ -72,6 +72,10 @@
 
 ### 배포 파이프라인
 
+서버 한 대(Oracle Cloud A1, ARM64)에 Cloudflare → Nginx → 앱 블루·그린 두 칸 → PostgreSQL로 올립니다. main에 머지되면 GitHub Actions가 테스트·빌드하고, 백엔드는 Trivy 관문을 통과한 이미지만, 프런트는 빌드 결과만 담은 이미지를 GHCR에 올린 뒤 SSH로 서버의 고정 배포 래퍼를 부릅니다. 래퍼가 이미지의 커밋이 main에 있는지·되돌리기 하한선·배포 순서를 확인하고, 백엔드는 블루·그린 전환, 프런트는 릴리스 폴더 링크 전환으로 끊김 없이 바꿉니다. 운영 방법은 [`deploy/README.md`](deploy/README.md)에 있습니다.
+
+(아래 그림은 AWS(EC2·S3·CloudFront) 시절 것입니다.)
+
 <img width="1568" height="280" alt="Image" src="https://github.com/user-attachments/assets/749fdf63-4bd2-49b0-be40-5535ef8dd2f4" />
 
 <br>
@@ -85,7 +89,7 @@
 | 검색 타임아웃 | 2.8초 데드라인 | 응답 지연 시 도착한 결과까지만 반환 (graceful degradation) |
 | 외부 API 장애 대응 | Resilience4j Circuit Breaker | 도서관정보나루 API 장애 시 연쇄 실패 방지 |
 | DB 마이그레이션 | Flyway | JPA ddl-auto 대신 SQL 기반 버전 관리 |
-| 프론트/백 분리 배포 | S3+CloudFront / EC2+Docker | 정적 자원과 API 서버의 스케일링 독립 |
+| 배포 | 서버 한 대 + Nginx 블루·그린, 프런트는 같은 도메인 정적 파일 | 무중단 교체, 실패하면 기존 칸·기존 릴리스가 계속 서비스. 이미지는 digest로 고정하고 서버의 고정 래퍼가 커밋 순서·되돌리기 하한선을 검사한다 |
 | 스레드풀 사이징 | 3-tier 분리, 12/40/5 | 공유 풀은 중첩 fan-out에서 데드락형 기아(재현 테스트로 증명). 크기는 "동시 요청 × 요청당 태스크"로 산정 후 부하 실측으로 검증 |
 | 실행자 큐 | bounded + AbortPolicy | 무제한 큐는 데드라인 지난 "유령 작업"을 적체(실측: 부하 종료 후 62초 점유). 큐 용량은 윈도 산식, 거절 정책은 A/B 실측으로 확정 |
 | 종료 처리 | @PreDestroy 블로킹 drain | SIGTERM 경로에서 진행 중 작업 보호는 daemon 여부가 아니라 awaitTermination 예산(5s)이 담당 |

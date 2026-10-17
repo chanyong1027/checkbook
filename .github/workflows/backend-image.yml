@@ -1,9 +1,13 @@
 name: Backend Image
 
-# 백엔드 이미지를 ARM64로 빌드해 GHCR(공개)에 올린다. 서버 배포는 하지 않는다.
-# 배포는 요약 화면의 digest로 서버 deploy 폴더에서 `sudo ./deploy.sh sha256:...`를 직접 실행한다(OCI 이전 결정 카드 1·3·12, Q5).
-# 자동 배포(Actions → SSH)는 PR-O2에서 이 뒤에 붙인다.
+# 백엔드 이미지를 ARM64로 빌드하고 검사를 통과한 이미지만 GHCR(공개)에 올린 뒤 서버에 자동 배포한다(PR-O2 결정 카드 1·7).
+# - 검사 후 push: 빌드한 이미지를 러너에 load → Trivy 검사 → 통과하면 그 이미지를 그대로 push(다시 빌드하지 않는다).
+#   관문에서 막힌 이미지는 GHCR에 남지 않아 배포될 수 없다.
+# - 배포: SSH로 서버 고정 래퍼(/usr/local/sbin/checkbook-deploy)를 부른다. 래퍼가 main 조상·되돌리기 하한선·
+#   지금 버전의 후손인지 검사하고 블루·그린으로 바꾼다(deploy/README.md '자동 배포').
+# - 되돌리기·재배포: Actions에서 digest를 넣어 수동 실행하면 빌드 없이 `backend rollback`만 한다.
 # 액션은 버전 태그가 아니라 커밋 SHA로 고정한다(태그는 옮겨 붙일 수 있어 공급망 공격 경로가 된다).
+# SSH는 비밀값에 닿는 서드파티 액션을 쓰지 않고 run:에서 직접 부른다.
 on:
   push:
     branches: [main]
@@ -17,11 +21,24 @@ on:
       - '.dockerignore'
       - '.github/workflows/backend-image.yml'
       - '.github/trivy/**'
+      # 배포 단위 = 커밋. 배포 파일만 바뀌어도 새 커밋 라벨의 이미지를 만들어 그 커밋의 배포 파일로 배포한다.
+      # deploy/server/**(고정 래퍼)와 deploy/nginx/**는 서버에 손으로 적용하므로 넣지 않는다
+      - 'deploy/compose.yaml'
+      - 'deploy/deploy.sh'
+      - 'deploy/backup.sh'
+      - 'deploy/STATE_FORMAT_VERSION'
   workflow_dispatch:
+    inputs:
+      digest:
+        description: '되돌리기·재배포할 이미지 digest(sha256:...). 비우면 이 브랜치를 빌드해 자동 배포'
+        required: false
+        default: ''
 
-# 커밋마다 따로 돈다(같은 그룹이면 대기 중인 실행이 다음 push에 밀려 취소된다)
+# 이미지 빌드는 커밋마다 따로 돈다(같은 그룹이면 대기 중인 실행이 다음 push에 밀려 취소된다).
+# 배포 순서는 아래 deploy job의 그룹이 정한다
 concurrency:
-  group: ${{ github.workflow }}-${{ github.sha }}
+  # 수동 실행(되돌리기)은 실행마다 따로 둔다(같은 커밋의 빌드 뒤에서 기다리거나 서로 취소하지 않게)
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.sha }}
   cancel-in-progress: false
 
 permissions:
@@ -32,12 +49,15 @@ env:
 
 jobs:
   image:
+    if: github.event_name != 'workflow_dispatch' || inputs.digest == ''
     # 서버가 ARM64(OCI A1)라 ARM 러너에서 에뮬레이션 없이 빌드한다(카드 1)
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     permissions:
       contents: read
       packages: write   # GITHUB_TOKEN으로 GHCR push. 오래 쓰는 레지스트리 토큰을 두지 않는다
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
     steps:
       - name: 코드 체크아웃
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -71,7 +91,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # SHA 태그 = 커밋에서 이미지를 찾는 지름길. revision 라벨(기본 포함) = 이미지에서 커밋을 찾는 기록
+      # SHA 태그 = 커밋에서 이미지를 찾는 지름길. revision 라벨(기본 포함) = 이미지에서 커밋을 찾는 기록.
+      # 서버 래퍼는 이 라벨의 커밋으로 배포 파일과 순서를 찾는다(출처 증명은 아니다 — 결정 카드 0)
       - name: 태그·라벨
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -80,39 +101,40 @@ jobs:
           tags: |
             type=sha,prefix=sha-,format=short
 
-      - name: 빌드·push
-        id: build
+      # push하지 않고 러너 Docker에 올린다. load는 단일 플랫폼 이미지만 받아서 provenance 증명은 붙지 않는다
+      - name: 빌드(러너에 load)
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           platforms: linux/arm64
-          push: true
+          load: true
+          push: false
+          provenance: false
+          sbom: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # 결과 표시용(실패시키지 않음): HIGH 이상을 표로 남긴다
-      # push한 digest는 이미지 + provenance 증명을 묶은 index다. Trivy는 플랫폼을 안 주면 linux/amd64를 찾아
-      # 실패하므로 arm64를 지정한다
+      # 결과 표시용(실패시키지 않음): HIGH 이상을 표로 남긴다. 러너에 load한 이미지를 검사한다(레지스트리에 아직 없음)
       - name: 취약점 목록 (HIGH 이상, 표시만)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
-          TRIVY_PLATFORM: linux/arm64
+          TRIVY_IMAGE_SRC: docker
         with:
-          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          image-ref: ${{ steps.meta.outputs.tags }}
           severity: HIGH,CRITICAL
           format: table
           exit-code: '0'
 
-      # 관문: 고칠 버전이 있는 CRITICAL이 있으면 실패. 이때는 digest를 요약에 남기지 않는다(Q4)
+      # 관문: 고칠 버전이 있는 CRITICAL이 있으면 실패하고 push하지 않는다(Q4)
       # 예외는 우리 앱에서 닿지 않는 것이 확인된 것만, 버전·만료일을 걸어 .github/trivy/gate-ignore.yaml에 둔다
       - name: 취약점 관문 (고칠 수 있는 CRITICAL)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
-          TRIVY_PLATFORM: linux/arm64
+          TRIVY_IMAGE_SRC: docker
         with:
-          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          image-ref: ${{ steps.meta.outputs.tags }}
           severity: CRITICAL
           ignore-unfixed: true
           trivyignores: .github/trivy/gate-ignore.yaml
@@ -120,9 +142,34 @@ jobs:
           exit-code: '1'
           skip-setup-trivy: true
 
-      - name: 배포용 digest 요약
+      # 검사한 이미지를 그대로 올리고, 올라간 이미지가 검사한 것과 같은지 확인한다
+      - name: push·검사한 이미지와 같은지 확인
+        id: push
         env:
-          DIGEST: ${{ steps.build.outputs.digest }}
+          TAG: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          scanned_id="$(docker image inspect --format '{{.Id}}' "${TAG}")"
+          docker push --quiet "${TAG}" >/dev/null
+          digest="$(docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "${TAG}" \
+            | sed -n "s#^${IMAGE}@\(sha256:[0-9a-f]\{64\}\)\$#\1#p" | head -n 1)"
+          [[ -n "${digest}" ]] || { echo "push한 digest를 찾지 못했습니다"; exit 1; }
+          # 레지스트리의 매니페스트가 가리키는 config = 검사한 이미지의 ID(이미지 ID는 config의 digest).
+          # containerd 이미지 저장소를 쓰는 Docker는 ID가 매니페스트 digest라 그쪽과 비교한다
+          config="$(docker buildx imagetools inspect --raw "${IMAGE}@${digest}" | jq -r '.config.digest // empty')"
+          if [[ "${config}" == "${scanned_id}" ]]; then
+            echo "확인: config ${config} = 검사한 이미지 ID"
+          elif [[ "${digest}" == "${scanned_id}" ]]; then
+            echo "확인: 매니페스트 ${digest} = 검사한 이미지 ID(containerd 저장소)"
+          else
+            echo "push한 이미지(${digest}, config ${config:-없음})가 검사한 이미지(${scanned_id})와 다릅니다"
+            exit 1
+          fi
+          echo "digest=${digest}" >>"$GITHUB_OUTPUT"
+
+      - name: digest 요약
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
           TAGS: ${{ steps.meta.outputs.tags }}
         run: |
           {
@@ -132,9 +179,50 @@ jobs:
             echo "- 태그: \`${TAGS}\`"
             echo "- digest: \`${DIGEST}\`"
             echo ""
-            echo "서버에서:"
-            echo ""
-            echo '```'
-            echo "sudo ./deploy.sh ${DIGEST}"
-            echo '```'
+            echo "되돌리기·재배포는 Actions에서 이 워크플로를 수동 실행하고 digest 칸에 넣는다."
           } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: image
+    # 자동 배포는 main push(이미지 성공)일 때, 수동 실행은 digest를 넣었을 때. 브랜치에서 수동 실행하면 이미지만 만든다
+    if: >-
+      always() && github.ref == 'refs/heads/main' &&
+      (needs.image.result == 'success' ||
+       (needs.image.result == 'skipped' && github.event_name == 'workflow_dispatch' && inputs.digest != ''))
+    runs-on: ubuntu-24.04
+    # 서버 유닛 상한(30분) + 정지 대기(3분) + 여유. 짧으면 job만 먼저 끝나 대기 중인 다음 배포가 "이미 진행 중"으로 빠진다
+    timeout-minutes: 40
+    # 배포 브랜치는 main만, 시크릿(SSH 키·주소·사용자·호스트 키)은 이 Environment에만 둔다(결정 카드 7)
+    environment: production
+    # 백엔드 배포는 한 번에 하나씩, 들어온 순서대로. 기본값(실행 1 + 대기 1)이면 새 실행이 대기 중인 것을 취소한다.
+    # 오래 걸린 옛 빌드가 최신 뒤에 배포되는 것은 서버 래퍼의 후손 검사가 막는다
+    concurrency:
+      group: deploy-backend
+      cancel-in-progress: false
+      queue: max
+    steps:
+      - name: SSH로 배포
+        env:
+          AUTO_DIGEST: ${{ needs.image.outputs.digest }}
+          INPUT_DIGEST: ${{ inputs.digest }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${AUTO_DIGEST}" ]]; then action=deploy digest="${AUTO_DIGEST}"; else action=rollback digest="${INPUT_DIGEST}"; fi
+          [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "digest 형식이 아닙니다: ${digest}"; exit 1; }
+          umask 077
+          dir="$(mktemp -d)"
+          trap 'rm -rf "${dir}"' EXIT
+          printf '%s\n' "${SSH_KEY}" >"${dir}/key"
+          # 서버에서 직접 확인한 호스트 키 한 줄. 매번 ssh-keyscan으로 받으면 확인을 끄는 것과 같다(결정 카드 8)
+          printf '%s %s\n' "${SSH_HOST}" "${SSH_HOST_KEY}" >"${dir}/known_hosts"
+          echo "backend ${action} ${digest}"
+          # 서버 래퍼가 SSH 세션 밖 유닛에서 작업하므로 이 연결이 끊겨도 배포는 끝까지 간다.
+          # 그때 이 단계는 실패로 끝나니 서버의 journalctl -u checkbook-deploy-backend 와 장부로 결과를 확인한다
+          ssh -i "${dir}/key" -o BatchMode=yes -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="${dir}/known_hosts" \
+            -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+            "${SSH_USER}@${SSH_HOST}" "backend ${action} ${digest}"

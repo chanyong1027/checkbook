@@ -1,28 +1,54 @@
 name: Frontend Deploy
 
-# 자동 배포 일시 중지 (2026-10-14): 프런트를 S3 + CloudFront에서 OCI Nginx로 옮기는 중이라
-# 수동 실행만 남긴다. OCI 이전 때 새 배포 방식으로 다시 켠다.
+# 프런트를 빌드·테스트하고 산출물 이미지(FROM scratch, 빌드 결과만)를 GHCR(공개)에 올린 뒤 서버에 자동 배포한다
+# (PR-O2 결정 카드 5·7. 옛 S3 + CloudFront 배포를 대체).
+# - 서버 래퍼가 이미지에서 /site를 꺼내 구조를 검사하고 릴리스 폴더로 옮긴 뒤 /var/www/checkbook 링크를 바꾼다.
+#   옛 해시 asset은 공용 폴더에 남아 교체 직후에도 404가 나지 않는다.
+# - 정적 파일 이미지는 OS 패키지가 없어 Trivy 관문을 두지 않는다. 빌드·테스트를 통과한 것만 push한다.
+# - 되돌리기·재배포: digest를 넣어 수동 실행하면 빌드 없이 `frontend rollback`만 한다.
+# 액션은 커밋 SHA로 고정하고, SSH는 run:에서 직접 부른다(backend-image.yml과 같은 이유).
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend-deploy.yml'
   workflow_dispatch:
+    inputs:
+      digest:
+        description: '되돌리기·재배포할 산출물 digest(sha256:...). 비우면 이 브랜치를 빌드해 자동 배포'
+        required: false
+        default: ''
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # 수동 실행(되돌리기)은 실행마다 따로 둔다(같은 커밋의 빌드 뒤에서 기다리거나 서로 취소하지 않게)
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.sha }}
+  cancel-in-progress: false
 
 permissions:
-  id-token: write
   contents: read
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
+env:
+  IMAGE: ghcr.io/${{ github.repository }}-frontend
 
+jobs:
+  artifact:
+    if: github.event_name != 'workflow_dispatch' || inputs.digest == ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: 코드 체크아웃
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - name: Node.js 24 설정
-        uses: actions/setup-node@v4
+      - name: Node 설정
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
           cache: 'npm'
@@ -32,31 +58,98 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: 빌드
+      - name: 단위 테스트
         working-directory: frontend
-        env:
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+        run: npm test
+
+      # API는 같은 도메인의 /api라 VITE_API_BASE_URL을 두지 않는다
+      - name: 타입 검사 + 빌드
+        working-directory: frontend
         run: npm run build
 
-      - name: AWS 자격증명 설정 (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Docker Buildx 설정
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: GHCR 로그인
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ap-northeast-2
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: S3에 업로드
-        run: |
-          aws s3 sync frontend/dist s3://${{ secrets.S3_BUCKET_NAME }} \
-            --delete \
-            --cache-control "public, max-age=31536000, immutable"
+      # revision 라벨 = 서버 래퍼가 main 조상·순서를 확인하는 커밋
+      - name: 태그·라벨
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,prefix=sha-,format=short
 
-      - name: index.html 캐시 무효화 (항상 최신 버전 제공)
-        run: |
-          aws s3 cp frontend/dist/index.html s3://${{ secrets.S3_BUCKET_NAME }}/index.html \
-            --cache-control "no-cache, no-store, must-revalidate"
+      # RUN이 없어 에뮬레이션 없이 서버 플랫폼(ARM64)으로 만든다(서버에서 플랫폼 경고 없이 pull)
+      - name: 산출물 이미지 빌드·push
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: frontend/dist
+          file: frontend/artifact.Dockerfile
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
-      - name: CloudFront 캐시 무효화
+      - name: digest 요약
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          aws cloudfront create-invalidation \
-            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
-            --paths "/*"
+          {
+            echo "### 배포할 프런트 산출물"
+            echo ""
+            echo "- 커밋: \`${GITHUB_SHA}\`"
+            echo "- 태그: \`${TAGS}\`"
+            echo "- digest: \`${DIGEST}\`"
+            echo ""
+            echo "되돌리기·재배포는 Actions에서 이 워크플로를 수동 실행하고 digest 칸에 넣는다."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    needs: artifact
+    if: >-
+      always() && github.ref == 'refs/heads/main' &&
+      (needs.artifact.result == 'success' ||
+       (needs.artifact.result == 'skipped' && github.event_name == 'workflow_dispatch' && inputs.digest != ''))
+    runs-on: ubuntu-24.04
+    # 서버 유닛 상한(30분) + 정지 대기(3분) + 여유. 짧으면 job만 먼저 끝나 대기 중인 다음 배포가 "이미 진행 중"으로 빠진다
+    timeout-minutes: 40
+    environment: production
+    # 백엔드와 그룹을 나눈다(같은 그룹이면 서로의 대기 실행을 취소한다 — 결정 카드 7)
+    concurrency:
+      group: deploy-frontend
+      cancel-in-progress: false
+      queue: max
+    steps:
+      - name: SSH로 배포
+        env:
+          AUTO_DIGEST: ${{ needs.artifact.outputs.digest }}
+          INPUT_DIGEST: ${{ inputs.digest }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_HOST: ${{ secrets.DEPLOY_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_USER }}
+          SSH_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${AUTO_DIGEST}" ]]; then action=deploy digest="${AUTO_DIGEST}"; else action=rollback digest="${INPUT_DIGEST}"; fi
+          [[ "${digest}" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "digest 형식이 아닙니다: ${digest}"; exit 1; }
+          umask 077
+          dir="$(mktemp -d)"
+          trap 'rm -rf "${dir}"' EXIT
+          printf '%s\n' "${SSH_KEY}" >"${dir}/key"
+          printf '%s %s\n' "${SSH_HOST}" "${SSH_HOST_KEY}" >"${dir}/known_hosts"
+          echo "frontend ${action} ${digest}"
+          ssh -i "${dir}/key" -o BatchMode=yes -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="${dir}/known_hosts" \
+            -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 \
+            "${SSH_USER}@${SSH_HOST}" "frontend ${action} ${digest}"
