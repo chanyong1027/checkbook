@@ -53,6 +53,8 @@ FRONTEND_MAX_PATH=255
 FRONTEND_MAX_TAR_BYTES=$((64 * 1024 * 1024))  # docker cp 스트림 상한(파일 헤더 몫을 더함)
 NGINX_CHECK_TIMEOUT_SECONDS=15   # deploy.sh와 같다 (Q9)
 GIT_FETCH_TIMEOUT_SECONDS=120
+# 백엔드·프런트 fetch가 겹치면 기다리는 시간(상대 fetch 상한 + 여유)
+GIT_LOCK_WAIT_SECONDS=$((GIT_FETCH_TIMEOUT_SECONDS + 30))
 # 시간 상한(결정 12절 F6): 멈춘 pull·배포가 이후 배포와 repair를 막지 않게.
 # 유닛 30분이 지나면 systemd가 SIGTERM → deploy.sh가 되돌리고 래퍼가 정리한다. 정지는 3분까지 기다린 뒤 SIGKILL
 DOCKER_PULL_TIMEOUT_SECONDS=600
@@ -157,10 +159,20 @@ label_commit() {
   printf '%s' "${commit}"
 }
 
+# 백엔드·프런트는 잠금이 따로라 동시에 돌 수 있는데, fetch는 같은 저장소의 refs/remotes/origin/main을 갱신한다.
+# 둘이 거의 같은 순간에 끝나면 한쪽이 "cannot lock ref ... expected ..."로 실패해서 git 전용 잠금으로 한 번에 하나씩 한다.
+# (merge-base·archive 같은 읽기는 ref 갱신이 rename이라 잠금 없이도 안전하다)
 fetch_main() {
   log "main 받기"
+  install -d -m 700 "${LOCK_DIR}"
+  exec 6>"${LOCK_DIR}/git.lock"
+  if ! flock -n 6; then
+    log "다른 git 작업이 끝나기를 기다립니다(최대 ${GIT_LOCK_WAIT_SECONDS}초)"
+    flock -w "${GIT_LOCK_WAIT_SECONDS}" 6 || die "git 잠금을 ${GIT_LOCK_WAIT_SECONDS}초 안에 얻지 못했습니다"
+  fi
   timeout "${GIT_FETCH_TIMEOUT_SECONDS}" git -C "${APP_DIR}" fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main' \
     || die "git fetch에 실패했습니다(${APP_DIR})"
+  exec 6>&-
 }
 
 # $1이 $2의 조상이거나 같으면 0
