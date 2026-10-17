@@ -105,11 +105,13 @@ sudo /usr/local/sbin/checkbook-deploy repair backend     # 또는 frontend
    sudo chmod 644 /home/deploy/.ssh/authorized_keys
    ```
 6. 호스트 키 확인: 서버에서 `cat /etc/ssh/ssh_host_ed25519_key.pub` → `ssh-ed25519 AAAA...` 부분(앞 두 칸)을 적어 둔다.
-7. GitHub → Settings → Environments → `production` 만들기: Deployment branches = `main`만, 승인 대기 없음. Environment secrets:
-   - `DEPLOY_SSH_KEY`: 5번 개인 키 파일 전체
-   - `DEPLOY_HOST`: 서버 주소(IP. 로그에 찍히지 않게 시크릿에 둔다)
-   - `DEPLOY_USER`: `deploy`
-   - `DEPLOY_HOST_KEY`: 6번 한 줄(`ssh-ed25519 AAAA...`)
+7. GitHub → Settings → **Environments** → `production` 만들기(저장소 Secrets 메뉴가 아니다): Deployment branches = `main`만, 승인 대기 없음.
+   - Environment secrets:
+     - `DEPLOY_SSH_KEY`: 5번 개인 키 파일 전체
+     - `DEPLOY_HOST`: 서버 주소(IP. 로그에 찍히지 않게 시크릿에 둔다)
+     - `DEPLOY_HOST_KEY`: 6번 한 줄(`ssh-ed25519 AAAA...`)
+   - Environment variables: `DEPLOY_USER` = `deploy`(비밀이 아니다. 시크릿에 두면 로그의 모든 "deploy" 글자가 `***`로 가려진다)
+   - 넣기 전에 PC에서 같은 값으로 시험해 두면 좋다: `"<IP> <ssh-ed25519 AAAA…>"`를 파일에 써서 `ssh -o StrictHostKeyChecking=yes -o UserKnownHostsFile=<그 파일> -i <키> deploy@<IP> id` → `허용하지 않는 명령입니다`가 나오면 두 값이 맞다. 워크플로는 앞뒤 공백·줄바꿈을 지우고, 형식이 틀리면 값은 찍지 않고 어느 시크릿이 틀렸는지 알려 준다.
 8. 확인: PC에서 `ssh -i checkbook-deploy deploy@<서버> id` → `허용하지 않는 명령입니다`가 나와야 한다(셸이 열리면 안 된다).
 9. 장부 만들기(지금 손으로 운영 중인 상태를 그대로 옮긴다):
    ```
