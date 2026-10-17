@@ -1,7 +1,9 @@
 # CheckBook 운영 Compose (OCI 서버). 운영 방법은 deploy/README.md
 #
 # - postgres는 항상 떠 있고, 앱은 블루·그린 두 칸(app-blue 8081, app-green 8082) 중 하나만 서비스한다.
-#   앱 칸은 profile "app"이라 `docker compose up -d`로는 뜨지 않고, deploy.sh가 칸 이름을 지정해 띄운다.
+#   앱 칸은 profile "app"이라 그냥 `up -d`를 하면 postgres만 뜨고, 앱 칸은 deploy.sh가 칸 이름을 지정해 띄운다.
+# - compose 명령을 손으로 칠 때는 deploy.sh처럼 `--env-file /opt/checkbook/.env`를 붙인다. 아래 env_file:은
+#   컨테이너 안 변수만 정하고, 이 파일의 ${DB_USERNAME} 같은 치환에는 쓰이지 않는다(빠지면 ps·logs까지 모든 명령이 실패한다).
 # - 칸별 이미지는 deploy.sh가 환경 변수(BLUE_IMAGE/GREEN_IMAGE, digest 고정)로 넘긴다.
 # - DB는 내부 전용 네트워크(db)에만 있어 호스트·인터넷에서 닿지 않는다. 앱은 127.0.0.1에만 열고 Nginx가 앞에 선다.
 # - 로그는 journald로 보낸다. json-file은 `docker rm` 때 같이 지워져 칸을 지우는 블루·그린과 안 맞는다.
