@@ -2,7 +2,6 @@ package com.checkbook.client.kakao;
 
 import com.checkbook.client.kakao.dto.KakaoBookResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -15,18 +14,14 @@ public class KakaoBookClient {
 
     private final RestClient restClient;
 
-    public KakaoBookClient(
-            @Value("${kakao.book.base-url:https://dapi.kakao.com}") String baseUrl,
-            @Value("${kakao.book.rest-api-key}") String restApiKey,
-            @Value("${kakao.book.timeout:1000}") int timeoutMs
-    ) {
+    public KakaoBookClient(KakaoBookProperties properties) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(timeoutMs);
-        factory.setReadTimeout(timeoutMs);
+        factory.setConnectTimeout(properties.timeout());
+        factory.setReadTimeout(properties.timeout());
 
         this.restClient = RestClient.builder()
-                .baseUrl(baseUrl)
-                .defaultHeader("Authorization", "KakaoAK " + restApiKey)
+                .baseUrl(properties.baseUrl())
+                .defaultHeader("Authorization", "KakaoAK " + properties.restApiKey())
                 .requestFactory(factory)
                 .build();
     }

@@ -9,7 +9,6 @@ import com.checkbook.client.datanaru.dto.DatanaruLoanItemResponse;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
@@ -27,16 +26,10 @@ public class DatanaruClient {
     private final String authKey;
     private final Counter rateLimitedCounter;
 
-    public DatanaruClient(
-            @Value("${datanaru.base-url}") String baseUrl,
-            @Value("${datanaru.auth-key}") String authKey,
-            @Value("${datanaru.timeout:2000}") int timeout,
-            @Value("${datanaru.list-timeout:10000}") int listTimeout,
-            MeterRegistry meterRegistry
-    ) {
-        this.authKey = authKey;
-        this.defaultClient = buildClient(baseUrl, timeout);
-        this.listClient = buildClient(baseUrl, listTimeout);
+    public DatanaruClient(DatanaruProperties properties, MeterRegistry meterRegistry) {
+        this.authKey = properties.authKey();
+        this.defaultClient = buildClient(properties.baseUrl(), properties.timeout());
+        this.listClient = buildClient(properties.baseUrl(), properties.listTimeout());
         this.rateLimitedCounter = Counter.builder("datanaru.rate_limited")
                 .description("정보나루 429 Too Many Requests 수신 횟수 (rate limiter 재도입 트리거)")
                 .register(meterRegistry);

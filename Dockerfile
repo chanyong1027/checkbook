@@ -18,7 +18,12 @@ RUN ./gradlew bootJar --no-daemon -x test
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
+# root가 아닌 사용자로 실행한다(컨테이너가 뚫려도 호스트 root 권한으로 이어지지 않게). UID를 고정해 두면
+# 호스트에서 권한·로그를 볼 때 누구인지 알 수 있다. jar는 root 소유로 두어 앱이 자기 실행 파일을 못 바꾼다
+RUN addgroup -S -g 10001 checkbook && adduser -S -D -H -u 10001 -G checkbook checkbook
+
 COPY --from=build /app/build/libs/*.jar app.jar
 
+USER checkbook:checkbook
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
