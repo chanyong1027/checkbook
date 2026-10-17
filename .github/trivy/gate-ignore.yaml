@@ -1,0 +1,22 @@
+# 취약점 관문(backend-image.yml '고칠 수 있는 CRITICAL')에서만 쓰는 예외 목록. 표시용 목록에는 그대로 나온다.
+# 예외는 "우리 앱에서 그 코드에 닿지 않는다"가 확인된 경우만 두고, 버전(purl)과 만료일을 꼭 건다.
+# - 버전을 걸어 두면 의존성이 올라가는 순간 예외도 같이 사라진다
+# - 만료일이 지나면 관문이 다시 막혀서 그때 다시 본다(그 전에 Spring Boot가 올린 버전으로 바꾸는 게 목표)
+vulnerabilities:
+  # Spring Boot 4.1.1이 고정한 Tomcat 11.0.24. 세 건 모두 Tomcat이 직접 하는 인증·접근 제어 기능의 버그인데
+  # 이 앱은 web.xml·Servlet 보안 제약·Tomcat 인증(DIGEST/FORM)·Spring Security를 쓰지 않는다(2026-10-17 확인)
+  - id: CVE-2026-65182
+    statement: Servlet security-constraint 순서 우회. 보안 제약을 하나도 선언하지 않아 해당 없음
+    purls:
+      - pkg:maven/org.apache.tomcat.embed/tomcat-embed-core@11.0.24
+    expired_at: 2026-12-31
+  - id: CVE-2026-65905
+    statement: DIGEST 인증 재전송. Tomcat DIGEST 인증을 쓰지 않아 해당 없음
+    purls:
+      - pkg:maven/org.apache.tomcat.embed/tomcat-embed-core@11.0.24
+    expired_at: 2026-12-31
+  - id: CVE-2026-68525
+    statement: FORM 로그인 뒤 리다이렉트의 메서드 제한 우회. Tomcat FORM 인증을 쓰지 않아 해당 없음
+    purls:
+      - pkg:maven/org.apache.tomcat.embed/tomcat-embed-core@11.0.24
+    expired_at: 2026-12-31
