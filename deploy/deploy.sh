@@ -25,7 +25,9 @@ ENV_FILE="${CHECKBOOK_ENV_FILE:-/opt/checkbook/.env}"
 STATE_FILE="${CHECKBOOK_STATE_FILE:-/opt/checkbook/deploy-state.env}"
 UPSTREAM_FILE="${CHECKBOOK_UPSTREAM_FILE:-/etc/nginx/checkbook/upstream.conf}"
 UPSTREAM_HOST="${CHECKBOOK_UPSTREAM_HOST:-127.0.0.1}"
-LOCK_FILE="${CHECKBOOK_LOCK_FILE:-/run/lock/checkbook-deploy.lock}"
+# 누구나 쓰는 /run/lock에 두면 다른 사용자가 잠금을 먼저 잡아 배포를 막을 수 있어 root 전용 폴더에 둔다.
+# 래퍼(checkbook-deploy)의 잠금과는 다른 파일이다(같으면 래퍼 아래에서 이 스크립트가 바로 실패한다)
+LOCK_FILE="${CHECKBOOK_LOCK_FILE:-/run/checkbook/deploy.lock}"
 NGINX_TEST_CMD="${CHECKBOOK_NGINX_TEST_CMD:-nginx -t}"
 NGINX_RELOAD_CMD="${CHECKBOOK_NGINX_RELOAD_CMD:-systemctl reload nginx}"
 # 서버 안에서 Nginx를 거쳐 API 1건을 부르고 응답 헤더를 찍는 명령(Cloudflare를 거치지 않음).
@@ -97,6 +99,8 @@ esac
 [[ -r "${ENV_FILE}" ]] || die "env 파일을 읽을 수 없습니다: ${ENV_FILE}"
 
 # 동시에 두 배포가 돌면 칸 상태가 꼬인다
+# 없을 때만 만든다(이미 있는 폴더 권한을 바꾸지 않게. 로컬 검증에서 /tmp를 주면 /tmp가 700이 된다)
+[[ -d "$(dirname "${LOCK_FILE}")" ]] || install -d -m 700 "$(dirname "${LOCK_FILE}")"
 exec 9>"${LOCK_FILE}"
 flock -n 9 || die "다른 배포가 진행 중입니다(${LOCK_FILE})"
 

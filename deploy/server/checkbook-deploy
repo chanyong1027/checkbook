@@ -1,0 +1,916 @@
+#!/usr/bin/env bash
+# CheckBook 배포 래퍼 (OCI 서버 /usr/local/sbin/checkbook-deploy, root 소유 755)
+#
+# 서버에는 손으로 설치하고 저장소에서 자동으로 갱신하지 않는다. 옛 커밋의 deploy.sh를 실행하더라도
+# 아래 검사(main 조상·하한선·후손)를 우회하지 못하게, 검사는 실행되는 스크립트가 아니라 이 파일이 한다
+# (PR-O2 결정 카드 2·3. 기준 문서는 deploy/README.md '자동 배포').
+#
+# 배포 키(deploy 계정, authorized_keys의 restrict,command=)로 할 수 있는 것은 4개뿐이다:
+#   backend  deploy   sha256:<64자리>    자동 배포. main 조상 + 하한선 + 지금 커밋의 후손
+#   backend  rollback sha256:<64자리>    수동 되돌리기·재배포. main 조상 + 하한선
+#   frontend deploy   sha256:<64자리>    자동 배포. main 조상 + 지금 커밋의 후손
+#   frontend rollback sha256:<64자리>    수동 되돌리기·재배포. main 조상
+# 관리자만(서버에서 sudo로 직접):
+#   sudo checkbook-deploy repair backend|frontend   "배포 중" 기록을 실제 상태로 판정
+#   sudo checkbook-deploy init <프런트 커밋>         지금 손으로 운영 중인 서버에 장부를 처음 만든다(한 번)
+#
+# 흐름: SSH 강제 명령(deploy 계정) → 입력 검사 → sudo로 root 단계 → systemd-run 유닛에서 실제 작업.
+# 실제 작업을 SSH 세션 밖(system.slice)의 유닛으로 떼어 내서, SSH가 끊기거나 CI가 취소되거나 서버가 세션을
+# 정리해도 작업은 끝까지 간다(결정 문서 11절 Q11, 10-17 시험). SSH 쪽은 유닛 로그를 따라가다 종료 코드를 돌려준다.
+# 이 파일은 eval·source를 쓰지 않는다. 입력과 장부 값은 모두 정규식으로 검사한 뒤에만 쓴다.
+set -euo pipefail
+
+SELF=/usr/local/sbin/checkbook-deploy
+DEPLOY_USER=deploy
+
+# 고정 저장소. 바꾸려면 이 파일을 고친다(운영). e2e만 아래 설정 파일로 바꾼다
+BACKEND_REPO=ghcr.io/chanyong1027/checkbook
+FRONTEND_REPO=ghcr.io/chanyong1027/checkbook-frontend
+# root 소유·다른 사람이 못 쓰는 파일일 때만 읽는다. 운영 서버에는 두지 않는다(결정 문서 11절 Q3)
+CONFIG_FILE=/etc/checkbook/deploy-wrapper.conf
+
+APP_DIR=/opt/checkbook/app                 # 저장소 clone. fetch·archive만 하고 작업 트리는 쓰지 않는다
+RELEASES_DIR=/opt/checkbook/releases       # 커밋별 deploy/ 꺼낸 곳
+CURRENT_LINK=/opt/checkbook/current        # 서비스 중인 백엔드 릴리스(백업 cron이 이 경로의 backup.sh를 부른다)
+FLOOR_FILE=/opt/checkbook/rollback-floor   # 되돌리기 하한선(호환성 버전, revision). 올리기만 한다
+LEDGER_DIR=/opt/checkbook/ledger           # 장부. backend/, frontend/ 따로
+UPSTREAM_FILE=/etc/nginx/checkbook/upstream.conf
+WEB_LINK=/var/www/checkbook                # Nginx root. 릴리스를 가리키는 링크
+WEB_RELEASES=/var/www/checkbook-releases
+WEB_ASSETS=/var/www/checkbook-assets       # 릴리스들이 같이 쓰는 assets(추가만)
+CRON_FILE=/etc/cron.d/checkbook-backup
+SITE_HOST=checkbook.site
+
+BACKEND_KEEP_RELEASES=5      # + current + 배포 중 대상 (Q8)
+FRONTEND_KEEP_RELEASES=3     # 서비스 중 포함 (결정 카드 5)
+ASSET_GRACE_SECONDS=$((7 * 24 * 3600))   # 보호에서 빠진 지 7일 (결정 카드 5)
+FRONTEND_MAX_BYTES=$((50 * 1024 * 1024)) # 풀린 크기 (Q5)
+FRONTEND_MAX_FILES=1000
+FRONTEND_MAX_PATH=255
+FRONTEND_MAX_TAR_BYTES=$((64 * 1024 * 1024))  # docker cp 스트림 상한(파일 헤더 몫을 더함)
+NGINX_CHECK_TIMEOUT_SECONDS=15   # deploy.sh와 같다 (Q9)
+GIT_FETCH_TIMEOUT_SECONDS=120
+
+DIGEST_RE='^sha256:[0-9a-f]{64}$'
+COMMIT_RE='^[0-9a-f]{40}$'
+VERSION_RE='^[0-9]{1,9}$'
+ACTION_RE='^(deploy|rollback)$'
+FRONT_RELEASE_RE='^[0-9a-f]{40}-([0-9a-f]{12}|init)$'
+TIME_RE='^[0-9T:+-]{19,25}$'
+REPO_RE='^[a-z0-9.-]+(:[0-9]{1,5})?(/[a-z0-9._-]+)+$'
+
+# 진행 기록은 표준 오류로 쓴다(값을 $(...)로 돌려주는 함수 안에서도 섞이지 않게). 유닛 안에서는 저널로 간다.
+# 출력이 실패해도(SSH 끊김) 멈추지 않는다
+log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >&2 2>/dev/null || true; }
+die() { log "실패: $*"; exit 1; }
+now_iso() { date '+%Y-%m-%dT%H:%M:%S%:z'; }
+
+usage() {
+  {
+    echo "사용법: checkbook-deploy backend|frontend deploy|rollback sha256:<64자리>"
+    echo "        sudo checkbook-deploy repair backend|frontend"
+    echo "        sudo checkbook-deploy init <프런트 커밋(40자리)>"
+  } >&2
+  exit 2
+}
+
+load_config() {
+  [[ -e "${CONFIG_FILE}" ]] || return 0
+  local owner_mode key value
+  owner_mode="$(stat -c '%u %a' "${CONFIG_FILE}")"
+  # 소유자 root, 그룹·다른 사람 쓰기 권한 없음(마지막 두 자리가 0·1·4·5)
+  [[ "${owner_mode}" =~ ^0\ [0-7]?[0-7][014-5][014-5]$ ]] || die "${CONFIG_FILE}은 root 소유에 다른 사람이 쓸 수 없어야 합니다(지금 ${owner_mode})"
+  while IFS='=' read -r key value || [[ -n "${key}" ]]; do
+    [[ -z "${key}" || "${key}" == \#* ]] && continue
+    [[ "${value}" =~ ${REPO_RE} ]] || die "${CONFIG_FILE}: ${key} 값 형식이 아닙니다"
+    case "${key}" in
+      BACKEND_REPO) BACKEND_REPO="${value}" ;;
+      FRONTEND_REPO) FRONTEND_REPO="${value}" ;;
+      *) die "${CONFIG_FILE}: 모르는 키 ${key}" ;;
+    esac
+  done <"${CONFIG_FILE}"
+}
+
+# ---------------------------------------------------------------- 장부 (KEY=value 줄, Q1)
+# 파일에서 KEY의 마지막 값을 꺼내 정규식에 맞을 때만 출력한다. 없거나 틀리면 1
+kv_get() {
+  local file=$1 key=$2 re=$3 value
+  value="$(sed -n "s/^${key}=//p" "${file}" 2>/dev/null | tail -n 1)"
+  [[ "${value}" =~ ${re} ]] || return 1
+  printf '%s' "${value}"
+}
+
+# 같은 폴더의 임시 파일에 쓰고 디스크에 내린 뒤 rename한다(반쯤 쓴 장부를 읽을 일이 없게)
+kv_write() {
+  local file=$1 tmp
+  shift
+  tmp="$(mktemp "${file}.tmp.XXXXXX")" || return 1
+  if ! { echo "# checkbook-deploy가 쓴다($(now_iso)). 손으로 고치지 않는다"; printf '%s\n' "$@"; } >"${tmp}" \
+    || ! chmod 600 "${tmp}" || ! sync "${tmp}" || ! mv -f "${tmp}" "${file}"; then
+    rm -f "${tmp}"
+    return 1
+  fi
+  sync "$(dirname "${file}")" 2>/dev/null || true
+}
+
+history_add() {
+  local area=$1
+  shift
+  { printf '%s %s\n' "$(now_iso)" "$*" >>"${LEDGER_DIR}/${area}/history.log"; } 2>/dev/null \
+    || log "경고: 이력(${LEDGER_DIR}/${area}/history.log)을 쓰지 못했습니다"
+}
+
+pending_file() { echo "${LEDGER_DIR}/$1/pending"; }
+current_file() { echo "${LEDGER_DIR}/$1/current"; }
+
+refuse_if_pending() {
+  local area=$1
+  if [[ -e "$(pending_file "${area}")" ]]; then
+    log "\"배포 중\" 기록이 남아 있어 배포하지 않습니다($(pending_file "${area}"))."
+    log "지난 배포가 끝나지 못했습니다. 서버에서 확인 후: sudo checkbook-deploy repair ${area}"
+    exit 1
+  fi
+}
+
+# ---------------------------------------------------------------- 공통 검사
+pull_image() {
+  local image=$1
+  log "이미지 받기: ${image}"
+  docker pull --quiet "${image}" >/dev/null || die "이미지를 받지 못했습니다: ${image}"
+}
+
+# revision 라벨(우리 CI가 넣는 메타데이터. 출처 증명이 아니라 버전 연결용 — 결정 카드 0)
+label_commit() {
+  local image=$1 commit
+  commit="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "${image}" 2>/dev/null)" || true
+  [[ "${commit}" =~ ${COMMIT_RE} ]] || die "이미지의 revision 라벨이 40자리 커밋이 아닙니다: '${commit}'"
+  printf '%s' "${commit}"
+}
+
+fetch_main() {
+  log "main 받기"
+  timeout "${GIT_FETCH_TIMEOUT_SECONDS}" git -C "${APP_DIR}" fetch --quiet origin '+refs/heads/main:refs/remotes/origin/main' \
+    || die "git fetch에 실패했습니다(${APP_DIR})"
+}
+
+# $1이 $2의 조상이거나 같으면 0
+is_ancestor() { git -C "${APP_DIR}" merge-base --is-ancestor "$1" "$2" 2>/dev/null; }
+
+require_on_main() {
+  local commit=$1
+  git -C "${APP_DIR}" cat-file -e "${commit}^{commit}" 2>/dev/null && is_ancestor "${commit}" refs/remotes/origin/main \
+    || die "커밋 ${commit}이 main에 없습니다"
+}
+
+# 그 커밋의 deploy/STATE_FORMAT_VERSION(없으면 0)
+state_format_version() {
+  local commit=$1 raw
+  if ! raw="$(git -C "${APP_DIR}" show "${commit}:deploy/STATE_FORMAT_VERSION" 2>/dev/null)"; then
+    echo 0
+    return 0
+  fi
+  raw="$(printf '%s' "${raw}" | tr -d '[:space:]')"
+  [[ "${raw}" =~ ${VERSION_RE} ]] || die "커밋 ${commit}의 deploy/STATE_FORMAT_VERSION이 정수가 아닙니다"
+  echo "$((10#${raw}))"
+}
+
+# Nginx를 거친 / 응답 본문의 sha256(Cloudflare를 거치지 않음). 실패하면 빈 줄
+nginx_index_hash() {
+  local body
+  body="$(curl -sSk --max-time 3 --resolve "${SITE_HOST}:443:127.0.0.1" "https://${SITE_HOST}/" 2>/dev/null | sha256sum)" || return 0
+  printf '%s' "${body%% *}"
+}
+
+file_hash() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1; }
+
+# ---------------------------------------------------------------- 백엔드 실제 상태
+# Nginx를 거친 응답의 칸 + 그 칸 컨테이너의 이미지. upstream 파일이 다르면 판정하지 않는다(결정 카드 6)
+nginx_slot() {
+  local headers
+  headers="$(curl -sSk --max-time 3 -o /dev/null -D - --resolve "${SITE_HOST}:443:127.0.0.1" \
+    "https://${SITE_HOST}/api/featured?type=BESTSELLER" 2>/dev/null)" || true
+  awk -F': *' 'tolower($1) == "x-checkbook-slot" && !n { sub(/\r$/, "", $2); print $2; n = 1 }' <<<"${headers}"
+}
+
+upstream_slot() {
+  local port
+  port="$(sed -n 's/^[[:space:]]*server [^:]*:\([0-9]*\);.*/\1/p' "${UPSTREAM_FILE}" 2>/dev/null | head -n 1)"
+  case "${port}" in
+    8081) echo blue ;;
+    8082) echo green ;;
+    *) echo "" ;;
+  esac
+}
+
+# 서비스 중인 digest를 출력한다. 확인하지 못하면 빈 줄과 함께 이유를 log로 남긴다
+backend_actual_digest() {
+  local slot file_slot info config_image image_id running expected_id digest
+  slot="$(nginx_slot)"
+  file_slot="$(upstream_slot)"
+  if [[ -z "${slot}" || "${slot}" != "${file_slot}" ]]; then
+    log "실제 상태: Nginx 응답 칸 '${slot:-없음}', upstream 파일 칸 '${file_slot:-없음}' → 판정 불가"
+    return 0
+  fi
+  info="$(docker inspect --format '{{.Config.Image}} {{.Image}} {{.State.Running}}' "checkbook-app-${slot}-1" 2>/dev/null)" || {
+    log "실제 상태: ${slot} 칸 컨테이너가 없습니다 → 판정 불가"
+    return 0
+  }
+  read -r config_image image_id running <<<"${info}"
+  digest="${config_image##*@}"
+  if [[ "${running}" != true || "${config_image%@*}" != "${BACKEND_REPO}" || ! "${digest}" =~ ${DIGEST_RE} ]]; then
+    log "실제 상태: ${slot} 칸 컨테이너(${config_image}, 실행 ${running}) → 판정 불가"
+    return 0
+  fi
+  # 이름(digest)만 믿지 않고 그 이름이 가리키는 이미지와 컨테이너의 이미지가 같은지 본다
+  expected_id="$(docker image inspect --format '{{.Id}}' "${config_image}" 2>/dev/null)" || expected_id=""
+  if [[ -z "${expected_id}" || "${expected_id}" != "${image_id}" ]]; then
+    log "실제 상태: ${slot} 칸 컨테이너의 이미지가 ${config_image}와 다릅니다 → 판정 불가"
+    return 0
+  fi
+  log "실제 상태: Nginx → ${slot} 칸 → ${digest}"
+  printf '%s' "${digest}"
+}
+
+# ---------------------------------------------------------------- 백엔드
+prepare_backend_release() {
+  local commit=$1 dir="${RELEASES_DIR}/${commit}" tmp
+  if [[ -f "${dir}/deploy/deploy.sh" ]]; then
+    touch "${dir}"
+    return 0
+  fi
+  install -d -m 700 "${RELEASES_DIR}"
+  tmp="$(mktemp -d "${RELEASES_DIR}/.tmp.XXXXXX")"
+  if ! git -C "${APP_DIR}" archive --format=tar "${commit}" deploy | tar -x --no-same-owner -C "${tmp}" \
+    || [[ ! -f "${tmp}/deploy/deploy.sh" ]] || ! mv -T "${tmp}" "${dir}"; then
+    rm -rf "${tmp}"
+    return 1
+  fi
+  log "배포 파일: ${dir}/deploy"
+}
+
+switch_link() {
+  local target=$1 link=$2 tmp="$2.tmp.$$"
+  rm -f "${tmp}"
+  ln -s "${target}" "${tmp}" && mv -T "${tmp}" "${link}"
+}
+
+# 배포 성공(또는 repair가 대상 버전을 확인함) → 하한선·current 링크·장부 확정. 실패하면 1(배포 중 기록 유지)
+backend_confirm() {
+  local stored_version=0
+  if [[ -f "${FLOOR_FILE}" ]]; then
+    stored_version="$(kv_get "${FLOOR_FILE}" VERSION "${VERSION_RE}")" || { log "하한선 파일을 읽지 못했습니다"; return 1; }
+  fi
+  if (( P_FLOOR_VERSION > stored_version )); then
+    kv_write "${FLOOR_FILE}" "VERSION=${P_FLOOR_VERSION}" "REVISION=${P_FLOOR_REVISION}" || { log "하한선을 저장하지 못했습니다"; return 1; }
+    log "하한선을 올렸습니다: 호환성 버전 ${P_FLOOR_VERSION}, ${P_FLOOR_REVISION}"
+  fi
+  prepare_backend_release "${P_TO_COMMIT}" || { log "배포 파일을 꺼내지 못했습니다"; return 1; }
+  switch_link "${RELEASES_DIR}/${P_TO_COMMIT}" "${CURRENT_LINK}" || { log "${CURRENT_LINK} 링크를 바꾸지 못했습니다"; return 1; }
+  kv_write "$(current_file backend)" "DIGEST=${P_TO_DIGEST}" "COMMIT=${P_TO_COMMIT}" "AT=$(now_iso)" \
+    || { log "장부(현재 버전)를 저장하지 못했습니다"; return 1; }
+  rm -f "$(pending_file backend)" || { log "배포 중 기록을 지우지 못했습니다"; return 1; }
+  history_add backend "confirmed action=${P_ACTION} digest=${P_TO_DIGEST} commit=${P_TO_COMMIT}"
+}
+
+read_backend_pending() {
+  local f
+  f="$(pending_file backend)"
+  P_ACTION="$(kv_get "${f}" ACTION "${ACTION_RE}")" \
+    && P_FROM_DIGEST="$(kv_get "${f}" FROM_DIGEST "${DIGEST_RE}")" \
+    && P_FROM_COMMIT="$(kv_get "${f}" FROM_COMMIT "${COMMIT_RE}")" \
+    && P_TO_DIGEST="$(kv_get "${f}" TO_DIGEST "${DIGEST_RE}")" \
+    && P_TO_COMMIT="$(kv_get "${f}" TO_COMMIT "${COMMIT_RE}")" \
+    && P_FLOOR_VERSION="$(kv_get "${f}" FLOOR_VERSION "${VERSION_RE}")" \
+    && P_FLOOR_REVISION="$(kv_get "${f}" FLOOR_REVISION "${COMMIT_RE}")" \
+    || die "배포 중 기록(${f})의 형식이 틀립니다. 손으로 확인해 주세요"
+}
+
+# 실패 뒤: 이전 버전이 서비스 중임을 실제 응답으로 확인한 경우에만 배포 중 기록을 지운다(결정 카드 4-8)
+backend_settle_failure() {
+  local actual
+  actual="$(backend_actual_digest)"
+  if [[ -n "${actual}" && "${actual}" == "${P_FROM_DIGEST}" ]]; then
+    if rm -f "$(pending_file backend)"; then
+      history_add backend "failed-restored to=${P_TO_DIGEST} serving=${actual}"
+      log "이전 버전(${actual})이 그대로 서비스 중이라 배포 중 기록을 지웠습니다. 다음 배포는 그대로 할 수 있습니다"
+      return 0
+    fi
+  fi
+  history_add backend "failed-unresolved to=${P_TO_DIGEST} serving=${actual:-unknown}"
+  log "이전 버전으로 복원됐는지 확인하지 못해 배포 중 기록을 남깁니다. 다음 배포는 거부됩니다"
+  log "서버에서 확인 후: sudo checkbook-deploy repair backend"
+}
+
+cleanup_backend_releases() {
+  local keep_commit=$1 dir name count=0
+  find "${RELEASES_DIR}" -mindepth 1 -maxdepth 1 -name '.tmp.*' -mmin +60 -exec rm -rf {} + 2>/dev/null || true
+  while IFS= read -r dir; do
+    name="${dir##*/}"
+    [[ "${name}" =~ ${COMMIT_RE} ]] || continue
+    if [[ "${name}" == "${keep_commit}" ]]; then continue; fi
+    count=$((count + 1))
+    if (( count > BACKEND_KEEP_RELEASES )); then
+      rm -rf -- "${dir}" && log "옛 배포 파일 삭제: ${name}"
+    fi
+  done < <(ls -1dt "${RELEASES_DIR}"/*/ 2>/dev/null | sed 's#/$##')
+}
+
+backend_run() {
+  local action=$1 digest=$2 image cur_digest cur_commit floor_version floor_revision commit new_version rc
+  image="${BACKEND_REPO}@${digest}"
+  refuse_if_pending backend
+  cur_digest="$(kv_get "$(current_file backend)" DIGEST "${DIGEST_RE}")" \
+    && cur_commit="$(kv_get "$(current_file backend)" COMMIT "${COMMIT_RE}")" \
+    || die "장부(현재 버전)가 없습니다. 처음이면 sudo checkbook-deploy init"
+  floor_version="$(kv_get "${FLOOR_FILE}" VERSION "${VERSION_RE}")" \
+    && floor_revision="$(kv_get "${FLOOR_FILE}" REVISION "${COMMIT_RE}")" \
+    || die "하한선 파일(${FLOOR_FILE})이 없거나 형식이 틀립니다"
+
+  pull_image "${image}"
+  commit="$(label_commit "${image}")"
+  log "대상 커밋: ${commit} (지금 ${cur_commit}, 하한선 ${floor_revision})"
+  fetch_main
+  require_on_main "${commit}"
+  # 하한선은 자동·수동 모두 항상(결정 카드 3)
+  is_ancestor "${floor_revision}" "${commit}" || die "커밋 ${commit}이 되돌리기 하한선 ${floor_revision}보다 옛 버전입니다"
+  if [[ "${action}" == deploy ]]; then
+    is_ancestor "${cur_commit}" "${commit}" \
+      || die "자동 배포는 지금 버전(${cur_commit})의 후손만 받습니다(늦게 끝난 옛 빌드일 수 있음). 되돌리기는 rollback으로"
+  fi
+
+  # 성공하면 적용할 하한선(올리기만). 되돌릴 대상 커밋이 낮은 값을 가져도 내려가지 않는다
+  new_version="$(state_format_version "${commit}")"
+  P_ACTION="${action}"
+  P_FROM_DIGEST="${cur_digest}"
+  P_FROM_COMMIT="${cur_commit}"
+  P_TO_DIGEST="${digest}"
+  P_TO_COMMIT="${commit}"
+  if (( new_version > floor_version )); then
+    P_FLOOR_VERSION="${new_version}"
+    P_FLOOR_REVISION="${commit}"
+  else
+    P_FLOOR_VERSION="${floor_version}"
+    P_FLOOR_REVISION="${floor_revision}"
+  fi
+  kv_write "$(pending_file backend)" "ACTION=${P_ACTION}" "FROM_DIGEST=${P_FROM_DIGEST}" "FROM_COMMIT=${P_FROM_COMMIT}" \
+    "TO_DIGEST=${P_TO_DIGEST}" "TO_COMMIT=${P_TO_COMMIT}" "FLOOR_VERSION=${P_FLOOR_VERSION}" \
+    "FLOOR_REVISION=${P_FLOOR_REVISION}" "STARTED_AT=$(now_iso)" \
+    || die "배포 중 기록을 저장하지 못해 시작하지 않습니다"
+  history_add backend "started action=${action} from=${cur_digest} to=${digest} commit=${commit}"
+  # 여기부터 어떻게 끝나든(set -e 포함) 실제 상태를 보고 배포 중 기록을 정리한다
+  RUN_AREA=backend
+  RUN_RESOLVED=false
+
+  prepare_backend_release "${commit}" || die "배포 파일을 꺼내지 못했습니다(${RELEASES_DIR}/${commit})"
+  log "deploy.sh 실행(${commit:0:7})"
+  rc=0
+  /bin/bash "${RELEASES_DIR}/${commit}/deploy/deploy.sh" "${image}" || rc=$?
+  if (( rc != 0 )); then
+    die "deploy.sh가 실패했습니다(종료 코드 ${rc})"
+  fi
+  # deploy.sh는 Nginx를 거쳐 새 칸을 확인한 뒤에만 0으로 끝난다. 장부도 같은 기준(실제 응답·digest)으로 한 번 더 본다
+  [[ "$(backend_actual_digest)" == "${digest}" ]] || die "deploy.sh는 성공했는데 실제 상태가 대상 버전이 아닙니다"
+  backend_confirm || die "배포는 됐지만 장부를 확정하지 못했습니다"
+  RUN_RESOLVED=true
+  cleanup_backend_releases "${commit}"
+  log "백엔드 배포 완료: ${digest} (${commit})"
+}
+
+# ---------------------------------------------------------------- 프런트
+# docker cp가 준 tar(site/...)를 검사하고 dest에 푼다. 절대 경로·..·링크·특수 파일·상한 초과는 거부(결정 카드 5)
+extract_site_tar() {
+  python3 -I - "$1" "$2" "${FRONTEND_MAX_BYTES}" "${FRONTEND_MAX_FILES}" "${FRONTEND_MAX_PATH}" <<'PY'
+import os, re, sys, tarfile
+tar_path, dest = sys.argv[1], sys.argv[2]
+max_bytes, max_files, max_path = (int(v) for v in sys.argv[3:6])
+part_ok = re.compile(r'^[A-Za-z0-9._@+-]+$')
+
+def fail(msg):
+    print(f"산출물 거부: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+total = files = 0
+members = []
+with tarfile.open(tar_path, 'r:') as tf:
+    for m in tf:
+        name = m.name
+        if name.rstrip('/') == 'site':
+            if not m.isdir():
+                fail("site가 폴더가 아닙니다")
+            continue
+        if not name.startswith('site/'):
+            fail(f"site/ 밖의 경로: {name!r}")
+        rel = name[len('site/'):].rstrip('/')
+        parts = rel.split('/')
+        if not rel or any(p in ('', '.', '..') or not part_ok.match(p) for p in parts):
+            fail(f"허용하지 않는 경로: {name!r}")
+        if len(rel.encode()) > max_path:
+            fail(f"경로가 너무 깁니다: {rel[:60]}...")
+        if m.issym() or m.islnk():
+            fail(f"링크: {rel}")
+        if not (m.isfile() or m.isdir()):
+            fail(f"특수 파일: {rel}")
+        if m.isfile():
+            files += 1
+            total += m.size
+            if files > max_files or total > max_bytes:
+                fail(f"상한 초과(파일 {files}개, {total}바이트)")
+        members.append((m, rel))
+    for m, rel in members:
+        target = os.path.join(dest, rel)
+        if m.isdir():
+            os.makedirs(target, mode=0o755, exist_ok=True)
+            continue
+        os.makedirs(os.path.dirname(target), mode=0o755, exist_ok=True)
+        src = tf.extractfile(m)
+        # 'x': 같은 이름이 두 번 나오면 실패(덮어쓰기로 내용을 바꾸지 못하게)
+        with open(target, 'xb') as out:
+            while chunk := src.read(1 << 16):
+                out.write(chunk)
+        os.chmod(target, 0o644)
+if not os.path.isfile(os.path.join(dest, 'index.html')):
+    fail("index.html이 없습니다")
+print(f"산출물 검사 통과: 파일 {files}개, {total}바이트")
+PY
+}
+
+# 새 릴리스를 tmp에 만든다: 꺼내기·검사 → assets를 공용 폴더에 추가 → assets 링크·manifest
+build_frontend_release() {
+  local image=$1 name=$2 tmp cid rc=0 rel manifest
+  rel="${WEB_RELEASES}/${name}"
+  manifest="${WEB_RELEASES}/${name}.assets.manifest"
+  if [[ -d "${rel}" && -f "${manifest}" ]]; then
+    log "릴리스가 이미 있습니다(같은 커밋·같은 digest): ${name}"
+    touch "${rel}"
+    return 0
+  fi
+  install -d -m 755 "${WEB_RELEASES}" "${WEB_ASSETS}"
+  tmp="$(mktemp -d "${WEB_RELEASES}/.tmp.XXXXXX")"
+  # 이 함수가 어디서 끝나든 임시 폴더를 지운다
+  BUILD_TMP="${tmp}"
+  # FROM scratch라 명령이 없어 create에 아무 명령이나 준다(실행하지 않는다)
+  cid="$(docker create "${image}" /none)" || die "이미지에서 컨테이너를 만들지 못했습니다"
+  docker cp "${cid}:/site" - | head -c "${FRONTEND_MAX_TAR_BYTES}" >"${tmp}/site.tar" || rc=$?
+  docker rm -f "${cid}" >/dev/null 2>&1 || true
+  (( rc == 0 )) || die "산출물을 꺼내지 못했습니다(이미지에 /site가 없거나 너무 큽니다)"
+  (( $(stat -c %s "${tmp}/site.tar") < FRONTEND_MAX_TAR_BYTES )) || die "산출물이 상한(${FRONTEND_MAX_TAR_BYTES}바이트)보다 큽니다"
+  mkdir -m 755 "${tmp}/root"
+  extract_site_tar "${tmp}/site.tar" "${tmp}/root" || die "산출물 검사에 실패했습니다"
+  rm -f "${tmp}/site.tar"
+
+  # 공용 assets에 추가만 한다. 같은 이름에 다른 내용이면 전환 전에 실패(Q9)
+  : >"${tmp}/manifest"
+  if [[ -d "${tmp}/root/assets" ]]; then
+    local f relpath dest
+    while IFS= read -r -d '' f; do
+      relpath="${f#"${tmp}/root/assets/"}"
+      dest="${WEB_ASSETS}/${relpath}"
+      if [[ -e "${dest}" ]]; then
+        cmp -s "${f}" "${dest}" || die "공용 assets에 같은 이름·다른 내용의 파일이 있습니다: ${relpath}"
+      else
+        install -d -m 755 "$(dirname "${dest}")"
+        install -m 644 "${f}" "${dest}.tmp.$$" && mv -f "${dest}.tmp.$$" "${dest}" || die "공용 assets에 추가하지 못했습니다: ${relpath}"
+      fi
+      printf '%s\n' "${relpath}" >>"${tmp}/manifest"
+    done < <(find "${tmp}/root/assets" -type f -print0)
+    rm -rf "${tmp}/root/assets"
+  fi
+  ln -s "${WEB_ASSETS}" "${tmp}/root/assets"
+  sort -o "${tmp}/manifest" "${tmp}/manifest"
+  chmod 755 "${tmp}/root"
+  # manifest 없이 남은 폴더는 지난번에 만들다 끊긴 것이다. 서비스 중인 폴더라면 지우지 않는다
+  [[ "$(readlink "${WEB_LINK}" 2>/dev/null)" != "${rel}" ]] || die "서비스 중인 릴리스(${name})에 manifest가 없습니다. 손으로 확인해 주세요"
+  rm -rf "${rel}"
+  mv -T "${tmp}/root" "${rel}" && mv -f "${tmp}/manifest" "${manifest}" || die "릴리스 폴더를 만들지 못했습니다: ${rel}"
+  rm -rf "${tmp}"
+  BUILD_TMP=""
+  log "릴리스 준비: ${rel} (assets $(wc -l <"${manifest}")개)"
+}
+
+# 링크가 가리키는 릴리스 이름을 출력하고, Nginx를 거친 / 가 그 릴리스의 index.html과 같지 않으면 빈 줄
+frontend_actual_release() {
+  local target name served
+  target="$(readlink "${WEB_LINK}" 2>/dev/null)" || { log "실제 상태: ${WEB_LINK}가 링크가 아닙니다 → 판정 불가"; return 0; }
+  name="${target##*/}"
+  if [[ "${target}" != "${WEB_RELEASES}/${name}" || ! "${name}" =~ ${FRONT_RELEASE_RE} ]]; then
+    log "실제 상태: 링크 대상 ${target} → 판정 불가"
+    return 0
+  fi
+  served="$(nginx_index_hash)"
+  if [[ -z "${served}" || "${served}" != "$(file_hash "${WEB_RELEASES}/${name}/index.html")" ]]; then
+    log "실제 상태: 링크는 ${name}인데 Nginx 응답이 그 index.html과 다릅니다 → 판정 불가"
+    return 0
+  fi
+  log "실제 상태: ${WEB_LINK} → ${name}, Nginx 응답 일치"
+  printf '%s' "${name}"
+}
+
+# 링크를 바꾼 뒤 Nginx를 거친 응답이 그 릴리스의 index.html이 될 때까지 기다린다
+wait_frontend_served() {
+  local name=$1 want deadline
+  want="$(file_hash "${WEB_RELEASES}/${name}/index.html")"
+  deadline=$((SECONDS + NGINX_CHECK_TIMEOUT_SECONDS))
+  while (( SECONDS < deadline )); do
+    [[ "$(nginx_index_hash)" == "${want}" ]] && return 0
+    sleep 1
+  done
+  return 1
+}
+
+read_frontend_pending() {
+  local f
+  f="$(pending_file frontend)"
+  P_ACTION="$(kv_get "${f}" ACTION "${ACTION_RE}")" \
+    && P_FROM_DIGEST="$(kv_get "${f}" FROM_DIGEST "${DIGEST_RE}|^none$")" \
+    && P_FROM_COMMIT="$(kv_get "${f}" FROM_COMMIT "${COMMIT_RE}")" \
+    && P_FROM_RELEASE="$(kv_get "${f}" FROM_RELEASE "${FRONT_RELEASE_RE}")" \
+    && P_TO_DIGEST="$(kv_get "${f}" TO_DIGEST "${DIGEST_RE}")" \
+    && P_TO_COMMIT="$(kv_get "${f}" TO_COMMIT "${COMMIT_RE}")" \
+    && P_TO_RELEASE="$(kv_get "${f}" TO_RELEASE "${FRONT_RELEASE_RE}")" \
+    || die "배포 중 기록(${f})의 형식이 틀립니다. 손으로 확인해 주세요"
+}
+
+frontend_confirm() {
+  kv_write "$(current_file frontend)" "DIGEST=${P_TO_DIGEST}" "COMMIT=${P_TO_COMMIT}" "RELEASE=${P_TO_RELEASE}" "AT=$(now_iso)" \
+    || { log "장부(현재 버전)를 저장하지 못했습니다"; return 1; }
+  rm -f "$(pending_file frontend)" || { log "배포 중 기록을 지우지 못했습니다"; return 1; }
+  history_add frontend "confirmed action=${P_ACTION} digest=${P_TO_DIGEST} release=${P_TO_RELEASE}"
+}
+
+# 실패 뒤: 링크를 이전 릴리스로 되돌리고, Nginx 응답이 이전 index.html과 같음을 확인한 경우에만 기록을 지운다
+frontend_settle_failure() {
+  local actual
+  if [[ "$(readlink "${WEB_LINK}" 2>/dev/null)" != "${WEB_RELEASES}/${P_FROM_RELEASE}" ]]; then
+    log "이전 릴리스(${P_FROM_RELEASE})로 링크를 되돌립니다"
+    if switch_link "${WEB_RELEASES}/${P_FROM_RELEASE}" "${WEB_LINK}"; then
+      wait_frontend_served "${P_FROM_RELEASE}" || true
+    else
+      log "경고: 링크를 되돌리지 못했습니다"
+    fi
+  fi
+  actual="$(frontend_actual_release)"
+  if [[ "${actual}" == "${P_FROM_RELEASE}" ]] && rm -f "$(pending_file frontend)"; then
+    history_add frontend "failed-restored to=${P_TO_RELEASE}"
+    log "이전 릴리스(${actual})가 서비스 중임을 확인해 배포 중 기록을 지웠습니다"
+    return 0
+  fi
+  history_add frontend "failed-unresolved to=${P_TO_RELEASE} serving=${actual:-unknown}"
+  log "이전 릴리스로 복원됐는지 확인하지 못해 배포 중 기록을 남깁니다. 다음 배포는 거부됩니다"
+  log "서버에서 확인 후: sudo checkbook-deploy repair frontend"
+}
+
+# 최근 릴리스 3개(서비스 중 포함)만 남기고, 보호에서 빠진 지 7일 지난 asset만 지운다(결정 카드 5)
+cleanup_frontend() {
+  local serving=$1 dir name count=1 now f relpath ts path
+  local -A protected=() since=()
+  find "${WEB_RELEASES}" -mindepth 1 -maxdepth 1 -name '.tmp.*' -mmin +60 -exec rm -rf {} + 2>/dev/null || true
+  while IFS= read -r dir; do
+    name="${dir##*/}"
+    [[ "${name}" =~ ${FRONT_RELEASE_RE} && "${name}" != "${serving}" ]] || continue
+    count=$((count + 1))
+    if (( count > FRONTEND_KEEP_RELEASES )); then
+      rm -rf -- "${dir}" "${dir}.assets.manifest" && log "옛 릴리스 삭제: ${name}"
+    fi
+  done < <(ls -1dt "${WEB_RELEASES}"/*/ 2>/dev/null | sed 's#/$##')
+
+  # 보호 대상 = 남은 릴리스들의 manifest 합집합
+  for f in "${WEB_RELEASES}"/*.assets.manifest; do
+    [[ -f "${f}" && -d "${f%.assets.manifest}" ]] || continue
+    while IFS= read -r relpath; do protected["${relpath}"]=1; done <"${f}"
+  done
+  local orphans="${LEDGER_DIR}/frontend/asset-orphans"
+  if [[ -f "${orphans}" ]]; then
+    while read -r ts path; do
+      [[ "${ts}" =~ ^[0-9]+$ && -n "${path}" ]] && since["${path}"]="${ts}"
+    done <"${orphans}"
+  fi
+  now="$(date +%s)"
+  local out=()
+  while IFS= read -r -d '' f; do
+    relpath="${f#"${WEB_ASSETS}/"}"
+    [[ -n "${protected[${relpath}]:-}" ]] && continue
+    ts="${since[${relpath}]:-${now}}"
+    if (( now - ts >= ASSET_GRACE_SECONDS )); then
+      rm -f -- "${f}" && log "옛 asset 삭제: ${relpath}"
+    else
+      out+=("${ts} ${relpath}")
+    fi
+  done < <(find "${WEB_ASSETS}" -type f ! -name '*.tmp.*' -print0)
+  # 다시 보호된 파일·이미 없는 파일은 기록에서 빠진다
+  {
+    if (( ${#out[@]} > 0 )); then printf '%s\n' "${out[@]}"; fi >"${orphans}.tmp" && mv -f "${orphans}.tmp" "${orphans}"
+  } 2>/dev/null || log "경고: asset 정리 기록을 쓰지 못했습니다"
+}
+
+frontend_run() {
+  local action=$1 digest=$2 image cur_digest cur_commit cur_release commit name
+  image="${FRONTEND_REPO}@${digest}"
+  command -v python3 >/dev/null || die "python3가 없습니다(산출물 검사에 필요)"
+  refuse_if_pending frontend
+  cur_digest="$(kv_get "$(current_file frontend)" DIGEST "${DIGEST_RE}|^none$")" \
+    && cur_commit="$(kv_get "$(current_file frontend)" COMMIT "${COMMIT_RE}")" \
+    && cur_release="$(kv_get "$(current_file frontend)" RELEASE "${FRONT_RELEASE_RE}")" \
+    || die "장부(현재 버전)가 없습니다. 처음이면 sudo checkbook-deploy init"
+  [[ -L "${WEB_LINK}" ]] || die "${WEB_LINK}가 링크가 아닙니다. 처음이면 sudo checkbook-deploy init"
+
+  pull_image "${image}"
+  commit="$(label_commit "${image}")"
+  log "대상 커밋: ${commit} (지금 ${cur_commit})"
+  fetch_main
+  require_on_main "${commit}"
+  if [[ "${action}" == deploy ]]; then
+    is_ancestor "${cur_commit}" "${commit}" \
+      || die "자동 배포는 지금 버전(${cur_commit})의 후손만 받습니다(늦게 끝난 옛 빌드일 수 있음). 되돌리기는 rollback으로"
+  fi
+  # 같은 커밋도 다시 빌드하면 내용이 다를 수 있어 digest를 이름에 붙인다(Q7)
+  name="${commit}-${digest:7:12}"
+
+  P_ACTION="${action}"
+  P_FROM_DIGEST="${cur_digest}"
+  P_FROM_COMMIT="${cur_commit}"
+  P_FROM_RELEASE="${cur_release}"
+  P_TO_DIGEST="${digest}"
+  P_TO_COMMIT="${commit}"
+  P_TO_RELEASE="${name}"
+  kv_write "$(pending_file frontend)" "ACTION=${P_ACTION}" "FROM_DIGEST=${P_FROM_DIGEST}" "FROM_COMMIT=${P_FROM_COMMIT}" \
+    "FROM_RELEASE=${P_FROM_RELEASE}" "TO_DIGEST=${P_TO_DIGEST}" "TO_COMMIT=${P_TO_COMMIT}" \
+    "TO_RELEASE=${P_TO_RELEASE}" "STARTED_AT=$(now_iso)" \
+    || die "배포 중 기록을 저장하지 못해 시작하지 않습니다"
+  history_add frontend "started action=${action} from=${cur_release} to=${name}"
+  RUN_AREA=frontend
+  RUN_RESOLVED=false
+
+  build_frontend_release "${image}" "${name}"
+  log "링크 전환: ${WEB_LINK} → ${name}"
+  switch_link "${WEB_RELEASES}/${name}" "${WEB_LINK}" || die "링크를 바꾸지 못했습니다"
+  wait_frontend_served "${name}" || die "Nginx를 거친 / 가 새 릴리스의 index.html이 아닙니다(${NGINX_CHECK_TIMEOUT_SECONDS}초)"
+  frontend_confirm || die "배포는 됐지만 장부를 확정하지 못했습니다"
+  RUN_RESOLVED=true
+  cleanup_frontend "${name}"
+  log "프런트 배포 완료: ${name}"
+}
+
+# ---------------------------------------------------------------- 유닛 안에서 도는 본체
+RUN_AREA=""
+RUN_RESOLVED=true
+BUILD_TMP=""
+
+on_run_exit() {
+  local rc=$?
+  trap '' INT TERM HUP
+  set +e
+  [[ -n "${BUILD_TMP}" ]] && rm -rf "${BUILD_TMP}"
+  if [[ -n "${RUN_AREA}" && "${RUN_RESOLVED}" != true ]]; then
+    log "배포가 끝나지 못했습니다(종료 코드 ${rc}). 실제 상태를 확인합니다"
+    "${RUN_AREA}_settle_failure"
+    (( rc == 0 )) && rc=1
+  fi
+  exit "${rc}"
+}
+
+run_job() {
+  local area=$1 action=$2 digest=$3
+  trap '' PIPE
+  # 중단 신호는 표시만 한다. 앞쪽(deploy.sh)이 끝날 때까지 기다린 뒤 실제 상태를 보고 정리한다
+  trap 'log "중단 신호를 받았습니다"; exit 130' INT TERM HUP
+  trap on_run_exit EXIT
+  install -d -m 700 "${LEDGER_DIR}" "${LEDGER_DIR}/${area}"
+  exec 8>"/run/lock/checkbook-wrapper-${area}.lock"
+  flock -n 8 || die "다른 ${area} 작업이 진행 중입니다"
+  "${area}_run" "${action}" "${digest}"
+}
+
+# ---------------------------------------------------------------- 유닛 시작(SSH 쪽)
+# 실제 작업을 SSH 세션 밖 유닛으로 띄우고, 그 유닛의 로그를 따라가다 종료 코드를 돌려준다.
+# 이 프로세스가 죽어도(SSH 끊김·CI 취소·시간 초과) 유닛은 계속 돈다
+start_unit() {
+  local area=$1 action=$2 digest=$3 unit="checkbook-deploy-$1" run_id follower rc=0
+  if systemctl is-active --quiet "${unit}"; then
+    die "${area} 배포가 이미 진행 중입니다(${unit}). 기다리거나 journalctl -u ${unit} 로 확인해 주세요"
+  fi
+  run_id="$(tr -d '-' </proc/sys/kernel/random/uuid)"
+  journalctl --quiet --follow --lines=all --output=cat "CHECKBOOK_RUN=${run_id}" 2>/dev/null &
+  follower=$!
+  # 이 프로세스가 끊김 신호로 죽을 때 따라가던 journalctl을 남기지 않는다(유닛은 건드리지 않는다)
+  trap 'kill "${follower}" 2>/dev/null || true' EXIT
+  trap 'exit 129' HUP INT TERM PIPE
+  systemd-run --quiet --wait --collect --unit="${unit}" --property=Type=exec \
+    --property="LogExtraFields=CHECKBOOK_RUN=${run_id}" --setenv=LANG=C.UTF-8 \
+    --description="CheckBook ${area} ${action}" \
+    "${SELF}" __run "${area}" "${action}" "${digest}" || rc=$?
+  # 마지막 몇 줄이 저널에 내려올 시간을 준다
+  sleep 1
+  kill "${follower}" 2>/dev/null || true
+  wait "${follower}" 2>/dev/null || true
+  if (( rc == 0 )); then
+    log "결과: 성공"
+  else
+    log "결과: 실패(종료 코드 ${rc}). 기록: journalctl -u ${unit} , 장부 ${LEDGER_DIR}/${area}/"
+  fi
+  exit "${rc}"
+}
+
+# ---------------------------------------------------------------- repair (관리자)
+repair() {
+  local area=$1 actual
+  [[ "${area}" =~ ^(backend|frontend)$ ]] || usage
+  systemctl is-active --quiet "checkbook-deploy-${area}" && die "${area} 배포가 진행 중입니다. 끝난 뒤 다시 실행해 주세요"
+  install -d -m 700 "${LEDGER_DIR}/${area}"
+  exec 8>"/run/lock/checkbook-wrapper-${area}.lock"
+  flock -n 8 || die "다른 ${area} 작업이 진행 중입니다"
+  if [[ ! -e "$(pending_file "${area}")" ]]; then
+    log "배포 중 기록이 없습니다. 고칠 것이 없습니다"
+    sed -n 's/^\([A-Z_]*=\)/  \1/p' "$(current_file "${area}")" 2>/dev/null || true
+    return 0
+  fi
+  if [[ "${area}" == backend ]]; then
+    read_backend_pending
+    log "배포 중 기록: ${P_ACTION} ${P_FROM_DIGEST} → ${P_TO_DIGEST}"
+    actual="$(backend_actual_digest)"
+    if [[ -n "${actual}" && "${actual}" == "${P_TO_DIGEST}" ]]; then
+      backend_confirm || die "대상 버전으로 확정하지 못했습니다"
+      history_add backend "repair confirmed digest=${P_TO_DIGEST}"
+      log "대상 버전(${P_TO_DIGEST})이 서비스 중이라 배포 성공으로 확정했습니다"
+    elif [[ -n "${actual}" && "${actual}" == "${P_FROM_DIGEST}" ]]; then
+      rm -f "$(pending_file backend)"
+      history_add backend "repair discarded to=${P_TO_DIGEST}"
+      log "이전 버전(${P_FROM_DIGEST})이 서비스 중이라 배포 중 기록을 지웠습니다"
+    else
+      log "실제 상태가 이전·대상 어느 쪽도 아닙니다(실제: ${actual:-알 수 없음}). 판정하지 않습니다"
+      log "Nginx 칸(upstream 파일·응답 헤더)과 칸 컨테이너를 손으로 맞춘 뒤 다시 repair 해 주세요"
+      exit 1
+    fi
+  else
+    read_frontend_pending
+    log "배포 중 기록: ${P_ACTION} ${P_FROM_RELEASE} → ${P_TO_RELEASE}"
+    actual="$(frontend_actual_release)"
+    if [[ -n "${actual}" && "${actual}" == "${P_TO_RELEASE}" ]]; then
+      frontend_confirm || die "대상 릴리스로 확정하지 못했습니다"
+      history_add frontend "repair confirmed release=${P_TO_RELEASE}"
+      log "대상 릴리스(${P_TO_RELEASE})가 서비스 중이라 배포 성공으로 확정했습니다"
+    elif [[ -n "${actual}" && "${actual}" == "${P_FROM_RELEASE}" ]]; then
+      rm -f "$(pending_file frontend)"
+      history_add frontend "repair discarded to=${P_TO_RELEASE}"
+      log "이전 릴리스(${P_FROM_RELEASE})가 서비스 중이라 배포 중 기록을 지웠습니다"
+    else
+      log "실제 상태가 이전·대상 어느 쪽도 아닙니다(실제: ${actual:-알 수 없음}). 판정하지 않습니다"
+      log "${WEB_LINK} 링크와 Nginx 응답을 손으로 맞춘 뒤 다시 repair 해 주세요"
+      exit 1
+    fi
+  fi
+}
+
+# ---------------------------------------------------------------- init (관리자, 한 번)
+init_backend() {
+  local digest commit version
+  if [[ -e "$(current_file backend)" ]]; then
+    log "백엔드 장부가 이미 있습니다. 건너뜁니다"
+    return 0
+  fi
+  digest="$(backend_actual_digest)"
+  [[ -n "${digest}" ]] || die "서비스 중인 백엔드를 확인하지 못했습니다"
+  commit="$(label_commit "${BACKEND_REPO}@${digest}")"
+  fetch_main
+  require_on_main "${commit}"
+  version="$(state_format_version "${commit}")"
+  if [[ ! -f "${FLOOR_FILE}" ]]; then
+    kv_write "${FLOOR_FILE}" "VERSION=${version}" "REVISION=${commit}" || die "하한선을 저장하지 못했습니다"
+    log "하한선: 호환성 버전 ${version}, ${commit} (이보다 옛 버전으로는 래퍼로 되돌릴 수 없습니다)"
+  fi
+  prepare_backend_release "${commit}" || die "배포 파일을 꺼내지 못했습니다"
+  switch_link "${RELEASES_DIR}/${commit}" "${CURRENT_LINK}" || die "${CURRENT_LINK} 링크를 만들지 못했습니다"
+  kv_write "$(current_file backend)" "DIGEST=${digest}" "COMMIT=${commit}" "AT=$(now_iso)" || die "장부를 저장하지 못했습니다"
+  history_add backend "init digest=${digest} commit=${commit}"
+  log "백엔드 장부: ${digest} (${commit})"
+}
+
+init_frontend() {
+  local commit=$1 name tmp f relpath dest
+  if [[ -e "$(current_file frontend)" ]]; then
+    log "프런트 장부가 이미 있습니다. 건너뜁니다"
+    return 0
+  fi
+  require_on_main "${commit}"
+  name="${commit}-init"
+  # 지난 init이 링크를 바꾼 뒤 장부만 못 쓴 경우: 실제 응답이 그 릴리스면 장부만 쓴다
+  if [[ "$(frontend_actual_release)" == "${name}" ]]; then
+    kv_write "$(current_file frontend)" "DIGEST=none" "COMMIT=${commit}" "RELEASE=${name}" "AT=$(now_iso)" \
+      || die "장부를 저장하지 못했습니다"
+    history_add frontend "init release=${name} (resumed)"
+    log "프런트 장부를 이어서 썼습니다: ${name}"
+    return 0
+  fi
+  [[ -d "${WEB_LINK}" && ! -L "${WEB_LINK}" && -f "${WEB_LINK}/index.html" ]] \
+    || die "${WEB_LINK}가 index.html이 든 실제 폴더가 아닙니다"
+  install -d -m 755 "${WEB_RELEASES}" "${WEB_ASSETS}"
+  # 서비스 중인 폴더는 그대로 두고 복사본으로 첫 릴리스를 만든 뒤 바꾼다
+  tmp="$(mktemp -d "${WEB_RELEASES}/.tmp.XXXXXX")"
+  cp -a "${WEB_LINK}/." "${tmp}/"
+  [[ -z "$(find "${tmp}" ! -type f ! -type d -print -quit)" ]] || die "지금 폴더에 링크·특수 파일이 있습니다"
+  : >"${tmp}.manifest"
+  if [[ -d "${tmp}/assets" ]]; then
+    while IFS= read -r -d '' f; do
+      relpath="${f#"${tmp}/assets/"}"
+      dest="${WEB_ASSETS}/${relpath}"
+      if [[ -e "${dest}" ]]; then
+        cmp -s "${f}" "${dest}" || die "공용 assets에 같은 이름·다른 내용의 파일이 있습니다: ${relpath}"
+      else
+        install -d -m 755 "$(dirname "${dest}")"
+        install -m 644 "${f}" "${dest}"
+      fi
+      printf '%s\n' "${relpath}" >>"${tmp}.manifest"
+    done < <(find "${tmp}/assets" -type f -print0)
+    rm -rf "${tmp}/assets"
+  fi
+  ln -s "${WEB_ASSETS}" "${tmp}/assets"
+  sort -o "${tmp}.manifest" "${tmp}.manifest"
+  chmod 755 "${tmp}"
+  mv -T "${tmp}" "${WEB_RELEASES}/${name}"
+  mv -f "${tmp}.manifest" "${WEB_RELEASES}/${name}.assets.manifest"
+  # 실제 폴더는 링크로 원자적으로 바꿀 수 없어 옆으로 옮긴 직후 링크를 놓는다(그 사이 수 ms)
+  mv -T "${WEB_LINK}" "${WEB_LINK}-before-init"
+  if ! switch_link "${WEB_RELEASES}/${name}" "${WEB_LINK}" || ! wait_frontend_served "${name}"; then
+    rm -f "${WEB_LINK}"
+    mv -T "${WEB_LINK}-before-init" "${WEB_LINK}"
+    die "링크로 바꾼 뒤 Nginx 응답이 맞지 않아 원래 폴더로 되돌렸습니다"
+  fi
+  kv_write "$(current_file frontend)" "DIGEST=none" "COMMIT=${commit}" "RELEASE=${name}" "AT=$(now_iso)" \
+    || die "장부를 저장하지 못했습니다(링크는 이미 바뀜. 다시 init하면 이어서 합니다)"
+  history_add frontend "init release=${name}"
+  log "프런트 첫 릴리스: ${WEB_RELEASES}/${name}. 확인 뒤 ${WEB_LINK}-before-init 폴더는 지워도 됩니다"
+}
+
+init_cron() {
+  local line="30 3 * * * root /bin/bash ${CURRENT_LINK}/deploy/backup.sh 2>&1 | systemd-cat -t checkbook-backup"
+  if grep -qF "${CURRENT_LINK}/deploy/backup.sh" "${CRON_FILE}" 2>/dev/null; then
+    log "백업 cron은 이미 ${CURRENT_LINK} 경로입니다"
+    return 0
+  fi
+  [[ -f "${CRON_FILE}" ]] && cp -p "${CRON_FILE}" "${LEDGER_DIR}/cron-before-init"
+  printf '# checkbook-deploy init이 썼다. 백업 스크립트는 서비스 중인 릴리스의 것을 쓴다\n%s\n' "${line}" >"${CRON_FILE}.tmp"
+  chmod 644 "${CRON_FILE}.tmp"
+  mv -f "${CRON_FILE}.tmp" "${CRON_FILE}"
+  log "백업 cron을 바꿨습니다: ${CRON_FILE} (이전 내용은 ${LEDGER_DIR}/cron-before-init)"
+}
+
+init_all() {
+  local front_commit=$1
+  [[ "${front_commit}" =~ ${COMMIT_RE} ]] || die "프런트 커밋은 40자리로 주세요(git rev-parse로 확인)"
+  install -d -m 700 "${LEDGER_DIR}" "${LEDGER_DIR}/backend" "${LEDGER_DIR}/frontend"
+  exec 8>/run/lock/checkbook-wrapper-backend.lock
+  flock -n 8 || die "백엔드 작업이 진행 중입니다"
+  exec 7>/run/lock/checkbook-wrapper-frontend.lock
+  flock -n 7 || die "프런트 작업이 진행 중입니다"
+  init_backend
+  init_frontend "${front_commit}"
+  init_cron
+  log "init 완료"
+}
+
+# ---------------------------------------------------------------- 진입점
+valid_job() {
+  [[ "$1" =~ ^(backend|frontend)$ && "$2" =~ ${ACTION_RE} && "$3" =~ ${DIGEST_RE} ]]
+}
+
+main() {
+  if (( EUID != 0 )); then
+    # SSH 강제 명령으로 deploy 계정에서 불렸다. 원래 명령은 믿지 않는 입력이라 모양만 보고 root 단계로 넘긴다
+    local cmd="${SSH_ORIGINAL_COMMAND:-}" area action digest
+    [[ "${cmd}" =~ ^(backend|frontend)\ (deploy|rollback)\ (sha256:[0-9a-f]{64})$ ]] || {
+      echo "허용하지 않는 명령입니다. 가능한 것: backend|frontend deploy|rollback sha256:<64자리>" >&2
+      exit 2
+    }
+    area="${BASH_REMATCH[1]}" action="${BASH_REMATCH[2]}" digest="${BASH_REMATCH[3]}"
+    exec sudo -n "${SELF}" "${area}" "${action}" "${digest}"
+  fi
+
+  load_config
+  if [[ "${SUDO_USER:-}" == "${DEPLOY_USER}" ]]; then
+    # 배포 키로 들어온 경우: 허용 목록 4개만
+    [[ $# -eq 3 ]] && valid_job "$1" "$2" "$3" || { echo "허용하지 않는 명령입니다" >&2; exit 2; }
+    start_unit "$1" "$2" "$3"
+  fi
+
+  case "${1:-}" in
+    __run)
+      # systemd-run이 띄운 유닛 안에서만
+      [[ -n "${INVOCATION_ID:-}" && $# -eq 4 ]] && valid_job "$2" "$3" "$4" || usage
+      run_job "$2" "$3" "$4"
+      ;;
+    backend | frontend)
+      [[ $# -eq 3 ]] && valid_job "$1" "$2" "$3" || usage
+      start_unit "$1" "$2" "$3"
+      ;;
+    repair)
+      [[ $# -eq 2 ]] || usage
+      repair "$2"
+      ;;
+    init)
+      [[ $# -eq 2 ]] || usage
+      init_all "$2"
+      ;;
+    *) usage ;;
+  esac
+}
+
+main "$@"
