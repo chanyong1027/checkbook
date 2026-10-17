@@ -65,6 +65,7 @@ CORS_ALLOWED_ORIGINS=https://checkbook.site
    30 3 * * * root /bin/bash <deploy 폴더>/backup.sh 2>&1 | systemd-cat -t checkbook-backup
    ```
    서버 시간대가 Asia/Seoul이라(`timedatectl`로 확인) 03:30 KST다. 앱의 03:00 정리 배치·04:00 추천 갱신과 겹치지 않는다. `/bin/bash`로 부르는 건 실행 권한이 빠져도 돌게 하려는 것.
+   손으로 백업할 때는 `sudo /bin/bash <deploy 폴더>/backup.sh`. 다른 백업이 돌고 있으면 기다리지 않고 실패로 끝난다.
 
 ## 로그
 ```

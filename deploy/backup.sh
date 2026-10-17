@@ -19,6 +19,10 @@ compose() {
 
 umask 077
 mkdir -p "${BACKUP_DIR}"
+# cron과 손으로 돌린 실행이 겹치면 덤프 두 개가 함께 돌고, 같은 초에 시작하면 같은 .partial 파일에 쓴다.
+# 정리부터 오래된 백업 삭제까지 한 번에 하나만 돈다
+exec 9>"${BACKUP_DIR}/.lock"
+flock -n 9 || { log "실패: 다른 백업이 진행 중입니다(${BACKUP_DIR}/.lock)"; exit 1; }
 # 강제 종료돼 남은 미완성 파일 정리
 find "${BACKUP_DIR}" -maxdepth 1 -name 'checkbook-*.dump.partial' -type f -mmin +60 -delete
 
