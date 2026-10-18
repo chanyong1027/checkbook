@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { getPublicLibraryAvailability } from '../api'
 import { ApiError } from '../api/errors.ts'
 
-// 하루 한도(앱 429)·공급자 예산(앱 503)·속도 제한(Nginx 429 JSON)
-const LIMIT_ERROR_CODES = new Set(['DAILY_REQUEST_LIMIT_EXCEEDED', 'PROVIDER_DAILY_LIMIT', 'RATE_LIMIT_EXCEEDED'])
 import { isSafeUrl } from '../utils/url'
 import type { PublicLibraryInfo } from '../types'
+
+// 하루 한도(앱 429)·공급자 예산(앱 503)·속도 제한(Nginx 429 JSON)
+const LIMIT_ERROR_CODES = new Set(['DAILY_REQUEST_LIMIT_EXCEEDED', 'PROVIDER_DAILY_LIMIT', 'RATE_LIMIT_EXCEEDED'])
 
 interface Props {
   isbn13: string
