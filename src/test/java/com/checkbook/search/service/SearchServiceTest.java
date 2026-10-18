@@ -454,7 +454,7 @@ class SearchServiceTest {
     }
 
     private static MillieAvailability millieAvailable() {
-        return new MillieAvailability(true, "ABC", "https://www.millie.co.kr/v3/book/ABC", MillieAvailability.Format.EBOOK);
+        return new MillieAvailability(true, "ABC", "https://www.millie.co.kr/v4/book/ABC", MillieAvailability.Format.EBOOK);
     }
 
     private static PublicLibraryAvailabilityPage libraryPage() {

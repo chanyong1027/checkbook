@@ -5,6 +5,7 @@ import com.checkbook.client.datanaru.DatanaruProperties;
 import com.checkbook.client.kakao.KakaoBookClient;
 import com.checkbook.client.kakao.KakaoBookProperties;
 import com.checkbook.client.millie.MillieClient;
+import com.checkbook.client.millie.MillieProperties;
 import com.checkbook.common.ratelimit.DailyBudgetExceededException;
 import com.checkbook.common.ratelimit.ExternalCallBudget;
 import com.checkbook.common.ratelimit.ExternalProvider;
@@ -74,7 +75,7 @@ class ExternalClientBudgetTest {
 
     @Test
     void 밀리는_예산_소진이면_보내지_않는다() {
-        MillieClient client = new MillieClient(baseUrl(), 1000, budget);
+        MillieClient client = new MillieClient(new MillieProperties(baseUrl(), 1000, "/v3/search/total", "https://millie.example/book/"), budget);
 
         assertThatThrownBy(() -> client.searchByTitle("소년이 온다"))
                 .isInstanceOf(DailyBudgetExceededException.class);

@@ -40,6 +40,10 @@ datanaru:
 millie:
   base-url: https://live-api.millie.co.kr
   timeout: 2000
+  # 밀리가 경로 버전을 바꾸면 여기만 고쳐 재배포한다. 옛 상세 주소(v3)도 200 빈 페이지를 줘서 상태 코드로는 안 잡힌다 —
+  # 바뀌었는지는 페이지 제목(책 이름)으로 확인한다(10-18)
+  search-path: /v3/search/total
+  detail-url-base: https://www.millie.co.kr/v4/book/
 
 yes24:
   # 필수 키. 비면 기동이 멈춘다(@NotBlank). ${X:}의 빈 기본값은 env가 없을 때 ""를 넣어 @NotBlank가 잡게 하려는 것 —

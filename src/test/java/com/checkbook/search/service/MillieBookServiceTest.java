@@ -3,16 +3,17 @@ package com.checkbook.search.service;
 import com.checkbook.search.dto.IdentifiedBook;
 import com.checkbook.client.millie.MillieClient;
 import com.checkbook.client.millie.MillieClientException;
+import com.checkbook.client.millie.MillieProperties;
 import com.checkbook.client.millie.dto.MillieBookItem;
 import com.checkbook.common.matcher.BookMetadataNormalizer;
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.MillieAvailability.Format;
 import com.checkbook.search.service.MillieBookMatcher.MatchedMillie;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -46,8 +47,15 @@ class MillieBookServiceTest {
     @Spy
     private SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
-    @InjectMocks
     private MillieBookService service;
+
+    @BeforeEach
+    void setUp() {
+        // 상세 링크 주소는 설정에서 온다 — 운영 값과 다른 주소로 코드에 박힌 값이 아님을 확인한다
+        MillieProperties properties = new MillieProperties(
+                "https://live-api.example", 2000, "/v3/search/total", "https://millie.example/v9/book/");
+        service = new MillieBookService(millieClient, matcher, normalizer, meterRegistry, properties);
+    }
 
     private IdentifiedBook aladin(String title, String author) {
         return new IdentifiedBook(title, author, null, null, null);
@@ -229,7 +237,7 @@ class MillieBookServiceTest {
 
         assertThat(result.available()).isTrue();
         assertThat(result.bookSeq()).isEqualTo("SEQ001");
-        assertThat(result.detailUrl()).isEqualTo("https://www.millie.co.kr/v3/book/SEQ001");
+        assertThat(result.detailUrl()).isEqualTo("https://millie.example/v9/book/SEQ001");
         assertThat(result.format()).isEqualTo(Format.EBOOK);
     }
 

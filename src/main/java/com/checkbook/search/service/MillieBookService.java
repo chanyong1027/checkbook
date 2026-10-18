@@ -1,6 +1,7 @@
 package com.checkbook.search.service;
 
 import com.checkbook.client.millie.MillieClient;
+import com.checkbook.client.millie.MillieProperties;
 import com.checkbook.client.millie.dto.MillieBookItem;
 import com.checkbook.common.matcher.BookMetadataNormalizer;
 import com.checkbook.search.dto.IdentifiedBook;
@@ -20,12 +21,11 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class MillieBookService {
 
-    private static final String DETAIL_URL_BASE = "https://www.millie.co.kr/v3/book/";
-
     private final MillieClient millieClient;
     private final MillieBookMatcher matcher;
     private final BookMetadataNormalizer normalizer;
     private final MeterRegistry meterRegistry;
+    private final MillieProperties properties;
 
     /**
      * @param book         매칭 기준 책 정보(YES24 또는 힌트). 검색어도 이 제목으로 만든다
@@ -87,7 +87,7 @@ public class MillieBookService {
         return new MillieAvailability(
                 true,
                 primary.bookSeq(),
-                DETAIL_URL_BASE + primary.bookSeq(),
+                properties.detailUrlBase() + primary.bookSeq(),
                 format
         );
     }
