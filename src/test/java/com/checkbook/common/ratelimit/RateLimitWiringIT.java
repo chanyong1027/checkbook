@@ -11,6 +11,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -53,10 +54,20 @@ class RateLimitWiringIT {
             "/api/elibraries",
             "/api/featured?type=BESTSELLER",
             "/api/off-stores?isbn13=9788936434120&lat=37.5&lon=127.0",
-            "/actuator/health"
+            "/actuator/health",
+            // 없는 경로·끝 슬래시는 대상 경로와 맞지 않아 세지 않는다(끝 슬래시는 nginx 주석이 기대는 Spring 동작)
+            "/api/.env",
+            "/api/search/"
     })
     void 외부_호출이_없는_경로는_세지_않는다(String path) throws Exception {
         int status = mockMvc.perform(get(path)).andReturn().getResponse().getStatus();
         assertThat(status).isNotEqualTo(429);
+    }
+
+    @Test
+    void 틀린_메서드는_인터셉터에_닿기_전에_405() throws Exception {
+        // 처리기를 찾는 단계에서 예외가 나 인터셉터 체인이 만들어지지 않는다 — 하루 한도에 세지 않는다
+        mockMvc.perform(post("/api/search").param("q", "9788936434120"))
+                .andExpect(status().isMethodNotAllowed());
     }
 }
