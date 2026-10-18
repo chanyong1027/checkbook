@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { getPublicLibraryAvailability } from '../api'
+import { ApiError } from '../api/errors.ts'
 import { isSafeUrl } from '../utils/url'
 import type { PublicLibraryInfo } from '../types'
 
@@ -54,7 +55,9 @@ export function PublicLibraryList({
       })
       .catch(err => {
         if (err?.name === 'AbortError') return
-        setMoreError('도서관 정보를 더 가져오지 못했습니다. 다시 시도해주세요.')
+        // 한도 초과(429·503)만 서버가 준 안내 문구를 보여 준다. 다른 오류는 지금처럼 이 화면에 맞는 문구
+        const limited = err instanceof ApiError && (err.status === 429 || err.status === 503)
+        setMoreError(limited ? err.message : '도서관 정보를 더 가져오지 못했습니다. 다시 시도해주세요.')
         setLoadingMore(false)
       })
   }

@@ -173,7 +173,7 @@ export interface ELibraryBook {
   detailUrl: string
 }
 
-export type ELibrarySearchStatus = 'SUCCESS' | 'FAILED' | 'TIMEOUT'
+export type ELibrarySearchStatus = 'SUCCESS' | 'FAILED' | 'TIMEOUT' | 'DAILY_LIMIT'
 
 export interface ELibraryResult {
   libraryId: number
