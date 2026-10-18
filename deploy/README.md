@@ -163,7 +163,7 @@ journald로 보내서 칸 컨테이너를 지워도 로그가 남는다. 보관�
 Nginx가 되돌리기까지 실패하면(`deploy.sh` 로그에 `모두 살려 둡니다`) 어느 칸도 지우지 않고 손으로 할 일을 출력한다. 그 순서대로 되돌린 뒤 `repair`한다.
 
 ## 요청 제한 dry run 끄기
-`checkbook.conf`의 `limit_req_dry_run on;`은 재가동 후 1~2주 관찰용이다. `/var/log/nginx/error.log`에서 `limiting requests, dry run`을 보고 실제 사용자가 걸리지 않으면 `off`로 바꾸고 reload한다.
+`checkbook.conf`의 `limit_req_dry_run on;`은 사이트를 알리기 전에 끈다. 사용자가 없을 때는 "실제 사용자가 걸리는지" 관찰할 수 없으므로 숫자로 판단한다: 사람이 책 한 권을 볼 때는 짧은 시간에 3~4회 요청이라 `/api/` 5r/s(burst 20)에 걸리지 않는다. `/var/log/nginx/error.log`의 `limiting requests, dry run`에 사람으로 보이는 패턴(같은 IP가 몇 초 간격으로 여러 책을 보는 등)이 없으면 `off`로 바꾸고 `sudo nginx -t && sudo systemctl reload nginx`. 하루 총량과 공급자 예산은 앱 안 요청 제한(`application.yaml`의 `rate-limit`)이 이미 지키고 있다.
 
 ## 백업 복원
 앱 칸을 먼저 멈춘다(연결이 남아 있으면 `--clean`이 잠금을 기다리거나 일부만 복원된다). 서비스가 잠깐 멈춘다.
