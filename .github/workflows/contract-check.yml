@@ -1,0 +1,63 @@
+name: Contract Check
+
+# 외부 공급자(지금은 밀리)의 응답 형식과 상세 페이지가 앱 코드·설정과 아직 맞는지 주 1회 확인한다.
+# 실패하면 GitHub가 메일을 보낸다 — 따로 알림 장치를 두지 않고 그 메일을 알림으로 쓴다.
+# - 예약 실행 실패 메일은 이 파일의 cron을 마지막으로 고친 사람에게 간다
+# - 공개 저장소에 60일 동안 활동이 없으면 GitHub가 예약 실행을 끈다(Actions 탭에서 다시 켠다)
+# - 예약 실행은 몇십 분 늦게 시작될 수 있다
+# 확인 내용은 MillieContractTest 주석. 요청은 회당 3건이라 수집이 아니라 상태 확인이다.
+on:
+  schedule:
+    # 매주 월 09:17 KST (cron은 UTC 기준). 정각은 GitHub 예약 실행이 몰려 늦거나 빠질 수 있어 분을 비켰다
+    - cron: '17 0 * * 1'
+  workflow_dispatch:
+  # 확인 대상(설정·클라이언트·매처)이나 이 확인 자체를 고치는 PR에서는 한 번 돌려 본다(회당 요청 3건)
+  pull_request:
+    paths:
+      - '.github/workflows/contract-check.yml'
+      - 'src/test/java/**/*ContractTest.java'
+      - 'src/main/resources/application.yaml'
+      - 'src/main/java/com/checkbook/client/millie/**'
+      - 'src/main/java/com/checkbook/search/service/MillieBook*.java'
+      - 'src/main/java/com/checkbook/common/matcher/**'
+      - 'build.gradle'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Gradle wrapper 검증
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Java 21 설정
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: 계약 확인 (실제 외부 API 호출)
+        run: |
+          chmod +x gradlew
+          ./gradlew contractTest --no-daemon
+
+      - name: 실패 시 테스트 리포트 업로드
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: contract-reports
+          path: |
+            build/reports/tests/contractTest/
+            build/test-results/contractTest/
+          retention-days: 14

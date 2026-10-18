@@ -130,12 +130,13 @@ src/main/java/com/checkbook/
 
 ## 테스트
 
-52개 테스트 클래스 (기본 스위트 49 + 동시성 재현 2 + 성능 비교 1), MockWebServer 기반 외부 API 테스트 포함.
+66개 테스트 클래스 (기본 스위트 62 + 동시성 재현 2 + 성능 비교 1 + 외부 계약 확인 1), MockWebServer 기반 외부 API 테스트 포함.
 
 ```bash
 ./gradlew test            # 기본 스위트 (결정적 테스트만)
 ./gradlew diagnosisTest   # 동시성 한계 재현 테스트 (타이밍 의존이라 분리 태깅)
 ./gradlew benchmarkTest   # 도서관 순차·병렬 조회 시간 비교 (검증 없이 출력만)
+./gradlew contractTest    # 밀리 계약 확인 (실제 API 호출, GitHub Actions가 매주 월 09:17에 실행)
 cd frontend && npm test   # 프런트 단위 테스트 (node --test, Node 22.18 이상 — .ts를 그대로 실행)
 ```
 
