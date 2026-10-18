@@ -69,10 +69,11 @@ public class ExternalCallBudget {
             count(provider.name());
             return;
         }
-        if (!counter.tryAcquire(provider.name(), limits.blockAt())) {
+        LocalDate countedOn = counter.tryAcquireOn(provider.name(), limits.blockAt());
+        if (countedOn == null) {
             reject(provider);
         }
-        addPending(provider.name());
+        addPending(provider.name(), countedOn);
         warnIfNearLimit(provider, limits);
     }
 
@@ -110,10 +111,11 @@ public class ExternalCallBudget {
             count(key);
             return;
         }
-        if (!counter.tryAcquire(key, elibraryPerLibraryLimit)) {
+        LocalDate countedOn = counter.tryAcquireOn(key, elibraryPerLibraryLimit);
+        if (countedOn == null) {
             reject(ExternalProvider.ELIBRARY, key);
         }
-        addPending(key);
+        addPending(key, countedOn);
     }
 
     /** 차단선에 닿았으면 {@link DailyBudgetExceededException}. 호출이 아니라 결과 해석용이라 세지 않는다. */
@@ -163,15 +165,14 @@ public class ExternalCallBudget {
     }
 
     private void count(String key) {
-        counter.increment(key);
-        addPending(key);
+        addPending(key, counter.incrementOn(key));
     }
 
-    // 날짜는 카운터의 현재 날짜. 자정 경계에서 1회가 이웃 날짜로 기록될 수 있다(하루 총량에서 무시할 오차)
-    // 제한이 꺼져 있으면(부하 측정) 동기화하지 않으니 쌓지 않는다 — 핫패스의 merge 경합도 피한다
-    private void addPending(String key) {
+    // 날짜는 카운터를 올린 그 Day의 날짜(호출하는 쪽이 tryAcquireOn·incrementOn으로 받아 넘긴다) — 자정 경계에서도
+    // 전날 호출은 전날 행으로 간다. 제한이 꺼져 있으면(부하 측정) 동기화하지 않으니 쌓지 않는다
+    private void addPending(String key, LocalDate date) {
         if (enabled) {
-            pending.merge(new UsageKey(key, counter.currentDate()), 1, Integer::sum);
+            pending.merge(new UsageKey(key, date), 1, Integer::sum);
         }
     }
 
