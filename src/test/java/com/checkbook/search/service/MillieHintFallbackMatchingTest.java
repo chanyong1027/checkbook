@@ -1,6 +1,7 @@
 package com.checkbook.search.service;
 
 import com.checkbook.client.millie.MillieClient;
+import com.checkbook.client.millie.MillieProperties;
 import com.checkbook.client.millie.dto.MillieBookItem;
 import com.checkbook.common.matcher.BookMatcher;
 import com.checkbook.common.matcher.BookMetadataNormalizer;
@@ -24,7 +25,8 @@ class MillieHintFallbackMatchingTest {
     private final BookMetadataNormalizer normalizer = new BookMetadataNormalizer();
     private final MillieBookMatcher matcher = new MillieBookMatcher(new BookMatcher(normalizer), normalizer);
     private final MillieClient millieClient = mock(MillieClient.class);
-    private final MillieBookService service = new MillieBookService(millieClient, matcher, normalizer, new SimpleMeterRegistry());
+    private final MillieBookService service = new MillieBookService(millieClient, matcher, normalizer, new SimpleMeterRegistry(),
+            new MillieProperties("https://live-api.example", 2000, "/v3/search/total", "https://millie.example/book/"));
 
     private final MillieBookItem onMillie = new MillieBookItem(
             "SEQ9", "모두가 부자 되는 투자 공부", "", "홍길동", "경제경영", "테스트출판", true, true);

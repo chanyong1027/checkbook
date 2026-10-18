@@ -5,7 +5,6 @@ import com.checkbook.client.millie.dto.MillieSearchResponse;
 import com.checkbook.common.ratelimit.ExternalCallBudget;
 import com.checkbook.common.ratelimit.ExternalProvider;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -23,19 +22,17 @@ public class MillieClient {
 
     private final RestClient restClient;
     private final ExternalCallBudget budget;
+    private final String searchPath;
 
-    public MillieClient(
-            @Value("${millie.base-url:https://live-api.millie.co.kr}") String baseUrl,
-            @Value("${millie.timeout:2000}") int timeout,
-            ExternalCallBudget budget
-    ) {
+    public MillieClient(MillieProperties properties, ExternalCallBudget budget) {
         this.budget = budget;
+        this.searchPath = properties.searchPath();
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(timeout);
-        factory.setReadTimeout(timeout);
+        factory.setConnectTimeout(properties.timeout());
+        factory.setReadTimeout(properties.timeout());
 
         this.restClient = RestClient.builder()
-                .baseUrl(baseUrl)
+                .baseUrl(properties.baseUrl())
                 .defaultHeader("User-Agent", USER_AGENT)
                 .defaultHeader("Accept", "application/json")
                 .requestFactory(factory)
@@ -57,7 +54,7 @@ public class MillieClient {
         try {
             response = restClient.get()
                     // 제목은 템플릿 변수로 넘긴다: 그대로 넣으면 "{…}"가 템플릿으로 해석돼 예외가 나고, "+"가 공백으로 읽힌다
-                    .uri("/v3/search/total?searchType=total&keyword={keyword}"
+                    .uri(searchPath + "?searchType=total&keyword={keyword}"
                             + "&contentlimitCount=20&postlimitCount=0&librarylimitCount=0&startPage=1", title)
                     .retrieve()
                     .body(MillieSearchResponse.class);

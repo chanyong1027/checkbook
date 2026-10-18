@@ -2,6 +2,7 @@ package com.checkbook.client;
 
 import com.checkbook.client.millie.MillieClient;
 import com.checkbook.client.millie.MillieClientException;
+import com.checkbook.client.millie.MillieProperties;
 import com.checkbook.client.millie.dto.MillieBookItem;
 import com.checkbook.common.ratelimit.ExternalCallBudget;
 import okhttp3.HttpUrl;
@@ -35,11 +36,17 @@ class MillieClientTest {
     }
 
     private MillieClient newClient() {
-        return new MillieClient(baseUrl(), 2000, ExternalCallBudget.unlimited());
+        return newClient(2000, "/v3/search/total");
     }
 
     private MillieClient newClientWithTimeout(int timeoutMs) {
-        return new MillieClient(baseUrl(), timeoutMs, ExternalCallBudget.unlimited());
+        return newClient(timeoutMs, "/v3/search/total");
+    }
+
+    private MillieClient newClient(int timeoutMs, String searchPath) {
+        return new MillieClient(
+                new MillieProperties(baseUrl(), timeoutMs, searchPath, "https://millie.example/book/"),
+                ExternalCallBudget.unlimited());
     }
 
     @Test
@@ -263,6 +270,23 @@ class MillieClientTest {
         assertThat(emptyResult).isEmpty();
         assertThat(whitespaceResult).isEmpty();
         assertThat(server.getRequestCount()).isZero();
+    }
+
+    // 밀리가 경로 버전을 바꾸면 설정만 고쳐 재배포한다 — 경로가 코드에 박혀 있지 않은지 확인
+    @Test
+    void usesSearchPathFromProperties() throws Exception {
+        server = new MockWebServer();
+        server.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"RESP_CD\": 200, \"RESP_DATA\": {\"content\": {\"list\": []}}}"));
+        server.start();
+
+        newClient(2000, "/v9/search/total").searchByTitle("테스트");
+
+        RecordedRequest request = server.takeRequest(2, TimeUnit.SECONDS);
+        assertThat(request).isNotNull();
+        assertThat(request.getRequestUrl().encodedPath()).isEqualTo("/v9/search/total");
+        assertThat(request.getRequestUrl().queryParameter("keyword")).isEqualTo("테스트");
     }
 
     // Jackson 3 회귀: 값이 빠진 필드가 원시형이면 파싱 전체가 실패한다(FAIL_ON_NULL_FOR_PRIMITIVES).
