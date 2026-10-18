@@ -125,15 +125,20 @@ public class DailyCounter {
         return day.counts.computeIfAbsent(key, k -> new AtomicInteger());
     }
 
+    // 앞으로만 바꾼다. 자정 직전에 날짜를 계산하고 멈춘 스레드가 이미 새 날로 바뀐 카운터를 보면
+    // 그대로 쓴다(과거 날짜로 교체하면 새 날에 센 사용량이 사라진다). 그 스레드의 1회는 새 날로 세진다
     private Day day() {
         LocalDate today = today();
-        Day day = current.get();
-        if (day.date.equals(today)) {
-            return day;
+        while (true) {
+            Day day = current.get();
+            if (!day.date.isBefore(today)) {
+                return day;
+            }
+            Day next = new Day(today);
+            if (current.compareAndSet(day, next)) {
+                return next;
+            }
         }
-        Day next = new Day(today);
-        // 다른 스레드가 먼저 바꿨으면 그 묶음을 쓴다
-        return current.compareAndSet(day, next) ? next : current.get();
     }
 
     private LocalDate today() {
