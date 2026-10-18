@@ -28,6 +28,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -80,6 +83,30 @@ class ELibrarySearchServiceTest {
         assertThat(response.results()).extracting(ELibrarySearchResponse.ELibraryResult::status)
                 .containsExactly(ELibrarySearchStatus.DAILY_LIMIT, ELibrarySearchStatus.SUCCESS);
         verify(mockClient, times(1)).search(anyString(), anyString());
+    }
+
+    @Test
+    void 풀이_거절해_수집하지_못하면_예산을_차감하지_않는다() {
+        // 제출 전에 차감하면 풀 포화 거절만으로 자정까지 DAILY_LIMIT이 된다(외부 리뷰 P2)
+        ELibrary library = activeLibrary(1L);
+        when(eLibraryRepository.findAllById(List.of(1L))).thenReturn(List.of(library));
+        BookMetadataNormalizer normalizer = new BookMetadataNormalizer();
+        ExecutorService rejecting = new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS,
+                new SynchronousQueue<>(), new ThreadPoolExecutor.AbortPolicy());
+        rejecting.shutdown(); // 이후 제출은 전부 거절된다
+        ELibrarySearchService saturated = new ELibrarySearchService(eLibraryRepository, clientResolver, rejecting,
+                new BookMatcher(normalizer), normalizer, budget);
+
+        ELibrarySearchResponse first = saturated.search("자바의 정석", "남궁성", "1");
+        assertThat(first.results()).extracting(ELibrarySearchResponse.ELibraryResult::status)
+                .containsExactly(ELibrarySearchStatus.FAILED);
+
+        // 풀이 회복된 뒤(정상 서비스) 같은 도서관은 수집할 수 있어야 한다(상한 1)
+        when(clientResolver.resolve(VendorType.KYOBO)).thenReturn(mockClient);
+        when(mockClient.search(anyString(), anyString())).thenReturn(List.of());
+        ELibrarySearchResponse second = service.search("자바의 정석", "남궁성", "1");
+        assertThat(second.results()).extracting(ELibrarySearchResponse.ELibraryResult::status)
+                .containsExactly(ELibrarySearchStatus.SUCCESS);
     }
 
     @Test

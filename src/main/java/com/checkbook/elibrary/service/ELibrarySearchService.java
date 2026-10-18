@@ -21,12 +21,10 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
@@ -99,18 +97,16 @@ public class ELibrarySearchService {
         }
 
         Map<Long, ScrapeTask> futureMap = new LinkedHashMap<>();
-        Set<Long> overBudgetIds = new HashSet<>();
         for (Long id : validIds) {
             ELibrary library = foundMap.get(id);
-            try {
-                budget.acquireELibrary(id);
-            } catch (DailyBudgetExceededException e) {
-                overBudgetIds.add(id);
-                continue;
-            }
             long startedAt = System.currentTimeMillis();
             futureMap.put(id, new ScrapeTask(
-                    submitSafely(() -> searchBooks(library, selected))
+                    // 예산은 작업이 실제로 돌 때 차감한다 — 제출 전에 깎으면 풀 포화로 거절돼 수집을 안 했는데도
+                    // 하루 예산이 줄어 자정까지 막힐 수 있다. 소진이면 toResult가 DAILY_LIMIT으로 바꾼다
+                    submitSafely(() -> {
+                        budget.acquireELibrary(library.getId());
+                        return searchBooks(library, selected);
+                    })
                             .orTimeout(perLibraryTimeoutMs, TimeUnit.MILLISECONDS),
                     startedAt
             ));
@@ -133,12 +129,6 @@ public class ELibrarySearchService {
         List<ELibrarySearchResponse.ELibraryResult> results = new ArrayList<>();
         for (Long id : validIds) {
             ELibrary library = foundMap.get(id);
-            if (overBudgetIds.contains(id)) {
-                results.add(new ELibrarySearchResponse.ELibraryResult(
-                        library.getId(), library.getName(), library.getVendorType().name(),
-                        List.of(), ELibrarySearchStatus.DAILY_LIMIT, 0));
-                continue;
-            }
             results.add(toResult(library, futureMap.get(id)));
         }
 
@@ -252,6 +242,11 @@ public class ELibrarySearchService {
             );
         } catch (CompletionException exception) {
             Throwable cause = exception.getCause();
+            if (cause instanceof DailyBudgetExceededException) {
+                return new ELibrarySearchResponse.ELibraryResult(
+                        library.getId(), library.getName(), library.getVendorType().name(),
+                        List.of(), ELibrarySearchStatus.DAILY_LIMIT, 0);
+            }
             if (cause instanceof TimeoutException) {
                 long elapsedMs = Math.max(1L, System.currentTimeMillis() - scrapeTask.startedAt());
                 return timedOutResult(library, elapsedMs);
