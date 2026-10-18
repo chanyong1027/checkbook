@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { getPublicLibraryAvailability } from '../api'
 import { ApiError } from '../api/errors.ts'
+
+// 하루 한도(앱 429)·공급자 예산(앱 503)·속도 제한(Nginx 429 JSON)
+const LIMIT_ERROR_CODES = new Set(['DAILY_REQUEST_LIMIT_EXCEEDED', 'PROVIDER_DAILY_LIMIT', 'RATE_LIMIT_EXCEEDED'])
 import { isSafeUrl } from '../utils/url'
 import type { PublicLibraryInfo } from '../types'
 
@@ -55,8 +58,9 @@ export function PublicLibraryList({
       })
       .catch(err => {
         if (err?.name === 'AbortError') return
-        // 한도 초과(429·503)만 서버가 준 안내 문구를 보여 준다. 다른 오류는 지금처럼 이 화면에 맞는 문구
-        const limited = err instanceof ApiError && (err.status === 429 || err.status === 503)
+        // 한도 초과만 서버가 준 안내 문구를 보여 준다. 상태 코드가 아니라 오류 코드로 가린다 —
+        // 앱이 내려가 Nginx·Cloudflare가 HTML 503을 주면 본문 코드가 없어 이 화면의 문구가 맞다
+        const limited = err instanceof ApiError && err.code != null && LIMIT_ERROR_CODES.has(err.code)
         setMoreError(limited ? err.message : '도서관 정보를 더 가져오지 못했습니다. 다시 시도해주세요.')
         setLoadingMore(false)
       })
