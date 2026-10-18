@@ -12,7 +12,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 키별 하루 호출 수. KST 날짜가 바뀌면 전부 0부터 다시 센다(YES24·정보나루의 일 한도 경계와 같다).
- * 인메모리라 재시작·블루그린 전환 때 초기화된다(요청 제한 결정 카드 2).
+ * 인메모리라 재시작·블루그린 전환 때 초기화된다(요청 제한 결정 카드 2). 공급자 예산은
+ * {@link ExternalCallBudgetSyncer}가 DB와 맞춰 이어서 세고, IP별 한도는 그대로 초기화된다.
  */
 public class DailyCounter {
 
@@ -100,6 +101,11 @@ public class DailyCounter {
     public boolean markOnce(String key) {
         AtomicInteger count = counterFor(key);
         return count != null && count.compareAndSet(0, 1);
+    }
+
+    /** 지금 세고 있는 날짜(KST) */
+    public LocalDate currentDate() {
+        return day().date;
     }
 
     public Duration untilReset() {
