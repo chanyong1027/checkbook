@@ -130,7 +130,7 @@ src/main/java/com/checkbook/
 
 ## 테스트
 
-52개 테스트 클래스 (기본 스위트 49 + 동시성 재현 2 + 성능 비교 1), MockWebServer 기반 외부 API 테스트 포함.
+66개 테스트 클래스 (기본 스위트 62 + 동시성 재현 2 + 성능 비교 1 + 외부 계약 확인 1), MockWebServer 기반 외부 API 테스트 포함.
 
 ```bash
 ./gradlew test            # 기본 스위트 (결정적 테스트만)
