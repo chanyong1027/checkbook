@@ -55,9 +55,10 @@ public class ExternalCallBudgetSyncer {
                 .register(meterRegistry);
     }
 
+    // 첫 동기화(오늘 합계 읽기)도 실행기에서 곧바로 돈다. 기동 이벤트 스레드에서 돌리면 DB가 죽어 있을 때 기동을
+    // 연결 대기만큼 붙잡고, 예상 못 한 예외가 새면 앱 기동이 실패한다. 첫 동기화 전에 센 양은 증가분에 남아 함께 더해진다
     @EventListener(ApplicationReadyEvent.class)
     public void start() {
-        sync();
         if (!budget.isEnabled()) {
             return;
         }
@@ -66,7 +67,7 @@ public class ExternalCallBudgetSyncer {
             thread.setDaemon(true);
             return thread;
         });
-        executor.scheduleWithFixedDelay(this::syncSafely, intervalMs, intervalMs, TimeUnit.MILLISECONDS);
+        executor.scheduleWithFixedDelay(this::syncSafely, 0, intervalMs, TimeUnit.MILLISECONDS);
     }
 
     // ScheduledExecutorService는 작업이 예외를 던지면 그 뒤 실행을 조용히 멈춘다 — 무엇이 나든 다음 주기는 돌게 한다

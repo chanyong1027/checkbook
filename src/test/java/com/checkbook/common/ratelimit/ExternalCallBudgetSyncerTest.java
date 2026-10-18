@@ -7,7 +7,12 @@ import org.springframework.dao.DataAccessResourceFailureException;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -171,6 +176,52 @@ class ExternalCallBudgetSyncerTest {
         syncer.flushOnShutdown();
 
         verify(store).add("DATANARU", TODAY, 1);
+    }
+
+    @Test
+    void 기동하면_첫_동기화부터_자체_스레드에서_주기적으로_돈다() throws InterruptedException {
+        // 기동 이벤트 스레드에서 돌면 DB 장애 때 기동을 붙잡는다. 공용 스케줄러 스레드면 추천 배치에 밀린다
+        ExternalCallBudget budget = budget(true);
+        CountDownLatch twoRuns = new CountDownLatch(2);
+        List<String> threads = new CopyOnWriteArrayList<>();
+        when(store.load(TODAY)).thenAnswer(invocation -> {
+            threads.add(Thread.currentThread().getName());
+            twoRuns.countDown();
+            return Map.of();
+        });
+        ExternalCallBudgetSyncer syncer = new ExternalCallBudgetSyncer(budget, store, meterRegistry, 20);
+
+        syncer.start();
+        try {
+            assertThat(twoRuns.await(5, TimeUnit.SECONDS)).isTrue();
+            assertThat(threads).allMatch("budget-sync"::equals);
+        } finally {
+            syncer.flushOnShutdown();
+        }
+    }
+
+    @Test
+    void 종료하면_주기_실행을_멈추고_남은_증가분은_한_번만_쓴다() throws InterruptedException {
+        ExternalCallBudget budget = budget(true);
+        CountDownLatch firstRun = new CountDownLatch(1);
+        AtomicInteger runs = new AtomicInteger();
+        when(store.load(TODAY)).thenAnswer(invocation -> {
+            runs.incrementAndGet();
+            firstRun.countDown();
+            return Map.of();
+        });
+        ExternalCallBudgetSyncer syncer = new ExternalCallBudgetSyncer(budget, store, meterRegistry, 20);
+        syncer.start();
+        assertThat(firstRun.await(5, TimeUnit.SECONDS)).isTrue();
+        budget.acquire(ExternalProvider.DATANARU);
+
+        syncer.flushOnShutdown();
+
+        // 마지막 주기가 썼든 종료 flush가 썼든 한 번만 더해진다
+        verify(store).add("DATANARU", TODAY, 1);
+        int afterShutdown = runs.get();
+        Thread.sleep(200); // 주기(20ms)의 10배 — 예약이 남아 있으면 그새 여러 번 돈다
+        assertThat(runs.get()).isEqualTo(afterShutdown);
     }
 
     @Test
