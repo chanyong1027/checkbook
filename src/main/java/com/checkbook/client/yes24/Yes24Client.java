@@ -4,6 +4,9 @@ import com.checkbook.client.yes24.Yes24Exception.Kind;
 import com.checkbook.client.yes24.dto.Yes24Book;
 import com.checkbook.client.yes24.dto.Yes24CategoryListResponse;
 import com.checkbook.client.yes24.dto.Yes24ItemDetailResponse;
+import com.checkbook.common.ratelimit.DailyBudgetExceededException;
+import com.checkbook.common.ratelimit.ExternalCallBudget;
+import com.checkbook.common.ratelimit.ExternalProvider;
 import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -55,6 +58,7 @@ public class Yes24Client {
     private final RateLimiter rateLimiter;
     private final MeterRegistry meterRegistry;
     private final Clock clock;
+    private final ExternalCallBudget budget;
     private final Duration callDeadline;
     private final Duration listCallDeadline;
     private final Yes24DailyStop dailyStop = new Yes24DailyStop();
@@ -66,7 +70,8 @@ public class Yes24Client {
             Yes24Properties properties,
             RateLimiter rateLimiter,
             MeterRegistry meterRegistry,
-            Clock clock
+            Clock clock,
+            ExternalCallBudget budget
     ) {
         // JdkClientHttpRequestFactory의 readTimeout은 '읽기 간격'이 아니라 sendAsync부터 본문 끝까지의 전체 마감이다
         // (Spring 7 JdkClientHttpRequest.TimeoutHandler). connectTimeout은 그 안의 연결 단계 상한이다.
@@ -93,6 +98,7 @@ public class Yes24Client {
         this.rateLimiter = rateLimiter;
         this.meterRegistry = meterRegistry;
         this.clock = clock;
+        this.budget = budget;
 
         Gauge.builder("yes24.remaining.day", remainingDay, AtomicReference::get)
                 .description("YES24 일일 호출 잔량 (마지막 응답 헤더 관측치)")
@@ -101,9 +107,14 @@ public class Yes24Client {
 
     public Optional<Yes24Book> lookupByIsbn(String isbn13) {
         checkDailyStop();
+        // 예산이 이미 다 찼으면 초당 허가를 쓰기 전에 끝낸다 — 허가를 쓰면 배치 몫(차단선~한도)을 쓰는 categoryList가 밀린다
+        if (budget.isExhausted(ExternalProvider.YES24)) {
+            throw budgetExhausted();
+        }
         if (!rateLimiter.acquirePermission()) {
             throw selfRateLimited();
         }
+        acquireBudget();
 
         Instant sentAt = clock.instant();
         // URI 템플릿을 유지해야 http.client.requests의 uri 태그가 ISBN 실값으로 늘어나지 않는다
@@ -121,6 +132,8 @@ public class Yes24Client {
         acquireForList();
         // 기다리는 동안 이미 나간 식별 요청이 RATE_002를 받았을 수 있다 — 허가를 얻었어도 보내지 않는다
         checkDailyStop();
+        // 배치는 예산 차단선을 넘어도 보낸다(차단선과 실제 한도 사이가 배치 몫). 세기만 한다
+        budget.record(ExternalProvider.YES24);
 
         Instant sentAt = clock.instant();
         RawResponse<Yes24CategoryListResponse> raw = exchange(listRestClient, listCallDeadline,
@@ -151,6 +164,21 @@ public class Yes24Client {
         }
     }
 
+    // 하루 예산 차단선이면 보내지 않는다. 섹션 의미는 일일 중단과 같다(SKIPPED, DAILY_LIMIT)
+    // 위의 isExhausted 확인과 허가 사이에 다른 요청이 마지막 몫을 가져갈 수 있어 여기서 한 번 더 원자적으로 확인한다
+    private void acquireBudget() {
+        try {
+            budget.acquire(ExternalProvider.YES24);
+        } catch (DailyBudgetExceededException e) {
+            throw budgetExhausted();
+        }
+    }
+
+    private Yes24Exception budgetExhausted() {
+        countRateLimited("self", "budget");
+        return new Yes24Exception(Kind.DAILY_LIMIT, false, "YES24 하루 예산 차단선 도달로 호출하지 않음");
+    }
+
     private Yes24Exception selfRateLimited() {
         countRateLimited("self", "second");
         return new Yes24Exception(Kind.RATE_LIMITED, false, "YES24 선제한 거절");
@@ -175,6 +203,7 @@ public class Yes24Client {
     private <T> RawResponse<T> exchange(RestClient client, Duration deadline, Class<T> bodyType,
                                         String uriTemplate, Object... uriVariables) {
         long startedNanos = System.nanoTime();
+        Instant sentAt = clock.instant();
         RawResponse<T> raw;
         try {
             raw = client.get()
@@ -196,7 +225,7 @@ public class Yes24Client {
             throw new Yes24Exception(Kind.FAILED, true, "YES24 호출 실패", e);
         }
 
-        observeRemainingDay(raw.headers());
+        observeRemainingDay(raw.headers(), sentAt);
 
         // 200인데 본문을 읽는 중에 마감이 지나면 스트림이 닫혀 '파싱 실패'로 보인다 → 타임아웃으로 분류.
         // 200이 아닌 응답은 상태 코드·헤더만으로 판정하므로(예: HTML 429 + 일일 잔량 0) 덮어쓰지 않는다
@@ -293,13 +322,19 @@ public class Yes24Client {
         }
     }
 
-    private void observeRemainingDay(HttpHeaders headers) {
+    private void observeRemainingDay(HttpHeaders headers, Instant sentAt) {
         String value = headers.getFirst("x-ratelimit-remaining-day");
         if (value == null) {
             return;
         }
         try {
-            remainingDay.set(Double.parseDouble(value.trim()));
+            double remaining = Double.parseDouble(value.trim());
+            // NaN을 long으로 바꾸면 0이 되어 하루 내내 막힌다. 유한한 0 이상 값만 받는다
+            if (!Double.isFinite(remaining) || remaining < 0) {
+                return;
+            }
+            remainingDay.set(remaining);
+            budget.observeRemaining(ExternalProvider.YES24, (long) remaining, sentAt);
         } catch (NumberFormatException ignored) {
             // 관측치일 뿐이라 형식이 이상하면 이전 값을 유지한다
         }

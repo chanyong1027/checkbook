@@ -1,12 +1,17 @@
 package com.checkbook.publiclibrary.service;
 
 import com.checkbook.common.exception.BusinessException;
+import com.checkbook.common.ratelimit.DailyBudgetExceededException;
+import com.checkbook.common.ratelimit.ExternalCallBudget;
+import com.checkbook.common.ratelimit.ExternalProvider;
+import com.checkbook.common.ratelimit.RateLimitProperties;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
 import com.checkbook.publiclibrary.dto.PublicLibraryAvailabilityPage;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
 import com.checkbook.publiclibrary.snapshot.domain.SnapshotSourceStatus;
 import com.checkbook.publiclibrary.snapshot.dto.LibraryAvailabilityResult;
 import com.checkbook.publiclibrary.snapshot.service.LibraryAvailabilitySnapshotService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,8 +20,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -34,13 +41,17 @@ class PublicLibraryAvailabilityServiceTest {
     private PublicLibraryRepository publicLibraryRepository;
 
     private ExecutorService publicLibraryExecutor;
+    private final ExternalCallBudget budget = new ExternalCallBudget(
+            new RateLimitProperties(true, null,
+                    Map.of(ExternalProvider.DATANARU, new RateLimitProperties.Provider(100, 90)), 1000),
+            new SimpleMeterRegistry(), Clock.systemUTC());
     private PublicLibraryAvailabilityService service;
 
     @BeforeEach
     void setUp() {
         publicLibraryExecutor = Executors.newFixedThreadPool(20);
         service = new PublicLibraryAvailabilityService(
-                snapshotService, publicLibraryRepository, publicLibraryExecutor);
+                snapshotService, publicLibraryRepository, publicLibraryExecutor, budget);
         ReflectionTestUtils.setField(service, "pageSize", 5);
         ReflectionTestUtils.setField(service, "maxCount", 20);
         ReflectionTestUtils.setField(service, "fanoutTimeoutMs", 2200L);
@@ -152,6 +163,28 @@ class PublicLibraryAvailabilityServiceTest {
         // 후보 소진과 구분: hasMore는 후보 기준으로 여전히 true
         assertThat(page.hasMoreLibraries()).isTrue();
         assertThat(page.nextOffset()).isEqualTo(5);
+    }
+
+    @Test
+    void 전부_실패했고_정보나루_예산이_소진이면_예산_소진을_알린다() {
+        budget.observeRemaining(ExternalProvider.DATANARU, 0, java.time.Instant.now());
+        when(publicLibraryRepository.findNearest(37.5665, 126.9780, 20)).thenReturn(libs(20));
+        when(snapshotService.getAvailability(eq("9788936439743"), org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(inv -> LibraryAvailabilityResult.failed(inv.getArgument(1)));
+
+        assertThatThrownBy(() -> service.fetch("9788936439743", 37.5665, 126.9780, 0))
+                .isInstanceOf(DailyBudgetExceededException.class);
+    }
+
+    @Test
+    void 예산이_소진돼도_스냅샷으로_일부를_보여_줄_수_있으면_그대로_돌려준다() {
+        budget.observeRemaining(ExternalProvider.DATANARU, 0, java.time.Instant.now());
+        when(publicLibraryRepository.findNearest(37.5665, 126.9780, 20)).thenReturn(libs(20));
+        stubAllSuccess();
+
+        PublicLibraryAvailabilityPage page = service.fetch("9788936439743", 37.5665, 126.9780, 0);
+
+        assertThat(page.libraries()).hasSize(5);
     }
 
     @Test

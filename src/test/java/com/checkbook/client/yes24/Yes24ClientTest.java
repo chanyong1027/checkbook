@@ -2,6 +2,9 @@ package com.checkbook.client.yes24;
 
 import com.checkbook.client.yes24.Yes24Exception.Kind;
 import com.checkbook.client.yes24.dto.Yes24Book;
+import com.checkbook.common.ratelimit.ExternalCallBudget;
+import com.checkbook.common.ratelimit.ExternalProvider;
+import com.checkbook.common.ratelimit.RateLimitProperties;
 import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -22,6 +25,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -37,6 +41,7 @@ class Yes24ClientTest {
     private MockWebServer server;
     private SimpleMeterRegistry meterRegistry;
     private MutableClock clock;
+    private ExternalCallBudget budget = ExternalCallBudget.unlimited();
 
     @BeforeEach
     void setUp() throws Exception {
@@ -336,6 +341,77 @@ class Yes24ClientTest {
         assertThat(meterRegistry.get("yes24.remaining.day").gauge().value()).isEqualTo(19993.0);
     }
 
+    // ---- 하루 예산 (요청 제한 결정 카드 1) ----
+
+    @Test
+    void 하루_예산이_차단선에_닿으면_보내지_않고_DAILY_LIMIT() {
+        budget = yes24Budget(10, 1);
+        Yes24Client client = newClient();
+        server.enqueue(json(200, foundBody(ISBN, "테스트 책", 13500.0)));
+        client.lookupByIsbn(ISBN);
+
+        assertFails(client, Kind.DAILY_LIMIT, false);
+        assertThat(server.getRequestCount()).isEqualTo(1);
+        assertThat(counter("self", "budget")).isEqualTo(1.0);
+    }
+
+    @Test
+    void 응답_헤더의_남은_한도로_예산_사용량을_맞춘다() {
+        budget = yes24Budget(20000, 19000);
+        server.enqueue(json(404, errorBody("GOODS_002")).setHeader("x-ratelimit-remaining-day", "1000"));
+
+        newClient().lookupByIsbn(ISBN);
+
+        // 재시작 직후라 우리는 1회만 셌지만 YES24 기준 사용량은 19,000
+        assertThat(budget.used(ExternalProvider.YES24)).isEqualTo(19000);
+        assertThat(budget.isExhausted(ExternalProvider.YES24)).isTrue();
+    }
+
+    @Test
+    void 자정_전에_보낸_요청의_잔량은_새_날_예산에_반영하지_않는다() {
+        clock.set(kst(2026, 10, 15, 23, 59, 59));
+        budget = yes24Budget(20000, 19000);
+        // 응답이 자정을 넘겨 도착한다. 헤더 잔량 300은 전날 창의 값이다(리뷰 F1)
+        server.setDispatcher(new Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) {
+                clock.set(kst(2026, 10, 16, 0, 0, 1));
+                return json(404, errorBody("GOODS_002")).setHeader("x-ratelimit-remaining-day", "300");
+            }
+        });
+
+        newClient().lookupByIsbn(ISBN);
+
+        assertThat(budget.used(ExternalProvider.YES24)).isZero();
+        assertThat(budget.isExhausted(ExternalProvider.YES24)).isFalse();
+    }
+
+    @Test
+    void 예산이_이미_소진이면_초당_허가를_쓰지_않는다() {
+        budget = yes24Budget(10, 0);
+        RateLimiter limiter = RateLimiter.of("yes24-budget", RateLimiterConfig.custom()
+                .limitForPeriod(1)
+                .limitRefreshPeriod(Duration.ofHours(1))
+                .timeoutDuration(Duration.ZERO)
+                .build());
+
+        assertFails(newClient(limiter), Kind.DAILY_LIMIT, false);
+
+        // 남은 허가는 배치(categoryList) 몫으로 남아 있어야 한다(리뷰 F5)
+        assertThat(limiter.getMetrics().getAvailablePermissions()).isEqualTo(1);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"NaN", "Infinity", "-5", "abc"})
+    void 이상한_잔량_헤더는_예산에_반영하지_않는다(String header) {
+        budget = yes24Budget(20000, 19000);
+        server.enqueue(json(404, errorBody("GOODS_002")).setHeader("x-ratelimit-remaining-day", header));
+
+        newClient().lookupByIsbn(ISBN);
+
+        assertThat(budget.used(ExternalProvider.YES24)).isEqualTo(1);
+    }
+
     // ---- helpers ----
 
     private Yes24Client newClient() {
@@ -353,7 +429,14 @@ class Yes24ClientTest {
                 Duration.ofMillis(200),
                 Duration.ofMillis(300),
                 Duration.ofSeconds(3));
-        return new Yes24Client(RestClient.builder(), properties, rateLimiter, meterRegistry, clock);
+        return new Yes24Client(RestClient.builder(), properties, rateLimiter, meterRegistry, clock, budget);
+    }
+
+    private ExternalCallBudget yes24Budget(int dailyLimit, int blockAt) {
+        return new ExternalCallBudget(
+                new RateLimitProperties(true, null,
+                        Map.of(ExternalProvider.YES24, new RateLimitProperties.Provider(dailyLimit, blockAt)), 1000),
+                new SimpleMeterRegistry(), clock);
     }
 
     private void assertFails(Kind kind, boolean sent) {

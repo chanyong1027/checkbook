@@ -3,6 +3,8 @@ package com.checkbook.publiclibrary.service;
 import com.checkbook.common.concurrent.AsyncSubmit;
 import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
+import com.checkbook.common.ratelimit.ExternalCallBudget;
+import com.checkbook.common.ratelimit.ExternalProvider;
 import com.checkbook.common.util.DistanceCalculator;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
 import com.checkbook.publiclibrary.dto.PublicLibraryAvailabilityPage;
@@ -31,6 +33,7 @@ public class PublicLibraryAvailabilityService {
     private final LibraryAvailabilitySnapshotService snapshotService;
     private final PublicLibraryRepository publicLibraryRepository;
     private final ExecutorService publicLibraryExecutor;
+    private final ExternalCallBudget budget;
 
     @Value("${search.public-library-page-size}")
     private int pageSize;
@@ -44,11 +47,13 @@ public class PublicLibraryAvailabilityService {
     public PublicLibraryAvailabilityService(
             LibraryAvailabilitySnapshotService snapshotService,
             PublicLibraryRepository publicLibraryRepository,
-            @Qualifier("publicLibraryExecutor") ExecutorService publicLibraryExecutor
+            @Qualifier("publicLibraryExecutor") ExecutorService publicLibraryExecutor,
+            ExternalCallBudget budget
     ) {
         this.snapshotService = snapshotService;
         this.publicLibraryRepository = publicLibraryRepository;
         this.publicLibraryExecutor = publicLibraryExecutor;
+        this.budget = budget;
     }
 
     /**
@@ -91,6 +96,11 @@ public class PublicLibraryAvailabilityService {
                 .toList();
 
         int failedCount = targets.size() - libraries.size();
+        // 하나도 못 보여 주는데 원인이 예산 소진이면 '조회 실패'가 아니라 그 이유를 알린다(섹션 SKIPPED, DAILY_LIMIT).
+        // 스냅샷으로 일부라도 보여 줄 수 있으면 지금처럼 failedCount로 돌려준다
+        if (libraries.isEmpty() && failedCount > 0) {
+            budget.throwIfExhausted(ExternalProvider.DATANARU);
+        }
         boolean hasMoreLibraries = to < total;
         Integer nextOffset = hasMoreLibraries ? to : null;
 

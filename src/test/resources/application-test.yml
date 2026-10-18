@@ -58,3 +58,4 @@ resilience4j:
         permitted-calls-in-half-open-state: 1
         ignore-exceptions:
           - com.checkbook.client.datanaru.DatanaruResponseException
+          - com.checkbook.common.ratelimit.DailyBudgetExceededException

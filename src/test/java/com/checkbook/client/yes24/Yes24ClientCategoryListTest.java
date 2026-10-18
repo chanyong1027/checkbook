@@ -3,6 +3,9 @@ package com.checkbook.client.yes24;
 import com.checkbook.client.yes24.Yes24ClientTest.MutableClock;
 import com.checkbook.client.yes24.Yes24Exception.Kind;
 import com.checkbook.client.yes24.dto.Yes24CategoryListResponse.Item;
+import com.checkbook.common.ratelimit.ExternalCallBudget;
+import com.checkbook.common.ratelimit.ExternalProvider;
+import com.checkbook.common.ratelimit.RateLimitProperties;
 import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -18,11 +21,13 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.web.client.RestClient;
 
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -46,6 +51,7 @@ class Yes24ClientCategoryListTest {
     private MockWebServer server;
     private SimpleMeterRegistry meterRegistry;
     private MutableClock clock;
+    private ExternalCallBudget budget = ExternalCallBudget.unlimited();
 
     @BeforeEach
     void setUp() throws Exception {
@@ -305,6 +311,20 @@ class Yes24ClientCategoryListTest {
         assertThat(meterRegistry.get("yes24.remaining.day").gauge().value()).isEqualTo(19990.0);
     }
 
+    // ---- 하루 예산 ----
+
+    @Test
+    void 배치는_예산_차단선을_넘어도_보내고_센다() {
+        budget = yes24Budget(10, 1);
+        budget.acquire(ExternalProvider.YES24);
+        server.enqueue(json(200, listBody()));
+
+        newClient().categoryList(Yes24CategoryList.NEW_ATTENTION, "001", 30);
+
+        assertThat(server.getRequestCount()).isEqualTo(1);
+        assertThat(budget.used(ExternalProvider.YES24)).isEqualTo(2);
+    }
+
     // ---- helpers ----
 
     private Yes24Client newClient() {
@@ -322,7 +342,14 @@ class Yes24ClientCategoryListTest {
                 Duration.ofMillis(200),
                 lookupReadTimeout,
                 Duration.ofSeconds(1));
-        return new Yes24Client(RestClient.builder(), properties, rateLimiter, meterRegistry, clock);
+        return new Yes24Client(RestClient.builder(), properties, rateLimiter, meterRegistry, clock, budget);
+    }
+
+    private static ExternalCallBudget yes24Budget(int dailyLimit, int blockAt) {
+        return new ExternalCallBudget(
+                new RateLimitProperties(true, null,
+                        Map.of(ExternalProvider.YES24, new RateLimitProperties.Provider(dailyLimit, blockAt)), 1000),
+                new SimpleMeterRegistry(), Clock.systemUTC());
     }
 
     private static RateLimiter limiter(int permits, Duration period) {

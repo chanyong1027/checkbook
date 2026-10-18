@@ -6,6 +6,8 @@ import com.checkbook.client.datanaru.dto.DatanaruLibSrchResponse;
 import com.checkbook.client.datanaru.dto.DatanaruLibSrchResult;
 import com.checkbook.client.datanaru.dto.DatanaruLoanBookResult;
 import com.checkbook.client.datanaru.dto.DatanaruLoanItemResponse;
+import com.checkbook.common.ratelimit.ExternalCallBudget;
+import com.checkbook.common.ratelimit.ExternalProvider;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
@@ -25,8 +27,10 @@ public class DatanaruClient {
     private final RestClient listClient;
     private final String authKey;
     private final Counter rateLimitedCounter;
+    private final ExternalCallBudget budget;
 
-    public DatanaruClient(DatanaruProperties properties, MeterRegistry meterRegistry) {
+    public DatanaruClient(DatanaruProperties properties, MeterRegistry meterRegistry, ExternalCallBudget budget) {
+        this.budget = budget;
         this.authKey = properties.authKey();
         this.defaultClient = buildClient(properties.baseUrl(), properties.timeout());
         this.listClient = buildClient(properties.baseUrl(), properties.listTimeout());
@@ -45,7 +49,9 @@ public class DatanaruClient {
                 .build();
     }
 
+    /** 사용자 요청 경로. 하루 예산 차단선이면 보내지 않고 DailyBudgetExceededException(서킷은 실패로 세지 않음). */
     public DatanaruBookExistResult bookExist(String isbn13, String libCode) {
+        budget.acquire(ExternalProvider.DATANARU);
         DatanaruBookExistResponse response;
         try {
             response = defaultClient.get()
@@ -74,7 +80,9 @@ public class DatanaruClient {
         );
     }
 
+    // 도서관 목록·인기 대출 목록은 배치라 예산 차단선을 넘어도 보낸다(세기만)
     public List<DatanaruLibSrchResult> libSrch(int pageNo, int pageSize) {
+        budget.record(ExternalProvider.DATANARU);
         try {
             DatanaruLibSrchResponse response = defaultClient.get()
                     .uri("/libSrch?authKey={key}&pageNo={page}&pageSize={size}&format=json",
@@ -109,6 +117,7 @@ public class DatanaruClient {
     }
 
     public List<DatanaruLoanBookResult> loanItemSrch(int pageSize) {
+        budget.record(ExternalProvider.DATANARU);
         try {
             DatanaruLoanItemResponse response = listClient.get()
                     .uri("/loanItemSrch?authKey={key}&pageNo=1&pageSize={size}&format=json",

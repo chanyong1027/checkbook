@@ -3,6 +3,7 @@ package com.checkbook.client;
 import com.checkbook.client.kakao.KakaoBookClient;
 import com.checkbook.client.kakao.KakaoBookProperties;
 import com.checkbook.client.kakao.dto.KakaoBookResponse;
+import com.checkbook.common.ratelimit.ExternalCallBudget;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterEach;
@@ -39,7 +40,7 @@ class KakaoBookClientTest {
                         """));
         server.start();
         KakaoBookClient client = new KakaoBookClient(
-                new KakaoBookProperties(server.url("/").toString().replaceAll("/$", ""), "test-key", 1000));
+                new KakaoBookProperties(server.url("/").toString().replaceAll("/$", ""), "test-key", 1000), ExternalCallBudget.unlimited());
 
         KakaoBookResponse response = client.searchBooks("혼모노", 1, 10);
 

@@ -3,6 +3,7 @@ package com.checkbook.client;
 import com.checkbook.client.kakao.KakaoBookClient;
 import com.checkbook.client.kakao.KakaoBookProperties;
 import com.checkbook.client.kakao.dto.KakaoBookResponse;
+import com.checkbook.common.ratelimit.ExternalCallBudget;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -25,7 +26,7 @@ class KakaoBookClientSmokeTest {
                 "https://dapi.kakao.com",
                 restApiKey,
                 5000
-        ));
+        ), ExternalCallBudget.unlimited());
 
         KakaoBookResponse response = client.searchBooks("자바", 1, 5);
 

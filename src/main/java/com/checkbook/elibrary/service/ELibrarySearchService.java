@@ -4,6 +4,8 @@ import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
 import com.checkbook.common.matcher.BookMatcher;
 import com.checkbook.common.matcher.BookMetadataNormalizer;
+import com.checkbook.common.ratelimit.DailyBudgetExceededException;
+import com.checkbook.common.ratelimit.ExternalCallBudget;
 import com.checkbook.elibrary.client.ELibClient;
 import com.checkbook.elibrary.client.ELibClientResolver;
 import com.checkbook.elibrary.domain.ELibrary;
@@ -19,10 +21,12 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
@@ -41,6 +45,7 @@ public class ELibrarySearchService {
     private final ExecutorService eLibraryExecutor;
     private final BookMatcher matcher;
     private final BookMetadataNormalizer normalizer;
+    private final ExternalCallBudget budget;
 
     @Value("${elibrary.per-library-timeout:15000}")
     private long perLibraryTimeoutMs = 15_000;
@@ -53,13 +58,15 @@ public class ELibrarySearchService {
             ELibClientResolver eLibClientResolver,
             @Qualifier("eLibraryExecutor") ExecutorService eLibraryExecutor,
             BookMatcher matcher,
-            BookMetadataNormalizer normalizer
+            BookMetadataNormalizer normalizer,
+            ExternalCallBudget budget
     ) {
         this.eLibraryRepository = eLibraryRepository;
         this.eLibClientResolver = eLibClientResolver;
         this.eLibraryExecutor = eLibraryExecutor;
         this.matcher = matcher;
         this.normalizer = normalizer;
+        this.budget = budget;
     }
 
     public ELibrarySearchResponse search(String title, String author, String libraryIds) {
@@ -92,8 +99,15 @@ public class ELibrarySearchService {
         }
 
         Map<Long, ScrapeTask> futureMap = new LinkedHashMap<>();
+        Set<Long> overBudgetIds = new HashSet<>();
         for (Long id : validIds) {
             ELibrary library = foundMap.get(id);
+            try {
+                budget.acquireELibrary(id);
+            } catch (DailyBudgetExceededException e) {
+                overBudgetIds.add(id);
+                continue;
+            }
             long startedAt = System.currentTimeMillis();
             futureMap.put(id, new ScrapeTask(
                     submitSafely(() -> searchBooks(library, selected))
@@ -119,8 +133,13 @@ public class ELibrarySearchService {
         List<ELibrarySearchResponse.ELibraryResult> results = new ArrayList<>();
         for (Long id : validIds) {
             ELibrary library = foundMap.get(id);
-            ScrapeTask scrapeTask = futureMap.get(id);
-            results.add(toResult(library, scrapeTask));
+            if (overBudgetIds.contains(id)) {
+                results.add(new ELibrarySearchResponse.ELibraryResult(
+                        library.getId(), library.getName(), library.getVendorType().name(),
+                        List.of(), ELibrarySearchStatus.DAILY_LIMIT, 0));
+                continue;
+            }
+            results.add(toResult(library, futureMap.get(id)));
         }
 
         long totalElapsed = System.currentTimeMillis() - startAll;

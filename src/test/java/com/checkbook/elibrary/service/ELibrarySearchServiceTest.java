@@ -4,6 +4,8 @@ import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
 import com.checkbook.common.matcher.BookMatcher;
 import com.checkbook.common.matcher.BookMetadataNormalizer;
+import com.checkbook.common.ratelimit.ExternalCallBudget;
+import com.checkbook.common.ratelimit.RateLimitProperties;
 import com.checkbook.elibrary.client.ELibClient;
 import com.checkbook.elibrary.client.ELibClientResolver;
 import com.checkbook.elibrary.domain.ELibrary;
@@ -12,6 +14,7 @@ import com.checkbook.elibrary.domain.VendorType;
 import com.checkbook.elibrary.dto.ELibrarySearchResponse;
 import com.checkbook.elibrary.dto.ELibrarySearchStatus;
 import com.checkbook.elibrary.repository.ELibraryRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -20,13 +23,17 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -42,6 +49,8 @@ class ELibrarySearchServiceTest {
     private ELibClient mockClient;
 
     private ExecutorService eLibraryExecutor;
+    private final ExternalCallBudget budget = new ExternalCallBudget(
+            new RateLimitProperties(true, null, Map.of(), 1), new SimpleMeterRegistry(), Clock.systemUTC());
     private ELibrarySearchService service;
 
     @BeforeEach
@@ -49,12 +58,28 @@ class ELibrarySearchServiceTest {
         eLibraryExecutor = Executors.newFixedThreadPool(5);
         BookMetadataNormalizer normalizer = new BookMetadataNormalizer();
         service = new ELibrarySearchService(eLibraryRepository, clientResolver, eLibraryExecutor,
-                new BookMatcher(normalizer), normalizer);
+                new BookMatcher(normalizer), normalizer, budget);
     }
 
     @AfterEach
     void tearDown() {
         eLibraryExecutor.shutdownNow();
+    }
+
+    @Test
+    void 도서관별_하루_수집_상한에_닿으면_그_도서관만_DAILY_LIMIT이고_수집하지_않는다() {
+        ELibrary first = activeLibrary(1L);
+        ELibrary second = activeLibrary(2L);
+        when(eLibraryRepository.findAllById(List.of(1L, 2L))).thenReturn(List.of(first, second));
+        when(clientResolver.resolve(VendorType.KYOBO)).thenReturn(mockClient);
+        when(mockClient.search(anyString(), anyString())).thenReturn(List.of());
+        budget.acquireELibrary(1L); // 상한 1을 미리 씀
+
+        ELibrarySearchResponse response = service.search("자바의 정석", "남궁성", "1,2");
+
+        assertThat(response.results()).extracting(ELibrarySearchResponse.ELibraryResult::status)
+                .containsExactly(ELibrarySearchStatus.DAILY_LIMIT, ELibrarySearchStatus.SUCCESS);
+        verify(mockClient, times(1)).search(anyString(), anyString());
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.checkbook.client.yes24;
 
+import com.checkbook.common.ratelimit.ExternalCallBudget;
 import io.github.resilience4j.ratelimiter.RateLimiterRegistry;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -21,13 +22,15 @@ public class Yes24ClientConfig {
             RestClient.Builder restClientBuilder,   // Boot 자동 설정 빌더(prototype) — 관측(http.client.requests) 포함
             Yes24Properties properties,
             RateLimiterRegistry rateLimiterRegistry,
-            MeterRegistry meterRegistry
+            MeterRegistry meterRegistry,
+            ExternalCallBudget budget
     ) {
         return new Yes24Client(
                 restClientBuilder,
                 properties,
                 rateLimiterRegistry.rateLimiter(RATE_LIMITER_NAME),
                 meterRegistry,
-                Clock.systemUTC());
+                Clock.systemUTC(),
+                budget);
     }
 }
