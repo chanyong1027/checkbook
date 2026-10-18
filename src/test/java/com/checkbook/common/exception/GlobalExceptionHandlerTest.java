@@ -1,5 +1,7 @@
 package com.checkbook.common.exception;
 
+import com.checkbook.common.ratelimit.DailyBudgetExceededException;
+import com.checkbook.common.ratelimit.ExternalProvider;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,7 +13,10 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Duration;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -43,6 +48,11 @@ class GlobalExceptionHandlerTest {
         void err() {
             throw new RuntimeException("oops");
         }
+
+        @GetMapping("/test/budget")
+        void budget() {
+            throw new DailyBudgetExceededException(ExternalProvider.KAKAO, Duration.ofSeconds(120));
+        }
     }
 
     @Test
@@ -58,6 +68,14 @@ class GlobalExceptionHandlerTest {
         mockMvc.perform(get("/test/search"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_SEARCH_KEYWORD"));
+    }
+
+    @Test
+    void 공급자_예산_소진은_503과_Retry_After() throws Exception {
+        mockMvc.perform(get("/test/budget"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(header().string("Retry-After", "120"))
+                .andExpect(jsonPath("$.code").value("PROVIDER_DAILY_LIMIT"));
     }
 
     @Test
