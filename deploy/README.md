@@ -162,8 +162,12 @@ journald로 보내서 칸 컨테이너를 지워도 로그가 남는다. 보관�
 
 Nginx가 되돌리기까지 실패하면(`deploy.sh` 로그에 `모두 살려 둡니다`) 어느 칸도 지우지 않고 손으로 할 일을 출력한다. 그 순서대로 되돌린 뒤 `repair`한다.
 
-## 요청 제한 dry run 끄기
-`checkbook.conf`의 `limit_req_dry_run on;`은 사이트를 알리기 전에 끈다. 사용자가 없을 때는 "실제 사용자가 걸리는지" 관찰할 수 없으므로 숫자로 판단한다: 사람이 책 한 권을 볼 때는 짧은 시간에 3~4회 요청이라 `/api/` 5r/s(burst 20)에 걸리지 않는다. `/var/log/nginx/error.log`의 `limiting requests, dry run`에 사람으로 보이는 패턴(같은 IP가 몇 초 간격으로 여러 책을 보는 등)이 없으면 `off`로 바꾸고 `sudo nginx -t && sudo systemctl reload nginx`. 하루 총량과 공급자 예산은 앱 안 요청 제한(`application.yaml`의 `rate-limit`)이 이미 지키고 있다.
+## 요청 제한 dry run
+`checkbook.conf`의 `limit_req_dry_run`은 10-18에 `off`로 바꿨다(실제로 막는다). 근거: 사용자가 없을 때는 "실제 사용자가 걸리는지" 관찰할 수 없어 숫자로 판단했다. 사람이 책 한 권을 볼 때는 짧은 시간에 3~4회 요청이라 `/api/` 5r/s(burst 20)에 걸리지 않고, 10-18 access.log 바깥 요청(거의 전부 스캐너)에서도 `/api/`를 IP·초당 5회 넘게 보낸 경우가 0건이었다. 하루 총량과 공급자 예산은 앱 안 요청 제한(`application.yaml`의 `rate-limit`)이 지킨다.
+
+- 막힌 요청은 `/var/log/nginx/error.log`에 `limiting requests, excess: ... by zone "..."`(error 레벨)로, access.log에는 429로 남는다.
+- 사람이 막힌다면 dry run을 다시 켜지 말고 한도 숫자를 늘린다(dry run을 켜면 스캐너·폭주도 전부 통과한다). 한도를 더 빡빡하게 바꿀 때만 그 규칙에 잠시 `on`으로 관찰한다.
+- 사이트 설정 반영: `sudo git -C /opt/checkbook/app pull --ff-only` → `sudo cp /opt/checkbook/app/deploy/nginx/checkbook.conf /etc/nginx/sites-available/checkbook` → `sudo nginx -t && sudo systemctl reload nginx`(`/opt/checkbook`은 root 700이라 `cd` 없이 전체 경로로).
 
 ## 백업 복원
 앱 칸을 먼저 멈춘다(연결이 남아 있으면 `--clean`이 잠금을 기다리거나 일부만 복원된다). 서비스가 잠깐 멈춘다.
