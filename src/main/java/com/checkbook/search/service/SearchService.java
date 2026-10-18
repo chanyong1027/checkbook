@@ -3,13 +3,14 @@ package com.checkbook.search.service;
 import com.checkbook.common.concurrent.AsyncSubmit;
 import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
+import com.checkbook.common.ratelimit.DailyBudgetExceededException;
 import com.checkbook.common.util.InputNormalizer;
 import com.checkbook.publiclibrary.dto.PublicLibraryAvailabilityPage;
 import com.checkbook.publiclibrary.dto.PublicLibraryInfo;
 import com.checkbook.publiclibrary.service.PublicLibraryAvailabilityService;
 import com.checkbook.search.dto.BookHint;
-import com.checkbook.search.dto.IdentificationResult;
 import com.checkbook.search.dto.IdentificationResult.Source;
+import com.checkbook.search.dto.IdentificationResult;
 import com.checkbook.search.dto.IdentifiedBook;
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.SearchResponse;
@@ -215,6 +216,10 @@ public class SearchService {
                 case SUCCESS -> success(future.resultNow(), null);
                 case FAILED -> {
                     Throwable cause = unwrap(future.exceptionNow());
+                    if (cause instanceof DailyBudgetExceededException) {
+                        // 하루 예산 소진으로 호출하지 않았다 — 장애가 아니므로 failures에 넣지 않는다(YES24 일일 중단과 같은 의미)
+                        yield skipped(SearchSectionReason.DAILY_LIMIT);
+                    }
                     yield isTimeout(cause)
                             ? failed(SearchSectionReason.TIMEOUT, TIMEOUT_MESSAGE)
                             : failed(SearchSectionReason.UNAVAILABLE, failureMessage(cause));

@@ -4,6 +4,8 @@ import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
 import com.checkbook.common.matcher.BookMatcher;
 import com.checkbook.common.matcher.BookMetadataNormalizer;
+import com.checkbook.common.ratelimit.DailyBudgetExceededException;
+import com.checkbook.common.ratelimit.ExternalCallBudget;
 import com.checkbook.elibrary.client.ELibClient;
 import com.checkbook.elibrary.client.ELibClientResolver;
 import com.checkbook.elibrary.domain.ELibrary;
@@ -41,6 +43,7 @@ public class ELibrarySearchService {
     private final ExecutorService eLibraryExecutor;
     private final BookMatcher matcher;
     private final BookMetadataNormalizer normalizer;
+    private final ExternalCallBudget budget;
 
     @Value("${elibrary.per-library-timeout:15000}")
     private long perLibraryTimeoutMs = 15_000;
@@ -53,13 +56,15 @@ public class ELibrarySearchService {
             ELibClientResolver eLibClientResolver,
             @Qualifier("eLibraryExecutor") ExecutorService eLibraryExecutor,
             BookMatcher matcher,
-            BookMetadataNormalizer normalizer
+            BookMetadataNormalizer normalizer,
+            ExternalCallBudget budget
     ) {
         this.eLibraryRepository = eLibraryRepository;
         this.eLibClientResolver = eLibClientResolver;
         this.eLibraryExecutor = eLibraryExecutor;
         this.matcher = matcher;
         this.normalizer = normalizer;
+        this.budget = budget;
     }
 
     public ELibrarySearchResponse search(String title, String author, String libraryIds) {
@@ -96,7 +101,12 @@ public class ELibrarySearchService {
             ELibrary library = foundMap.get(id);
             long startedAt = System.currentTimeMillis();
             futureMap.put(id, new ScrapeTask(
-                    submitSafely(() -> searchBooks(library, selected))
+                    // 예산은 작업이 실제로 돌 때 차감한다 — 제출 전에 깎으면 풀 포화로 거절돼 수집을 안 했는데도
+                    // 하루 예산이 줄어 자정까지 막힐 수 있다. 소진이면 toResult가 DAILY_LIMIT으로 바꾼다
+                    submitSafely(() -> {
+                        budget.acquireELibrary(library.getId());
+                        return searchBooks(library, selected);
+                    })
                             .orTimeout(perLibraryTimeoutMs, TimeUnit.MILLISECONDS),
                     startedAt
             ));
@@ -119,8 +129,7 @@ public class ELibrarySearchService {
         List<ELibrarySearchResponse.ELibraryResult> results = new ArrayList<>();
         for (Long id : validIds) {
             ELibrary library = foundMap.get(id);
-            ScrapeTask scrapeTask = futureMap.get(id);
-            results.add(toResult(library, scrapeTask));
+            results.add(toResult(library, futureMap.get(id)));
         }
 
         long totalElapsed = System.currentTimeMillis() - startAll;
@@ -233,6 +242,11 @@ public class ELibrarySearchService {
             );
         } catch (CompletionException exception) {
             Throwable cause = exception.getCause();
+            if (cause instanceof DailyBudgetExceededException) {
+                return new ELibrarySearchResponse.ELibraryResult(
+                        library.getId(), library.getName(), library.getVendorType().name(),
+                        List.of(), ELibrarySearchStatus.DAILY_LIMIT, 0);
+            }
             if (cause instanceof TimeoutException) {
                 long elapsedMs = Math.max(1L, System.currentTimeMillis() - scrapeTask.startedAt());
                 return timedOutResult(library, elapsedMs);

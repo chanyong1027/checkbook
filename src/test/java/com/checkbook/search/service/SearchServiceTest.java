@@ -3,17 +3,19 @@ package com.checkbook.search.service;
 import com.checkbook.client.millie.MillieClientException;
 import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
+import com.checkbook.common.ratelimit.DailyBudgetExceededException;
+import com.checkbook.common.ratelimit.ExternalProvider;
 import com.checkbook.publiclibrary.dto.PublicLibraryAvailabilityPage;
 import com.checkbook.publiclibrary.dto.PublicLibraryInfo;
 import com.checkbook.publiclibrary.service.PublicLibraryAvailabilityService;
 import com.checkbook.search.dto.BookHint;
-import com.checkbook.search.dto.IdentificationResult;
 import com.checkbook.search.dto.IdentificationResult.Source;
 import com.checkbook.search.dto.IdentificationResult.Yes24Status;
+import com.checkbook.search.dto.IdentificationResult;
 import com.checkbook.search.dto.IdentifiedBook;
 import com.checkbook.search.dto.MillieAvailability;
-import com.checkbook.search.dto.SearchResponse;
 import com.checkbook.search.dto.SearchResponse.SectionStatusDetail;
+import com.checkbook.search.dto.SearchResponse;
 import com.checkbook.search.dto.SearchSection;
 import com.checkbook.search.dto.SearchSectionReason;
 import com.checkbook.search.dto.SearchSectionStatus;
@@ -31,6 +33,7 @@ import org.mockito.quality.Strictness;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.net.SocketTimeoutException;
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -285,6 +288,30 @@ class SearchServiceTest {
 
         assertStatus(r, SearchSection.SUBSCRIPTION, SearchSectionStatus.SUCCESS, null);
         assertThat(r.subscription().millie().available()).isFalse();
+    }
+
+    @Test
+    void 밀리_예산_소진은_SKIPPED_DAILY_LIMIT이고_failures에_없다() {
+        when(identificationService.identify(ISBN, null)).thenReturn(found(13500, YES24_URL));
+        when(millieBookService.findAvailability(any(), any()))
+                .thenThrow(new DailyBudgetExceededException(ExternalProvider.MILLIE, Duration.ofHours(1)));
+
+        SearchResponse r = assertConsistent(searchService.search(ISBN, null, null, null));
+
+        assertStatus(r, SearchSection.SUBSCRIPTION, SearchSectionStatus.SKIPPED, SearchSectionReason.DAILY_LIMIT);
+        assertThat(r.metadata().failures()).isEmpty();
+    }
+
+    @Test
+    void 도서관_예산_소진은_SKIPPED_DAILY_LIMIT() {
+        when(identificationService.identify(ISBN, null)).thenReturn(found(13500, YES24_URL));
+        when(publicLibraryAvailabilityService.fetch(ISBN, LAT, LON, 0))
+                .thenThrow(new DailyBudgetExceededException(ExternalProvider.DATANARU, Duration.ofHours(1)));
+
+        SearchResponse r = assertConsistent(searchService.search(ISBN, LAT, LON, null));
+
+        assertStatus(r, SearchSection.PUBLIC_LIBRARY, SearchSectionStatus.SKIPPED, SearchSectionReason.DAILY_LIMIT);
+        assertThat(r.publicLibraries()).isEmpty();
     }
 
     @Test

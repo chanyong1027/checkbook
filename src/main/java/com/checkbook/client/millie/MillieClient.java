@@ -2,6 +2,8 @@ package com.checkbook.client.millie;
 
 import com.checkbook.client.millie.dto.MillieBookItem;
 import com.checkbook.client.millie.dto.MillieSearchResponse;
+import com.checkbook.common.ratelimit.ExternalCallBudget;
+import com.checkbook.common.ratelimit.ExternalProvider;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -20,11 +22,14 @@ public class MillieClient {
             "CheckBook/1.0 (+https://github.com/chanyong1027/checkbook)";
 
     private final RestClient restClient;
+    private final ExternalCallBudget budget;
 
     public MillieClient(
             @Value("${millie.base-url:https://live-api.millie.co.kr}") String baseUrl,
-            @Value("${millie.timeout:2000}") int timeout
+            @Value("${millie.timeout:2000}") int timeout,
+            ExternalCallBudget budget
     ) {
+        this.budget = budget;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(timeout);
         factory.setReadTimeout(timeout);
@@ -45,6 +50,8 @@ public class MillieClient {
      */
     public List<MillieBookItem> searchByTitle(String title) {
         if (title == null || title.isBlank()) return List.of();
+        // 예산 소진은 MillieClientException(장애)과 구분해 그대로 던진다 — 섹션은 SKIPPED(DAILY_LIMIT)
+        budget.acquire(ExternalProvider.MILLIE);
 
         MillieSearchResponse response;
         try {

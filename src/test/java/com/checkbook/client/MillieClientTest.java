@@ -3,6 +3,7 @@ package com.checkbook.client;
 import com.checkbook.client.millie.MillieClient;
 import com.checkbook.client.millie.MillieClientException;
 import com.checkbook.client.millie.dto.MillieBookItem;
+import com.checkbook.common.ratelimit.ExternalCallBudget;
 import okhttp3.HttpUrl;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
@@ -34,11 +35,11 @@ class MillieClientTest {
     }
 
     private MillieClient newClient() {
-        return new MillieClient(baseUrl(), 2000);
+        return new MillieClient(baseUrl(), 2000, ExternalCallBudget.unlimited());
     }
 
     private MillieClient newClientWithTimeout(int timeoutMs) {
-        return new MillieClient(baseUrl(), timeoutMs);
+        return new MillieClient(baseUrl(), timeoutMs, ExternalCallBudget.unlimited());
     }
 
     @Test

@@ -1,11 +1,12 @@
 package com.checkbook.search.service;
 
-import com.checkbook.search.dto.IdentificationResult;
-import com.checkbook.search.dto.IdentifiedBook;
+import com.checkbook.common.ratelimit.ExternalCallBudget;
+import com.checkbook.publiclibrary.domain.PublicLibrary;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
 import com.checkbook.publiclibrary.service.PublicLibraryAvailabilityService;
 import com.checkbook.publiclibrary.snapshot.service.LibraryAvailabilitySnapshotService;
-import com.checkbook.publiclibrary.domain.PublicLibrary;
+import com.checkbook.search.dto.IdentificationResult;
+import com.checkbook.search.dto.IdentifiedBook;
 import com.checkbook.search.dto.SearchResponse;
 import com.checkbook.search.dto.SearchSection;
 import com.checkbook.search.dto.SearchSectionStatus;
@@ -20,8 +21,6 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -29,6 +28,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -82,7 +83,7 @@ class PoolRejectionFallbackTest {
             saturated.execute(() -> { });
 
             PublicLibraryAvailabilityService availabilityService = new PublicLibraryAvailabilityService(
-                    snapshotService, publicLibraryRepository, saturated);
+                    snapshotService, publicLibraryRepository, saturated, ExternalCallBudget.unlimited());
             ReflectionTestUtils.setField(availabilityService, "pageSize", 20);
             ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
             ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
@@ -143,7 +144,7 @@ class PoolRejectionFallbackTest {
             });
 
             PublicLibraryAvailabilityService availabilityService = new PublicLibraryAvailabilityService(
-                    snapshotService, publicLibraryRepository, saturatedChildren);
+                    snapshotService, publicLibraryRepository, saturatedChildren, ExternalCallBudget.unlimited());
             ReflectionTestUtils.setField(availabilityService, "pageSize", 20);
             ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
             ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);

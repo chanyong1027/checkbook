@@ -1,13 +1,14 @@
 package com.checkbook.search.service;
 
-import com.checkbook.search.dto.IdentificationResult;
-import com.checkbook.search.dto.IdentifiedBook;
+import com.checkbook.common.ratelimit.ExternalCallBudget;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
 import com.checkbook.publiclibrary.service.PublicLibraryAvailabilityService;
 import com.checkbook.publiclibrary.snapshot.domain.SnapshotSourceStatus;
 import com.checkbook.publiclibrary.snapshot.dto.LibraryAvailabilityResult;
 import com.checkbook.publiclibrary.snapshot.service.LibraryAvailabilitySnapshotService;
+import com.checkbook.search.dto.IdentificationResult;
+import com.checkbook.search.dto.IdentifiedBook;
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.SearchResponse;
 import org.junit.jupiter.api.Tag;
@@ -64,7 +65,7 @@ class SharedPoolStarvationTest {
         ExecutorService sharedPool = Executors.newFixedThreadPool(1);
         try {
             PublicLibraryAvailabilityService availabilityService = new PublicLibraryAvailabilityService(
-                    snapshotService, publicLibraryRepository, sharedPool);
+                    snapshotService, publicLibraryRepository, sharedPool, ExternalCallBudget.unlimited());
             ReflectionTestUtils.setField(availabilityService, "pageSize", 20);
             ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
             ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
@@ -91,7 +92,7 @@ class SharedPoolStarvationTest {
         ExecutorService libraryPool = Executors.newFixedThreadPool(20);
         try {
             PublicLibraryAvailabilityService availabilityService = new PublicLibraryAvailabilityService(
-                    snapshotService, publicLibraryRepository, libraryPool);
+                    snapshotService, publicLibraryRepository, libraryPool, ExternalCallBudget.unlimited());
             ReflectionTestUtils.setField(availabilityService, "pageSize", 20);
             ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
             ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);

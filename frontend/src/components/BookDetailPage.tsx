@@ -55,12 +55,15 @@ const elibStatusColor: Record<string, string> = {
   SUCCESS: 'text-emerald-600',
   FAILED: 'text-red-500',
   TIMEOUT: 'text-orange-500',
+  DAILY_LIMIT: 'text-slate-500',
 }
 
 const elibStatusLabel: Record<string, string> = {
   SUCCESS: '완료',
   FAILED: '실패',
   TIMEOUT: '타임아웃',
+  // 이 도서관 사이트의 하루 조회 상한(작은 사이트 보호) — 자정에 풀린다
+  DAILY_LIMIT: '오늘 조회 마감',
 }
 
 /** 공유 링크 첫 진입 때 카카오 후보 조회를 기다리는 최대 시간. 넘기면 힌트 없이 통합 검색을 시작한다 */
@@ -678,6 +681,21 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                   표준 ISBN이 없는 상품이라 도서관 소장 여부를 확인할 수 없어요
                 </p>
               </SectionCard>
+            ) : libSectionStatus === 'SKIPPED' && libSection?.reason === 'DAILY_LIMIT' ? (
+              // 정보나루 하루 호출 예산 소진 — 위치 CTA로 보이면 안 된다(위치는 이미 있음)
+              <SectionCard
+                icon={
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                    <polyline points="9 22 9 12 15 12 15 22" />
+                  </svg>
+                }
+                title="공공도서관"
+              >
+                <p className="text-sm text-slate-600 text-center py-2">
+                  오늘은 조회가 많아 도서관 소장 여부를 확인할 수 없어요. 내일 다시 시도해주세요
+                </p>
+              </SectionCard>
             ) : libSectionStatus === 'SKIPPED' ? (
               // Location not granted (NO_LOCATION) — show CTA card
               <SectionCard
@@ -800,6 +818,16 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                   <SectionCard icon={sectionIcon} title="구독 서비스">
                     <p className="text-sm text-slate-600 text-center py-2">
                       책 정보를 확인하지 못해 구독 여부를 확인할 수 없어요
+                    </p>
+                  </SectionCard>
+                )
+              }
+
+              if (subscriptionStatus === 'SKIPPED' && subscriptionReason === 'DAILY_LIMIT') {
+                return (
+                  <SectionCard icon={sectionIcon} title="구독 서비스">
+                    <p className="text-sm text-slate-600 text-center py-2">
+                      오늘은 조회가 많아 구독 여부를 확인할 수 없어요. 내일 다시 시도해주세요
                     </p>
                   </SectionCard>
                 )

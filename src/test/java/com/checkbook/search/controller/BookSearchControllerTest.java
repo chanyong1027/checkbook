@@ -1,6 +1,8 @@
 package com.checkbook.search.controller;
 
 import com.checkbook.common.exception.GlobalExceptionHandler;
+import com.checkbook.common.ratelimit.DailyBudgetExceededException;
+import com.checkbook.common.ratelimit.ExternalProvider;
 import com.checkbook.search.dto.BookCandidateResponse;
 import com.checkbook.search.service.BookSearchService;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,10 +14,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import java.time.Duration;
 import java.util.List;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -35,6 +39,17 @@ class BookSearchControllerTest {
         mockMvc = MockMvcBuilders.standaloneSetup(bookSearchController)
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    void 카카오_예산_소진이면_503과_안내_문구() throws Exception {
+        when(bookSearchService.searchCandidates("혼모노", 1, 10))
+                .thenThrow(new DailyBudgetExceededException(ExternalProvider.KAKAO, Duration.ofSeconds(60)));
+
+        mockMvc.perform(get("/api/books/search").param("q", "혼모노"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(header().string("Retry-After", "60"))
+                .andExpect(jsonPath("$.code").value("PROVIDER_DAILY_LIMIT"));
     }
 
     @Test

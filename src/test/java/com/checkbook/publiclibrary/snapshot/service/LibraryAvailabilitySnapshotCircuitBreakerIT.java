@@ -1,10 +1,13 @@
 package com.checkbook.publiclibrary.snapshot.service;
 
 import com.checkbook.client.datanaru.DatanaruClient;
+import com.checkbook.common.ratelimit.DailyBudgetExceededException;
+import com.checkbook.common.ratelimit.ExternalProvider;
 import com.checkbook.publiclibrary.snapshot.domain.LibraryAvailabilitySnapshot;
 import com.checkbook.publiclibrary.snapshot.domain.SnapshotSourceStatus;
 import com.checkbook.publiclibrary.snapshot.dto.LibraryAvailabilityResult;
 import com.checkbook.publiclibrary.snapshot.repository.LibraryAvailabilitySnapshotRepository;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +17,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
@@ -70,5 +74,21 @@ class LibraryAvailabilitySnapshotCircuitBreakerIT {
 
         assertThat(result.sourceStatus())
                 .isIn(SnapshotSourceStatus.STALE, SnapshotSourceStatus.FAILED);
+    }
+
+    @Test
+    void 예산_소진은_서킷을_열지_않고_stale로_대체한다() {
+        when(datanaruClient.bookExist("9781234567890", "LIB001"))
+                .thenThrow(new DailyBudgetExceededException(ExternalProvider.DATANARU, Duration.ofHours(1)));
+
+        LibraryAvailabilityResult result = null;
+        for (int i = 0; i < 5; i++) {
+            result = snapshotService.getAvailability("9781234567890", "LIB001");
+        }
+
+        // 호출을 안 한 것이라 정보나루 장애가 아니다 — 실패로 세지 않아 서킷이 닫혀 있어야 한다
+        assertThat(circuitBreakerRegistry.circuitBreaker("datanaru").getState())
+                .isEqualTo(CircuitBreaker.State.CLOSED);
+        assertThat(result.sourceStatus()).isEqualTo(SnapshotSourceStatus.STALE);
     }
 }

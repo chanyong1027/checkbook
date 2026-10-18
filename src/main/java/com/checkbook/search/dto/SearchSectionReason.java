@@ -19,7 +19,10 @@ public enum SearchSectionReason {
     TIMEOUT,
     /** YES24 초당 한도 — 우리 쪽 선제한이면 SKIPPED, YES24 429면 FAILED */
     RATE_LIMITED,
-    /** YES24 일일 한도 — 중단 중이면 SKIPPED, YES24 429면 FAILED */
+    /**
+     * 하루 한도. YES24: 중단 중이거나 우리 예산 차단선이면 SKIPPED, YES24 429면 FAILED.
+     * 정보나루(도서관)·밀리(구독): 우리 하루 예산 차단선이라 호출하지 않음(SKIPPED, 요청 제한 결정 2026-10-18)
+     */
     DAILY_LIMIT,
     /** 외부 호출 오류·응답 검증 실패 또는 executor 거절(풀 포화) (FAILED). 원인은 failures[].reason */
     UNAVAILABLE

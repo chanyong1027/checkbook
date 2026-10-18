@@ -18,6 +18,11 @@ yes24:
   api-key: loadtest
   base-url: http://wiremock:8080
 
+# 요청 제한을 끈다 — k6는 IP 하나로 보내서 IP별 하루 한도(500)에 바로 걸리고, 긴 측정은 공급자 예산(스텁 호출 수)도 넘긴다.
+# 세기·게이지는 그대로 동작한다
+rate-limit:
+  enabled: false
+
 logging:
   level:
     com.checkbook.client: INFO
