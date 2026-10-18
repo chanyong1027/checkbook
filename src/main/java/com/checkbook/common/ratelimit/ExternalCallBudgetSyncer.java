@@ -4,19 +4,26 @@ import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.dao.DataAccessException;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 공급자 하루 예산을 DB와 맞춘다(리뷰 F2: 재시작·블루그린 전환에 카운터가 0이 되던 문제).
  * 기동 직후 오늘 합계를 읽고, 10초마다 증가분을 더한 뒤 합계를 다시 읽고, 종료 때 한 번 더 쓴다.
+ * 주기 실행은 @Scheduled(공용 스케줄러 스레드 1개)가 아니라 자체 스레드로 한다 — 월·목 04시 추천 배치가 그 스레드를
+ * 쥔 동안(최악 약 2분) 동기화가 멈추지 않게. 실행기는 빈으로 등록하지 않는다: TaskScheduler·ScheduledExecutorService
+ * 빈이 생기면 Boot 기본 스케줄러가 물러나 추천 배치·스냅샷 정리까지 그 스레드로 몰린다.
  * DB가 응답하지 않으면 증가분을 보관해 다음에 함께 더한다(결정 카드 B1) — 그동안 요청 처리는 메모리 카운터로 계속된다.
  */
 @Slf4j
@@ -26,11 +33,21 @@ public class ExternalCallBudgetSyncer {
     private final ExternalCallBudget budget;
     private final ExternalCallBudgetStore store;
     private final Counter failureCounter;
+    private final long intervalMs;
+    // 기동 스레드(ApplicationReady)가 쓰고 종료 스레드(@PreDestroy)가 읽는다
+    private volatile ScheduledExecutorService executor;
     private boolean failing;
     // 종료 flush를 건너뛸지는 쓰기 실패로만 판단한다(읽기만 실패했으면 쓰기는 되는 상태)
     private boolean writeFailing;
 
     public ExternalCallBudgetSyncer(ExternalCallBudget budget, ExternalCallBudgetStore store, MeterRegistry meterRegistry) {
+        this(budget, store, meterRegistry, 10_000);
+    }
+
+    @Autowired
+    public ExternalCallBudgetSyncer(ExternalCallBudget budget, ExternalCallBudgetStore store, MeterRegistry meterRegistry,
+                                    @Value("${rate-limit.sync-interval-ms:10000}") long intervalMs) {
+        this.intervalMs = intervalMs;
         this.budget = budget;
         this.store = store;
         this.failureCounter = Counter.builder("external.budget.sync.failures")
@@ -39,19 +56,39 @@ public class ExternalCallBudgetSyncer {
     }
 
     @EventListener(ApplicationReadyEvent.class)
-    public void loadOnStartup() {
+    public void start() {
         sync();
+        if (!budget.isEnabled()) {
+            return;
+        }
+        executor = Executors.newSingleThreadScheduledExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "budget-sync");
+            thread.setDaemon(true);
+            return thread;
+        });
+        executor.scheduleWithFixedDelay(this::syncSafely, intervalMs, intervalMs, TimeUnit.MILLISECONDS);
     }
 
-    @Scheduled(fixedDelayString = "${rate-limit.sync-interval-ms:10000}", initialDelayString = "${rate-limit.sync-interval-ms:10000}")
-    public void scheduledSync() {
-        sync();
+    // ScheduledExecutorService는 작업이 예외를 던지면 그 뒤 실행을 조용히 멈춘다 — 무엇이 나든 다음 주기는 돌게 한다
+    private void syncSafely() {
+        try {
+            sync();
+        } catch (RuntimeException e) {
+            log.error("공급자 예산 동기화 중 예상 못 한 오류", e);
+        }
     }
 
     // 직전 동기화의 쓰기가 실패한 상태(DB가 죽어 있음)면 종료 때 다시 연결을 기다리지 않는다 — 기다리면 docker stop
     // 시간을 넘긴다. 이때 남은 증가분은 잃는다(결정 문서의 알려진 한계)
     @PreDestroy
-    public synchronized void flushOnShutdown() {
+    public void flushOnShutdown() {
+        if (executor != null) {
+            executor.shutdown(); // 새 주기는 막고, 돌고 있는 한 번은 아래 synchronized flush가 기다린다
+        }
+        flush();
+    }
+
+    private synchronized void flush() {
         if (writeFailing) {
             log.warn("공급자 예산 DB 동기화가 실패 중이라 종료 때 쓰지 않음 — 이번 칸의 미반영 증가분은 잃는다");
             return;
