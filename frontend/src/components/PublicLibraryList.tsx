@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { getPublicLibraryAvailability } from '../api'
 import { ApiError } from '../api/errors.ts'
-
 import { isSafeUrl } from '../utils/url'
 import type { PublicLibraryInfo } from '../types'
 
