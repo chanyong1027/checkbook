@@ -15,8 +15,9 @@
 | `server/checkbook-deploy` | `/usr/local/sbin/checkbook-deploy` (root 755, **손으로 설치**) | 배포 래퍼. 입력 검사, main 조상·하한선·순서 검사, 장부, 프런트 릴리스 |
 | `compose.yaml`, `deploy.sh`, `backup.sh` | `/opt/checkbook/releases/<커밋>/deploy/` | 이미지 라벨 커밋의 것을 래퍼가 꺼내 쓴다 |
 | `STATE_FORMAT_VERSION` | (커밋 안) | 되돌리기 하한선용 호환성 버전(정수) |
-| `nginx/checkbook.conf` | `/etc/nginx/sites-available/checkbook` | 사이트 설정(손으로 적용) |
-| `nginx/cloudflare-realip.conf`, `security-headers.conf`, `proxy-app.conf` | `/etc/nginx/checkbook/` | 사이트 설정이 include(손으로 적용) |
+| `nginx/checkbook.conf` | `/etc/nginx/sites-available/checkbook` | 사이트 설정(`apply-nginx.sh`로 손으로 반영) |
+| `nginx/cloudflare-realip.conf`, `security-headers.conf`, `proxy-app.conf` | `/etc/nginx/checkbook/` | 사이트 설정이 include(`apply-nginx.sh`로 손으로 반영) |
+| `apply-nginx.sh` | (저장소 `/opt/checkbook/app/deploy/`에서 실행) | 위 Nginx 파일 반영: 비교·백업·검사·되돌리기·reload |
 | (deploy.sh가 씀) | `/etc/nginx/checkbook/upstream.conf` | 지금 서비스 중인 칸 |
 | (deploy.sh가 씀) | `/opt/checkbook/deploy-state.env` | 칸별 이미지 기록 |
 | (래퍼가 씀) | `/opt/checkbook/current` → `releases/<커밋>` | 서비스 중인 백엔드 커밋의 배포 파일(백업 cron이 여기를 부른다) |
@@ -162,8 +163,22 @@ journald로 보내서 칸 컨테이너를 지워도 로그가 남는다. 보관�
 
 Nginx가 되돌리기까지 실패하면(`deploy.sh` 로그에 `모두 살려 둡니다`) 어느 칸도 지우지 않고 손으로 할 일을 출력한다. 그 순서대로 되돌린 뒤 `repair`한다.
 
-## 요청 제한 dry run 끄기
-`checkbook.conf`의 `limit_req_dry_run on;`은 사이트를 알리기 전에 끈다. 사용자가 없을 때는 "실제 사용자가 걸리는지" 관찰할 수 없으므로 숫자로 판단한다: 사람이 책 한 권을 볼 때는 짧은 시간에 3~4회 요청이라 `/api/` 5r/s(burst 20)에 걸리지 않는다. `/var/log/nginx/error.log`의 `limiting requests, dry run`에 사람으로 보이는 패턴(같은 IP가 몇 초 간격으로 여러 책을 보는 등)이 없으면 `off`로 바꾸고 `sudo nginx -t && sudo systemctl reload nginx`. 하루 총량과 공급자 예산은 앱 안 요청 제한(`application.yaml`의 `rate-limit`)이 이미 지키고 있다.
+## Nginx 설정 반영
+`deploy/nginx/`의 파일은 자동 배포가 반영하지 않는다(배포 키에 Nginx 설정 쓰기 권한을 주지 않고, 설정은 하나라 잘못 들어가면 사이트 전체가 멈춘다). 바뀌면 서버에서 직접 한 줄로 반영한다.
+
+```bash
+sudo bash /opt/checkbook/app/deploy/apply-nginx.sh --diff   # 바뀔 내용만 보기(아무것도 안 바꿈)
+sudo bash /opt/checkbook/app/deploy/apply-nginx.sh          # 반영
+```
+
+저장소 갱신(`git pull --ff-only`) → 서버 파일과 비교(같으면 끝) → 배포 잠금(`/run/checkbook/deploy.lock`, 배포가 Nginx를 전환하는 중이면 최대 120초 기다림) → `/var/backups/checkbook-nginx/<시각>/`에 백업(최근 10개) → 복사 → `nginx -t`(실패하면 되돌리고 reload하지 않음) → reload. `upstream.conf`는 `deploy.sh`가 관리하므로 건드리지 않는다. 처음 한 번은 스크립트가 서버 저장소에 없으므로 `sudo git -C /opt/checkbook/app pull --ff-only`를 먼저 한다.
+
+## 요청 제한 dry run
+`checkbook.conf`의 `limit_req_dry_run`은 10-18에 `off`로 바꿨다(실제로 막는다). 근거: 사용자가 없을 때는 "실제 사용자가 걸리는지" 관찰할 수 없어 숫자로 판단했다. 사람이 책 한 권을 볼 때는 짧은 시간에 3~4회 요청이라 `/api/` 5r/s(burst 20)에 걸리지 않고, 10-18 access.log 바깥 요청(거의 전부 스캐너)에서도 `/api/`를 IP·초당 5회 넘게 보낸 경우가 0건이었다. 하루 총량과 공급자 예산은 앱 안 요청 제한(`application.yaml`의 `rate-limit`)이 지킨다.
+
+- 막힌 요청은 `/var/log/nginx/error.log`에 `limiting requests, excess: ... by zone "..."`(error 레벨)로, access.log에는 429로 남는다.
+- 사람이 막힌다면 dry run을 다시 켜지 말고 한도 숫자를 늘린다(dry run을 켜면 스캐너·폭주도 전부 통과한다). 한도를 더 빡빡하게 바꿀 때만 그 규칙에 잠시 `on`으로 관찰한다.
+- 사이트 설정 반영은 아래 'Nginx 설정 반영' 절의 스크립트로 한다.
 
 ## 백업 복원
 앱 칸을 먼저 멈춘다(연결이 남아 있으면 `--clean`이 잠금을 기다리거나 일부만 복원된다). 서비스가 잠깐 멈춘다.
