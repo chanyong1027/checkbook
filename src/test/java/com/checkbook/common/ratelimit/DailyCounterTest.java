@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.concurrent.CountDownLatch;
@@ -188,6 +189,20 @@ class DailyCounterTest {
 
         assertThat(counter.used("k")).isEqualTo(1);
         assertThat(counter.tryAcquire("k", 1)).isFalse();
+    }
+
+    @Test
+    void tryAcquireOn과_incrementOn은_올린_카운터의_날짜를_돌려준다() {
+        // 증가분에 붙일 날짜를 올리기와 같은 Day에서 정한다(CodeRabbit: 올린 뒤 따로 읽으면 자정에 다른 날짜가 붙음)
+        DailyCounter counter = new DailyCounter(clock, 100);
+        LocalDate today = BEFORE_MIDNIGHT_KST.atZone(DailyCounter.KST).toLocalDate();
+
+        assertThat(counter.tryAcquireOn("a", 1)).isEqualTo(today);
+        assertThat(counter.tryAcquireOn("a", 1)).isNull();
+        assertThat(counter.incrementOn("b")).isEqualTo(today);
+
+        clock.advance(Duration.ofMinutes(1));
+        assertThat(counter.incrementOn("b")).isEqualTo(today.plusDays(1));
     }
 
     @Test

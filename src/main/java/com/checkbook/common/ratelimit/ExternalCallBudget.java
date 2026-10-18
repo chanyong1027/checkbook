@@ -7,7 +7,11 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 공급자별 하루 외부 호출 예산. 나가는 호출을 세고, 차단선에 닿으면 사용자 요청의 호출만 막는다.
@@ -27,6 +31,9 @@ public class ExternalCallBudget {
     private final int elibraryPerLibraryLimit;
     private final DailyCounter counter;
     private final MeterRegistry meterRegistry;
+    // DB에 아직 더하지 않은 증가분(날짜별). 자정을 넘겨 동기화돼도 전날 몫은 전날 행에 간다.
+    // 더하기는 merge, 꺼내기는 remove라 둘 다 키 단위로 원자적이다 — 꺼내는 순간 들어온 1회는 새 항목으로 남는다
+    private final ConcurrentHashMap<UsageKey, Integer> pending = new ConcurrentHashMap<>();
 
     public ExternalCallBudget(RateLimitProperties properties, MeterRegistry meterRegistry, Clock clock) {
         this.enabled = properties.enabled();
@@ -59,18 +66,20 @@ public class ExternalCallBudget {
     public void acquire(ExternalProvider provider) {
         RateLimitProperties.Provider limits = providers.get(provider);
         if (!enabled || limits == null) {
-            counter.increment(provider.name());
+            count(provider.name());
             return;
         }
-        if (!counter.tryAcquire(provider.name(), limits.blockAt())) {
+        LocalDate countedOn = counter.tryAcquireOn(provider.name(), limits.blockAt());
+        if (countedOn == null) {
             reject(provider);
         }
+        addPending(provider.name(), countedOn);
         warnIfNearLimit(provider, limits);
     }
 
     /** 막지 않고 센다(배치 등 예산 여유분을 쓰는 호출). */
     public void record(ExternalProvider provider) {
-        counter.increment(provider.name());
+        count(provider.name());
         RateLimitProperties.Provider limits = providers.get(provider);
         if (limits != null) {
             warnIfNearLimit(provider, limits);
@@ -99,18 +108,71 @@ public class ExternalCallBudget {
     public void acquireELibrary(long libraryId) {
         String key = ELIBRARY_KEY_PREFIX + libraryId;
         if (!enabled) {
-            counter.increment(key);
+            count(key);
             return;
         }
-        if (!counter.tryAcquire(key, elibraryPerLibraryLimit)) {
+        LocalDate countedOn = counter.tryAcquireOn(key, elibraryPerLibraryLimit);
+        if (countedOn == null) {
             reject(ExternalProvider.ELIBRARY, key);
         }
+        addPending(key, countedOn);
     }
 
     /** 차단선에 닿았으면 {@link DailyBudgetExceededException}. 호출이 아니라 결과 해석용이라 세지 않는다. */
     public void throwIfExhausted(ExternalProvider provider) {
         if (isExhausted(provider)) {
             throw new DailyBudgetExceededException(provider, counter.untilReset());
+        }
+    }
+
+    // ---- DB 동기화(ExternalCallBudgetSyncer)용 ----
+
+    /** DB에 더할 증가분 하나 */
+    public record PendingUsage(String key, LocalDate date, int delta) {
+    }
+
+    private record UsageKey(String key, LocalDate date) {
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public LocalDate today() {
+        return counter.currentDate();
+    }
+
+    /** 아직 DB에 더하지 않은 증가분을 꺼낸다(꺼낸 만큼 비운다). */
+    public List<PendingUsage> drainPending() {
+        List<PendingUsage> drained = new ArrayList<>();
+        for (UsageKey key : pending.keySet()) {
+            Integer delta = pending.remove(key);
+            if (delta != null && delta > 0) {
+                drained.add(new PendingUsage(key.key(), key.date(), delta));
+            }
+        }
+        return drained;
+    }
+
+    /** DB에 더하지 못한 증가분을 되돌려 놓는다(다음 동기화에 함께 더한다). */
+    public void restorePending(PendingUsage usage) {
+        pending.merge(new UsageKey(usage.key(), usage.date()), usage.delta(), Integer::sum);
+    }
+
+    /** DB 합계(다른 칸 몫 포함)로 오늘 카운터를 올린다. 다른 날짜면 무시한다. */
+    public void applyStoredTotal(String key, LocalDate date, int total) {
+        counter.raiseToIfDate(key, total, date);
+    }
+
+    private void count(String key) {
+        addPending(key, counter.incrementOn(key));
+    }
+
+    // 날짜는 카운터를 올린 그 Day의 날짜(호출하는 쪽이 tryAcquireOn·incrementOn으로 받아 넘긴다) — 자정 경계에서도
+    // 전날 호출은 전날 행으로 간다. 제한이 꺼져 있으면(부하 측정) 동기화하지 않으니 쌓지 않는다
+    private void addPending(String key, LocalDate date) {
+        if (enabled) {
+            pending.merge(new UsageKey(key, date), 1, Integer::sum);
         }
     }
 

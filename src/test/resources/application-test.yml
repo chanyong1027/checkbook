@@ -59,3 +59,7 @@ resilience4j:
         ignore-exceptions:
           - com.checkbook.client.datanaru.DatanaruResponseException
           - com.checkbook.common.ratelimit.DailyBudgetExceededException
+
+# 공급자 예산 DB 동기화는 테스트가 직접 부른다 — 컨텍스트마다 도는 스케줄이 테스트 행과 섞이지 않게 사실상 끈다
+rate-limit:
+  sync-interval-ms: 3600000

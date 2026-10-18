@@ -12,7 +12,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 키별 하루 호출 수. KST 날짜가 바뀌면 전부 0부터 다시 센다(YES24·정보나루의 일 한도 경계와 같다).
- * 인메모리라 재시작·블루그린 전환 때 초기화된다(요청 제한 결정 카드 2).
+ * 인메모리라 재시작·블루그린 전환 때 초기화된다(요청 제한 결정 카드 2). 공급자 예산은
+ * {@link ExternalCallBudgetSyncer}가 DB와 맞춰 이어서 세고, IP별 한도는 그대로 초기화된다.
  */
 public class DailyCounter {
 
@@ -31,27 +32,43 @@ public class DailyCounter {
 
     /** 오늘 사용량이 limit 미만이면 1 올리고 true. 거절한 요청은 세지 않는다. */
     public boolean tryAcquire(String key, int limit) {
-        AtomicInteger count = counterFor(key);
+        return tryAcquireOn(key, limit) != null;
+    }
+
+    /**
+     * {@link #tryAcquire}와 같지만 1을 올린 카운터의 날짜를 돌려준다(거절이면 null).
+     * 올리기와 날짜를 같은 Day에서 정한다 — 올린 뒤 날짜를 따로 읽으면 그 사이 자정이 지나 다른 날짜가 붙는다.
+     */
+    public LocalDate tryAcquireOn(String key, int limit) {
+        Day day = day();
+        AtomicInteger count = counterFor(day, key);
         if (count == null) {
-            return true;
+            return day.date; // 키 상한: 세지 않고 통과(fail-open)
         }
         while (true) {
             int used = count.get();
             if (used >= limit) {
-                return false;
+                return null;
             }
             if (count.compareAndSet(used, used + 1)) {
-                return true;
+                return day.date;
             }
         }
     }
 
     /** 한도와 상관없이 1 올린다(막지 않고 세기만 하는 호출). */
     public void increment(String key) {
-        AtomicInteger count = counterFor(key);
+        incrementOn(key);
+    }
+
+    /** {@link #increment}와 같지만 1을 올린 카운터의 날짜를 돌려준다. */
+    public LocalDate incrementOn(String key) {
+        Day day = day();
+        AtomicInteger count = counterFor(day, key);
         if (count != null) {
             count.incrementAndGet();
         }
+        return day.date;
     }
 
     /** 더 큰 값일 때만 사용량을 올린다(공급자가 알려 준 실제 사용량 반영). */
@@ -100,6 +117,11 @@ public class DailyCounter {
     public boolean markOnce(String key) {
         AtomicInteger count = counterFor(key);
         return count != null && count.compareAndSet(0, 1);
+    }
+
+    /** 지금 세고 있는 날짜(KST) */
+    public LocalDate currentDate() {
+        return day().date;
     }
 
     public Duration untilReset() {
