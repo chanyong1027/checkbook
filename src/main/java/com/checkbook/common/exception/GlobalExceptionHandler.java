@@ -5,11 +5,14 @@ import com.checkbook.common.ratelimit.DailyBudgetExceededException;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.Duration;
 
@@ -99,6 +102,22 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.badRequest()
                 .body(ErrorResponse.of(errorCode));
+    }
+
+    // 없는 경로·틀린 메서드는 서버 오류가 아니다. 마지막 Exception 처리기가 받으면 500 + ERROR 로그(스택 추적)가
+    // 스캐너 요청마다 쌓인다(운영 10-18: /api/.env 등 500 119건). 로그는 남기지 않는다
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ErrorResponse> handleNoResource(NoResourceFoundException exception) {
+        log.debug("없는 경로: {}", exception.getResourcePath());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ErrorResponse.of(ErrorCode.NOT_FOUND));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleMethodNotSupported(HttpRequestMethodNotSupportedException exception) {
+        // 예외가 가진 헤더(Allow: 지원 메서드)를 그대로 붙인다 — 405에는 Allow가 있어야 한다(RFC 9110)
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .headers(exception.getHeaders())
+                .body(ErrorResponse.of(ErrorCode.METHOD_NOT_ALLOWED));
     }
 
     @ExceptionHandler(Exception.class)
