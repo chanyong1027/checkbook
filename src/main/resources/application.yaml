@@ -144,6 +144,22 @@ management:
   endpoint:
     health:
       show-details: never
+  # 지연 분포(p99 등)는 Grafana에서 구간 수로 계산한다. 구간 수 = 시리즈 수라 무료 한도(활성 1만, 블루·그린 전환 중 2배)에 맞춰
+  # 외부 호출은 기본 구간(1ms~30s, 68개)을 10ms~10s(46개)로 좁히고, 서버 요청은 판단에 쓰는 경계만 둔다(알림경로 결정 카드 2026-10-19)
+  # 설정은 이름 앞부분으로 걸려 진행 중 요청 타이머(<이름>.active)까지 물려받는다 — 그쪽은 수만 보면 되니 구간을 끈다
+  metrics:
+    distribution:
+      percentiles-histogram:
+        "[http.client.requests]": true
+        "[http.client.requests.active]": false
+      minimum-expected-value:
+        "[http.client.requests]": 10ms
+      maximum-expected-value:
+        "[http.client.requests]": 10s
+      # 200ms 정상 응답, 700ms YES24 식별 예산, 1·2s 느림, 2800ms 검색 전체 마감(search.total-deadline)
+      slo:
+        "[http.server.requests]": 200ms,700ms,1s,2s,2800ms
+        "[http.server.requests.active]": ""
 
 logging:
   level:
