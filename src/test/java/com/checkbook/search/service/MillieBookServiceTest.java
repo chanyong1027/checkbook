@@ -285,4 +285,19 @@ class MillieBookServiceTest {
         assertThat(result.available()).isTrue();
         verify(millieClient).searchByTitle("사피엔스");
     }
+
+    // F-T21-1: 서점 판 정보 괄호가 검색어에 남으면 밀리 검색이 0건이라 밀리에 있는 책이 "없음"이 됐다
+    @Test
+    void titleWithEditionParentheses_searchesWithoutThem() {
+        IdentifiedBook sel = aladin("사피엔스 (양장 특별판)", "유발 하라리");
+        MillieBookItem primary = item(true, true);
+        when(millieClient.searchByTitle("사피엔스")).thenReturn(List.of(primary));
+        when(matcher.findMatch(sel, List.of(primary)))
+                .thenReturn(Optional.of(new MatchedMillie(primary, Format.EBOOK)));
+
+        MillieAvailability result = service.findAvailability(sel, null);
+
+        assertThat(result.available()).isTrue();
+        verify(millieClient).searchByTitle("사피엔스");
+    }
 }
