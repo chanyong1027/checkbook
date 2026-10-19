@@ -1,0 +1,219 @@
+// CheckBook 서버 Alloy 설정 → 서버 /etc/alloy/config.alloy (root:alloy 640). 반영은 deploy/apply-alloy.sh, 설명은 deploy/README.md
+//
+// Alloy는 컨테이너가 아니라 서버에 systemd 서비스(deb 1.20.1)로 깔려 있다. 처음 설치 스크립트가 만든 설정에서
+// 서버 지표·Alloy 자체 점검은 그대로 두고, 앱 지표 수집을 더하고, 로그는 앱 컨테이너와 커널 오류만 보낸다
+// (알림경로 결정 카드 2026-10-19 "결정 4 수정").
+//
+// 주소·사용자 ID·토큰은 이 파일에 쓰지 않는다. /etc/alloy/secrets.env(root 600)에 두고 systemd drop-in의
+// EnvironmentFile=로 Alloy 프로세스 환경에만 넣는다(`apply-alloy.sh --secrets`). Environment=에 값을 직접 쓰면
+// `systemctl show`로 일반 사용자도 읽을 수 있다.
+
+// ---------- 보내는 곳(Grafana Cloud) ----------
+
+prometheus.remote_write "metrics_service" {
+	endpoint {
+		url = sys.env("GRAFANA_PROM_URL")
+
+		basic_auth {
+			username = sys.env("GRAFANA_PROM_USER")
+			password = sys.env("GRAFANA_CLOUD_TOKEN")
+		}
+	}
+}
+
+loki.write "grafana_cloud_loki" {
+	endpoint {
+		url = sys.env("GRAFANA_LOKI_URL")
+
+		basic_auth {
+			username = sys.env("GRAFANA_LOKI_USER")
+			password = sys.env("GRAFANA_CLOUD_TOKEN")
+		}
+	}
+}
+
+// ---------- 앱 지표 ----------
+// 블루(8081)·그린(8082) 두 칸을 다 찌른다. 서비스하지 않는 칸은 deploy.sh가 지워 두므로 평소 한 칸은 up=0이다 —
+// 앱이 죽었는지는 칸별이 아니라 "칸 중 하나라도 up"으로 본다. 전환 중에는 두 칸이 함께 세져 시리즈가 2배가 된다.
+// 60초 주기: 무료 한도(활성 시리즈 1만, 시리즈당 분당 1점)에 맞춘 값(30초면 전환 중 한도를 넘는다)
+prometheus.scrape "checkbook_app" {
+	targets = [
+		{"__address__" = "127.0.0.1:8081", "slot" = "blue"},
+		{"__address__" = "127.0.0.1:8082", "slot" = "green"},
+	]
+	job_name        = "checkbook-app"
+	metrics_path    = "/actuator/prometheus"
+	scrape_interval = "60s"
+	scrape_timeout  = "10s"
+	forward_to      = [prometheus.remote_write.metrics_service.receiver]
+}
+
+// ---------- Alloy 자체 점검(설치 스크립트 그대로) ----------
+
+prometheus.exporter.self "alloy_check" { }
+
+discovery.relabel "alloy_check" {
+	targets = prometheus.exporter.self.alloy_check.targets
+
+	rule {
+		target_label = "instance"
+		replacement  = constants.hostname
+	}
+
+	rule {
+		target_label = "alloy_hostname"
+		replacement  = constants.hostname
+	}
+
+	rule {
+		target_label = "job"
+		replacement  = "integrations/alloy-check"
+	}
+}
+
+prometheus.scrape "alloy_check" {
+	targets         = discovery.relabel.alloy_check.output
+	forward_to      = [prometheus.relabel.alloy_check.receiver]
+	scrape_interval = "60s"
+}
+
+prometheus.relabel "alloy_check" {
+	forward_to = [prometheus.remote_write.metrics_service.receiver]
+
+	rule {
+		source_labels = ["__name__"]
+		regex         = "(prometheus_target_sync_length_seconds_sum|prometheus_target_scrapes_.*|prometheus_target_interval.*|prometheus_sd_discovered_targets|alloy_build.*|prometheus_remote_write_wal_samples_appended_total|process_start_time_seconds)"
+		action        = "keep"
+	}
+}
+
+// ---------- 서버 지표(설치 스크립트 그대로) ----------
+
+discovery.relabel "integrations_node_exporter" {
+	targets = prometheus.exporter.unix.integrations_node_exporter.targets
+
+	rule {
+		target_label = "instance"
+		replacement  = constants.hostname
+	}
+
+	rule {
+		target_label = "job"
+		replacement  = "integrations/node_exporter"
+	}
+}
+
+prometheus.exporter.unix "integrations_node_exporter" {
+	disable_collectors = ["ipvs", "btrfs", "infiniband", "xfs", "zfs"]
+
+	filesystem {
+		fs_types_exclude     = "^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|tmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$"
+		mount_points_exclude = "^/(dev|proc|run/credentials/.+|sys|var/lib/docker/.+)($|/)"
+		mount_timeout        = "5s"
+	}
+
+	netclass {
+		ignored_devices = "^(veth.*|cali.*|[a-f0-9]{15})$"
+	}
+
+	netdev {
+		device_exclude = "^(veth.*|cali.*|[a-f0-9]{15})$"
+	}
+}
+
+prometheus.scrape "integrations_node_exporter" {
+	targets    = discovery.relabel.integrations_node_exporter.output
+	forward_to = [prometheus.relabel.integrations_node_exporter.receiver]
+}
+
+prometheus.relabel "integrations_node_exporter" {
+	forward_to = [prometheus.remote_write.metrics_service.receiver]
+
+	rule {
+		source_labels = ["__name__"]
+		regex         = "node_scrape_collector_.+"
+		action        = "drop"
+	}
+}
+
+// ---------- 로그(journald → Loki) ----------
+// 보내는 것: 앱 컨테이너(checkbook-app-blue-1 등, Docker journald 드라이버) 전부 + 커널 오류(err 이상, OOM 종료 등).
+// 앱의 stderr 줄도 journald에 PRIORITY 3으로 들어가므로 커널은 _TRANSPORT=kernel로 구분한다.
+// 나머지(sshd·sudo·Nginx 등)는 보내지 않는다 — 외부로 나가는 개인정보를 줄인다. 설치 스크립트의 /var/log 파일 수집도 뺐다
+
+loki.source.journal "system" {
+	max_age       = "24h0m0s"
+	relabel_rules = discovery.relabel.journal.rules
+	forward_to    = [loki.process.checkbook.receiver]
+	labels        = {"job" = "checkbook/journal", "instance" = constants.hostname}
+}
+
+discovery.relabel "journal" {
+	targets = []
+
+	// 컨테이너 이름;전송 경로;우선순위 — 앱 컨테이너면 나머지와 상관없이, 아니면 커널의 0~3(emerg~err)만 남긴다
+	rule {
+		source_labels = ["__journal_container_name", "__journal__transport", "__journal_priority"]
+		separator     = ";"
+		regex         = "checkbook-app-.+;.*;.*|;kernel;[0-3]"
+		action        = "keep"
+	}
+
+	rule {
+		source_labels = ["__journal_container_name"]
+		target_label  = "container"
+	}
+
+	rule {
+		source_labels = ["__journal_container_name"]
+		regex         = "checkbook-app-(blue|green)-.+"
+		target_label  = "slot"
+	}
+
+	rule {
+		source_labels = ["__journal__transport"]
+		target_label  = "transport"
+	}
+
+	// 커널 줄은 위에서 err 이상만 남겼으니 전부 ERROR로 둔다. 앱 줄과 같은 값이라 level="ERROR" 한 조건으로 둘 다 잡힌다
+	// (세부 우선순위가 필요하면 journald에서 본다). 앱 줄은 아래 loki.process가 본문에서 뽑는다
+	rule {
+		source_labels = ["__journal__transport"]
+		regex         = "kernel"
+		target_label  = "level"
+		replacement   = "ERROR"
+	}
+}
+
+loki.process "checkbook" {
+	forward_to = [loki.write.grafana_cloud_loki.receiver]
+
+	// 정보나루 키는 URL 쿼리(authKey=)로 가서, RestClient 예외 메시지("I/O error on GET request for ...")에 그대로 찍힌다.
+	// 서버 journald(root만 읽음)에는 남지만 밖으로는 내보내지 않는다
+	stage.replace {
+		expression = "authKey=([^&\\s\"]+)"
+		replace    = "****"
+	}
+
+	stage.match {
+		selector = "{container=~\"checkbook-app-.+\"}"
+
+		// Docker journald 드라이버는 스택 트레이스를 줄마다 따로 남긴다. 시각으로 시작하는 줄부터 다음 시각 줄 전까지를 한 항목으로 묶는다
+		stage.multiline {
+			firstline     = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}"
+			max_wait_time = "3s"
+			max_lines     = 300
+		}
+
+		// Spring Boot 기본 형식(컨테이너는 UTC): "2026-10-19T11:36:31.235Z  WARN 1 --- [checkbook] [스레드] 로거 : 메시지"
+		stage.regex {
+			expression = "^\\S+\\s+(?P<level>TRACE|DEBUG|INFO|WARN|ERROR)\\s"
+		}
+
+		stage.labels {
+			values = {
+				level = "",
+			}
+		}
+	}
+}

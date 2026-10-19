@@ -18,6 +18,8 @@
 | `nginx/checkbook.conf` | `/etc/nginx/sites-available/checkbook` | 사이트 설정(`apply-nginx.sh`로 손으로 반영) |
 | `nginx/cloudflare-realip.conf`, `security-headers.conf`, `proxy-app.conf` | `/etc/nginx/checkbook/` | 사이트 설정이 include(`apply-nginx.sh`로 손으로 반영) |
 | `apply-nginx.sh` | (저장소 `/opt/checkbook/app/deploy/`에서 실행) | 위 Nginx 파일 반영: 비교·백업·검사·되돌리기·reload |
+| `alloy/config.alloy` | `/etc/alloy/config.alloy` | 지표·로그 수집 설정(`apply-alloy.sh`로 손으로 반영, 아래 '관측: Grafana Alloy') |
+| `apply-alloy.sh` | (저장소 `/opt/checkbook/app/deploy/`에서 실행) | Alloy 설정 반영: 비밀값 확인·validate·백업·restart·준비 확인·되돌리기 |
 | (deploy.sh가 씀) | `/etc/nginx/checkbook/upstream.conf` | 지금 서비스 중인 칸 |
 | (deploy.sh가 씀) | `/opt/checkbook/deploy-state.env` | 칸별 이미지 기록 |
 | (래퍼가 씀) | `/opt/checkbook/current` → `releases/<커밋>` | 서비스 중인 백엔드 커밋의 배포 파일(백업 cron이 여기를 부른다) |
@@ -172,6 +174,41 @@ sudo bash /opt/checkbook/app/deploy/apply-nginx.sh          # 반영
 ```
 
 저장소 갱신(`git pull --ff-only`) → 서버 파일과 비교(같으면 끝) → 배포 잠금(`/run/checkbook/deploy.lock`, 배포가 Nginx를 전환하는 중이면 최대 120초 기다림) → `/var/backups/checkbook-nginx/<시각>/`에 백업(최근 10개) → 복사 → `nginx -t`(실패하면 되돌리고 reload하지 않음) → reload. `upstream.conf`는 `deploy.sh`가 관리하므로 건드리지 않는다. 처음 한 번은 스크립트가 서버 저장소에 없으므로 `sudo git -C /opt/checkbook/app pull --ff-only`를 먼저 한다.
+
+## 관측: Grafana Alloy
+서버에 systemd 서비스로 깔린 Alloy(deb 1.20.1, 자동 업데이트 없음)가 Grafana Cloud(무료, 도쿄 지역)로 보낸다.
+
+| 보내는 것 | 어디서 | 비고 |
+|---|---|---|
+| 앱 지표 | `127.0.0.1:8081`(blue)·`8082`(green) `/actuator/prometheus`, 60초 | `job="checkbook-app"`, `slot` 라벨. 대기 칸은 꺼져 있어 `up=0`이 정상 → 앱 다운은 "칸 중 하나라도 up"으로 본다 |
+| 서버 지표 | node_exporter 내장(디스크·메모리·CPU·네트워크) | `job="integrations/node_exporter"` |
+| 로그 | journald 중 앱 컨테이너 전부 + 커널 err 이상 | `job="checkbook/journal"`, `container`·`slot`·`level` 라벨. 스택 트레이스는 한 항목으로 묶는다. 정보나루 `authKey=` 값은 가려서 보낸다. sshd·sudo·Nginx 등은 보내지 않는다 |
+
+| 파일 | 서버 위치 | |
+|---|---|---|
+| `alloy/config.alloy` | `/etc/alloy/config.alloy` (root:alloy 640) | 주소·토큰 없음(`sys.env`로 읽음) |
+| (`--secrets`가 씀) | `/etc/alloy/secrets.env` (root 600) | 주소 2개·사용자 ID 2개·토큰 |
+| (`--secrets`가 씀) | `/etc/systemd/system/alloy.service.d/env.conf` | `EnvironmentFile=/etc/alloy/secrets.env` 한 줄. 값을 `Environment=`로 직접 쓰면 `systemctl show alloy`로 일반 사용자도 읽는다(설치 스크립트가 그렇게 만들었다) |
+
+평소 반영(자동 배포에 넣지 않는다):
+```bash
+sudo bash /opt/checkbook/app/deploy/apply-alloy.sh --diff   # 바뀔 내용만(서버 파일의 토큰은 가려서 보임)
+sudo bash /opt/checkbook/app/deploy/apply-alloy.sh          # 반영
+```
+저장소 갱신 → `alloy validate`(문법·속성 이름·구성 요소 참조. `fmt`는 문법만 본다) → 서버 파일과 비교(`--diff`는 여기서 끝) → `secrets.env`에 설정이 쓰는 값이 다 있는지 → `/var/backups/checkbook-alloy/<시각>/`에 백업(root 700, 최근 10개) → 복사 → `reset-failed` + `restart` → `http://127.0.0.1:12345/-/ready`를 30초 기다림 → 안 되면 되돌리고 다시 restart.
+- `reset-failed`를 먼저 하는 이유: 유닛이 `Restart=always`(간격 100ms)라 곧 죽는 설정이면 몇 초 안에 시작 횟수 제한(10초에 5회)에 걸리고, 걸린 동안은 손으로 하는 restart도 거절된다. 직전에 몇 번 재시작했을 뿐인데 멀쩡한 설정이 "시작 실패"로 되돌려지는 것을 막는다.
+- 준비 확인은 "설정을 불러왔다"까지만 본다. 토큰·주소가 틀려 보내기가 실패하는 것은 잡지 못한다 → 반영 뒤 `sudo journalctl -u alloy --since '-3 min' | grep -iE 'error|401|403'`가 비어 있는지와 Grafana Explore에서 `up{job="checkbook-app"}`, `{job="checkbook/journal"}`로 확인한다.
+- Alloy 자체 로그: `sudo journalctl -u alloy -f`. 구성 요소 상태: `curl -s http://127.0.0.1:12345/api/v0/web/components | head`(서버 안에서만 열림).
+
+처음 한 번(설치 스크립트 설정 → 저장소 설정, 10-19):
+1. Grafana 포털 → Security → Access Policies에서 정책 `checkbook-alloy`(scope `metrics:write`·`logs:write`만)를 만들고 토큰을 발급한다. 설치 마법사의 토큰(정책 `stack-1881956-quickstart`)은 한동안 644 파일과 `Environment=`에 있어 서버의 다른 사용자가 읽을 수 있었으므로 바꾼다.
+2. `sudo git -C /opt/checkbook/app pull --ff-only`
+3. `sudo bash /opt/checkbook/app/deploy/apply-alloy.sh --diff` — 바뀔 내용을 보고, 지울 줄(`-`)에 있는 remote_write·Loki 주소와 사용자 ID를 옮겨 적는다(토큰은 `<TOKEN>`으로 가려진다). 원본 파일을 `cat`하지 않는다(평문 토큰이 터미널에 남는다).
+4. `sudo bash /opt/checkbook/app/deploy/apply-alloy.sh --secrets` — 3의 주소·ID와 1의 토큰(입력이 화면에 안 보인다). Alloy는 아직 재시작하지 않는다.
+5. `sudo bash /opt/checkbook/app/deploy/apply-alloy.sh --no-pull`로 반영하고, 위의 확인 명령으로 보내기 성공을 확인한다. 저널 읽기 위치는 구성 요소 이름이 바뀌어 처음부터 다시 잡히므로, 이때 최근 24시간치 앱 로그를 한 번 더 보낸다(새 라벨이라 중복으로 보인다, 한 번뿐).
+6. 새 토큰으로 들어오는 것을 확인한 **뒤에** 포털에서 quickstart 토큰을 삭제하고, 5에서 만든 백업(`/var/backups/checkbook-alloy/<시각>/`, 설치 스크립트 원본 = 평문 옛 토큰)을 지운다. 지운 토큰을 쓰는 설정으로 되돌리면 Alloy는 떠도 401로 아무것도 못 보낸다.
+
+토큰을 바꿀 때는 `--secrets` 뒤 `--restart`(reset-failed + 재시작 + 준비 확인만 한다. 옵션 없이 실행하면 설정이 같아 "변경 없음"으로 끝나고 재시작하지 않는다).
 
 ## 요청 제한 dry run
 `checkbook.conf`의 `limit_req_dry_run`은 10-18에 `off`로 바꿨다(실제로 막는다). 근거: 사용자가 없을 때는 "실제 사용자가 걸리는지" 관찰할 수 없어 숫자로 판단했다. 사람이 책 한 권을 볼 때는 짧은 시간에 3~4회 요청이라 `/api/` 5r/s(burst 20)에 걸리지 않고, 10-18 access.log 바깥 요청(거의 전부 스캐너)에서도 `/api/`를 IP·초당 5회 넘게 보낸 경우가 0건이었다. 하루 총량과 공급자 예산은 앱 안 요청 제한(`application.yaml`의 `rate-limit`)이 지킨다.
