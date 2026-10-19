@@ -46,7 +46,7 @@ public class FeaturedBooksRefresher {
             // 굿즈·상품 코드·성인 상품을 걸러도 page-size를 채우도록 더 받아 둔다(호출 수는 같다)
             @Value("${featured.yes24-fetch-size:30}") int yes24FetchSize,
             @Value("${featured.bestseller.ttl-hours:168}") long bestsellerTtlHours,
-            @Value("${featured.new.ttl-hours:84}") long newTtlHours,
+            @Value("${featured.new.ttl-hours:100}") long newTtlHours,
             @Value("${featured.loan.ttl-hours:168}") long loanTtlHours
     ) {
         this.yes24Client = yes24Client;
