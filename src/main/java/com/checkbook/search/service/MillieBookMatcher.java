@@ -20,14 +20,15 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class MillieBookMatcher {
 
-    // 후순위 키워드 11개. EDITION_MARKERS("개정증보판", "개정판", "증보판",
-    // "완전판", "특별판", "최신판", "리뉴얼판", "한정판", "양장본", "양장")는
-    // 의도적으로 제외 — BookMetadataNormalizer.normalizeTitle이 정규화 단계에서
-    // 이를 통째로 제거해 본책과 동치로 매칭되기 때문. edition demotion이 강하게
+    // 후순위 키워드 10개. EDITION_MARKERS("개정증보판", "개정판", "증보판",
+    // "완전판", "특별판", "최신판", "리뉴얼판", "한정판", "양장본", "양장")와
+    // 괄호 없는 판 단어(초판본·리커버·신장판·N쇄)는 의도적으로 제외 —
+    // BookMetadataNormalizer.normalizeTitle이 정규화 단계에서 이를 통째로 제거해
+    // 본책과 동치로 매칭되기 때문("리커버"는 F-T21-2에서 빠짐). edition demotion이 강하게
     // 필요해지면 후속 PR에서 별도 정책으로 도입.
     private static final Set<String> DEMOTED_KEYWORDS = Set.of(
             "필사", "노트", "해설", "요약", "합본", "원전", "완역",
-            "확장", "리커버", "에디션", "세트"
+            "확장", "에디션", "세트"
     );
 
     private final BookMatcher baseMatcher;
@@ -92,7 +93,9 @@ public class MillieBookMatcher {
         // EDITION_MARKERS 처리에 대해선 DEMOTED_KEYWORDS 정의부 주석 참조.
         String haystack = normalizer.normalizeTitle(contentName + " " + subtitle);
         for (String kw : DEMOTED_KEYWORDS) {
-            if (haystack.contains(normalizer.normalizeTitle(kw))) return true;
+            String normalizedKw = normalizer.normalizeTitle(kw);
+            // 정규화가 지우는 단어면 빈 문자열이 되는데, contains("")는 항상 참이라 모든 후보가 강등된다
+            if (!normalizedKw.isEmpty() && haystack.contains(normalizedKw)) return true;
         }
         return false;
     }

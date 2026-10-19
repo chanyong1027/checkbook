@@ -37,9 +37,10 @@ public class BookMatcher {
 
         boolean candHasContent = !candNorm.isEmpty() || !candPrefix.isEmpty();
         boolean selHasContent = !selNorm.isEmpty() || !selPrefix.isEmpty();
+        // 빈 값끼리는 같은 제목으로 보지 않는다 — "초판본: 데미안"과 "리커버: 수레바퀴 아래서"는 부제 앞부분이 둘 다 비어 같아진다
         if (candHasContent && selHasContent
-                && (selNorm.equals(candNorm) || selPrefix.equals(candNorm)
-                    || selNorm.equals(candPrefix) || selPrefix.equals(candPrefix))) {
+                && (sameNonEmpty(selNorm, candNorm) || sameNonEmpty(selPrefix, candNorm)
+                    || sameNonEmpty(selNorm, candPrefix) || sameNonEmpty(selPrefix, candPrefix))) {
             boolean trueNormHit = !candNorm.isEmpty() && selNorm.equals(candNorm);
             boolean titleOnly = candAuthorTokens.isEmpty();
             if (titleOnly) return new MatchResult(true, MatchPath.TITLE_ONLY);
@@ -54,6 +55,10 @@ public class BookMatcher {
         }
 
         return new MatchResult(false, MatchPath.NONE);
+    }
+
+    private static boolean sameNonEmpty(String a, String b) {
+        return !a.isEmpty() && a.equals(b);
     }
 
     private boolean hasIntersection(Set<String> a, Set<String> b) {
