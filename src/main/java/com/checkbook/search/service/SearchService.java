@@ -76,6 +76,15 @@ public class SearchService {
         this.publicLibraryAvailabilityService = publicLibraryAvailabilityService;
         this.searchExecutor = searchExecutor;
         this.meterRegistry = meterRegistry;
+        // 알림이 보는 조합(FAILED·SKIPPED × 이유)을 기동 때 0으로 미리 만든다. 처음 실패하는 순간에 생기면
+        // 첫 값이 1이라 increase()가 그 실패를 못 센다(배포로 재시작할 때마다 되풀이). 섹션 4 × (2 × 이유 10 + 1)
+        for (SearchSection section : SearchSection.values()) {
+            sectionCounter(section, SearchSectionStatus.SUCCESS, null);
+            for (SearchSectionReason reason : SearchSectionReason.values()) {
+                sectionCounter(section, SearchSectionStatus.FAILED, reason);
+                sectionCounter(section, SearchSectionStatus.SKIPPED, reason);
+            }
+        }
     }
 
     public SearchResponse search(String q, Double lat, Double lon, BookHint hint) {
@@ -204,14 +213,17 @@ public class SearchService {
      */
     private void countSections(List<SearchResponse.SectionStatusDetail> statuses) {
         for (SearchResponse.SectionStatusDetail detail : statuses) {
-            Counter.builder("search.section")
-                    .description("검색 응답의 섹션별 상태")
-                    .tag("section", detail.section().name())
-                    .tag("status", detail.status().name())
-                    .tag("reason", detail.reason() == null ? "NONE" : detail.reason().name())
-                    .register(meterRegistry)
-                    .increment();
+            sectionCounter(detail.section(), detail.status(), detail.reason()).increment();
         }
+    }
+
+    private Counter sectionCounter(SearchSection section, SearchSectionStatus status, SearchSectionReason reason) {
+        return Counter.builder("search.section")
+                .description("검색 응답의 섹션별 상태")
+                .tag("section", section.name())
+                .tag("status", status.name())
+                .tag("reason", reason == null ? "NONE" : reason.name())
+                .register(meterRegistry);
     }
 
     /**

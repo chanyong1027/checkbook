@@ -161,9 +161,20 @@ class SearchServiceTest {
         assertThat(meterRegistry.get("search.section")
                 .tags("section", "PUBLIC_LIBRARY", "status", "SKIPPED", "reason", "NO_LOCATION")
                 .counter().count()).isEqualTo(1);
-        assertThat(meterRegistry.get("search.section").counters())
-                .extracting(c -> c.count()).containsOnly(1.0);
-        assertThat(meterRegistry.get("search.section").counters()).hasSize(4);
+        // 응답의 섹션 4개만 1씩 늘고 나머지(미리 만든 0)는 그대로다
+        assertThat(meterRegistry.get("search.section").counters().stream().mapToDouble(c -> c.count()).sum())
+                .isEqualTo(4);
+    }
+
+    // 처음 실패하는 순간에 카운터가 생기면 첫 값이 1이라 increase()가 못 센다 — 기동 때 0으로 있어야 한다
+    @Test
+    void failureSectionCountersExistAtZeroBeforeAnySearch() {
+        assertThat(meterRegistry.get("search.section")
+                .tags("section", "SUBSCRIPTION", "status", "FAILED", "reason", "TIMEOUT")
+                .counter().count()).isZero();
+        assertThat(meterRegistry.get("search.section")
+                .tags("section", "PUBLIC_LIBRARY", "status", "SKIPPED", "reason", "DAILY_LIMIT")
+                .counter().count()).isZero();
     }
 
     // (b) 정상 ISBN, YES24 타임아웃, 힌트 있음, 위치 없음

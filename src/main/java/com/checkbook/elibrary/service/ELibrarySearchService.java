@@ -11,6 +11,7 @@ import com.checkbook.elibrary.client.ELibClientResolver;
 import com.checkbook.elibrary.client.ELibraryClientException;
 import com.checkbook.elibrary.domain.ELibrary;
 import com.checkbook.elibrary.domain.ELibraryStatus;
+import com.checkbook.elibrary.domain.VendorType;
 import com.checkbook.elibrary.dto.ELibrarySearchResponse;
 import com.checkbook.elibrary.dto.ELibrarySearchStatus;
 import com.checkbook.elibrary.repository.ELibraryRepository;
@@ -50,6 +51,9 @@ public class ELibrarySearchService {
     private final ExternalCallBudget budget;
     private final MeterRegistry meterRegistry;
 
+    /** elibrary.scrape의 outcome 값 전부(수집 결과 + 크롤러 실패 종류) */
+    private static final List<String> SCRAPE_OUTCOMES = scrapeOutcomes();
+
     @Value("${elibrary.per-library-timeout:15000}")
     private long perLibraryTimeoutMs = 15_000;
 
@@ -72,6 +76,13 @@ public class ELibrarySearchService {
         this.normalizer = normalizer;
         this.budget = budget;
         this.meterRegistry = meterRegistry;
+        // 업체 × 결과를 기동 때 0으로 미리 만든다. 구조 변경처럼 드문 결과가 처음 나는 순간에 생기면
+        // 첫 값이 1이라 increase()가 그 사건을 못 센다(업체 구조 변경 알림의 첫 사건을 놓침)
+        for (VendorType vendor : VendorType.values()) {
+            for (String outcome : SCRAPE_OUTCOMES) {
+                scrapeTimer(vendor, outcome);
+            }
+        }
     }
 
     public ELibrarySearchResponse search(String title, String author, String libraryIds) {
@@ -285,12 +296,24 @@ public class ELibrarySearchService {
      * timeout은 제출 시점부터 잰다(orTimeout) — 우리 풀이 붐벼 큐에서 기다린 시간도 들어가 사이트 탓만은 아니다
      */
     private void recordScrape(ELibrary library, String outcome, long elapsedMs) {
-        Timer.builder("elibrary.scrape")
+        scrapeTimer(library.getVendorType(), outcome).record(elapsedMs, TimeUnit.MILLISECONDS);
+    }
+
+    private static List<String> scrapeOutcomes() {
+        LinkedHashSet<String> outcomes = new LinkedHashSet<>(
+                List.of("found", "empty", "timeout", "daily_limit", "rejected", "error"));
+        for (ELibraryClientException.Kind kind : ELibraryClientException.Kind.values()) {
+            outcomes.add(kind.name().toLowerCase(Locale.ROOT));
+        }
+        return List.copyOf(outcomes);
+    }
+
+    private Timer scrapeTimer(VendorType vendor, String outcome) {
+        return Timer.builder("elibrary.scrape")
                 .description("전자도서관 사이트 수집 한 번의 결과와 걸린 시간")
-                .tag("vendor", library.getVendorType().name().toLowerCase(Locale.ROOT))
+                .tag("vendor", vendor.name().toLowerCase(Locale.ROOT))
                 .tag("outcome", outcome)
-                .register(meterRegistry)
-                .record(elapsedMs, TimeUnit.MILLISECONDS);
+                .register(meterRegistry);
     }
 
     private static String failureOutcome(Throwable cause) {

@@ -113,6 +113,15 @@ class ELibrarySearchServiceTest {
     }
 
     @Test
+    void 업체와_결과_조합은_수집_전에_0으로_있다() {
+        // 구조 변경처럼 드문 결과가 처음 나는 순간에 생기면 increase()가 그 첫 사건을 못 센다
+        assertThat(meterRegistry.get("elibrary.scrape").tags("vendor", "bookcube", "outcome", "structure_changed")
+                .timer().count()).isZero();
+        assertThat(meterRegistry.get("elibrary.scrape").tags("vendor", "kyobo", "outcome", "endpoint_not_found")
+                .timer().count()).isZero();
+    }
+
+    @Test
     void 수집_결과를_업체와_결과_종류로_센다() {
         // 업체 구조 변경 알림이 이 숫자를 믿는다 — 사이트가 아니라 업체 단위로, 실패 종류를 그대로 남겨야 한다
         when(eLibraryRepository.findAllById(List.of(1L, 2L))).thenReturn(List.of(activeLibrary(1L), activeLibrary(2L)));

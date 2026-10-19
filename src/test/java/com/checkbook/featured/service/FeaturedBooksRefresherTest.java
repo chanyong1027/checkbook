@@ -59,6 +59,20 @@ class FeaturedBooksRefresherTest {
     }
 
     @Test
+    void 섹션별_성공_실패_카운터가_기동_때_0으로_있다() {
+        // 실패 순간에 처음 생기면 첫 값이 1이라 increase()가 못 센다 — 주간 배치는 다음 실패까지 일주일을 기다린다
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        new FeaturedBooksRefresher(yes24Client, datanaruClient, writer, registry, 15, 30, 168, 84, 168);
+
+        for (FeaturedSectionType type : FeaturedSectionType.values()) {
+            assertThat(registry.get("featured.refresh").tags("type", type.name(), "result", "failure").counter().count())
+                    .isZero();
+            assertThat(registry.get("featured.refresh").tags("type", type.name(), "result", "success").counter().count())
+                    .isZero();
+        }
+    }
+
+    @Test
     void refreshSection_bestseller_callsYes24BestsellerAndMapsFields() {
         when(yes24Client.categoryList(Yes24CategoryList.BESTSELLER, "001", 30))
                 .thenReturn(List.of(item(ISBN_A, "소년이 온다", "N", "20140519")));

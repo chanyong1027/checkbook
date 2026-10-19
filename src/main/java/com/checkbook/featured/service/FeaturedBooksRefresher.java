@@ -58,6 +58,12 @@ public class FeaturedBooksRefresher {
         this.bestsellerTtl = Duration.ofHours(bestsellerTtlHours);
         this.newTtl = Duration.ofHours(newTtlHours);
         this.loanTtl = Duration.ofHours(loanTtlHours);
+        // 기동 때 0으로 미리 만든다. 실패 순간에 처음 생기면 첫 값이 1이라 increase()가 그 실패를 못 센다 —
+        // 주간 배치는 다음 실패까지 일주일을 기다리고, 배포로 재시작할 때마다 되풀이된다
+        for (FeaturedSectionType type : FeaturedSectionType.values()) {
+            refreshCounter(type, "success");
+            refreshCounter(type, "failure");
+        }
     }
 
     /**
@@ -73,10 +79,10 @@ public class FeaturedBooksRefresher {
                 case LOAN       -> refreshFromDatanaru(type, loanTtl);
             }
             log.info("featured 섹션 갱신 성공: type={}", type);
-            countRefresh(type, "success");
+            refreshCounter(type, "success").increment();
         } catch (Exception e) {
             // 실패는 WARN 로그로만 남아 알림(ERROR 기준)에 안 잡힌다 — 이 카운터로 센다. 재시도 안내 WARN은 세지 않는다
-            countRefresh(type, "failure");
+            refreshCounter(type, "failure").increment();
             String reason = e.getClass().getSimpleName() + ": "
                     + truncate(e.getMessage(), 480);
             log.warn("featured 섹션 갱신 실패: type={}, reason={}", type, reason, e);
@@ -88,13 +94,12 @@ public class FeaturedBooksRefresher {
         }
     }
 
-    private void countRefresh(FeaturedSectionType type, String result) {
-        Counter.builder("featured.refresh")
+    private Counter refreshCounter(FeaturedSectionType type, String result) {
+        return Counter.builder("featured.refresh")
                 .description("featured 섹션 갱신 결과")
                 .tag("type", type.name())
                 .tag("result", result)
-                .register(meterRegistry)
-                .increment();
+                .register(meterRegistry);
     }
 
     // 우리 쪽 선제한은 클라이언트가 최대 1초 기다려 준다(PR-3 결정 카드 3).
