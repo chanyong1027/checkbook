@@ -121,10 +121,17 @@ def _elibrary_counts(outcome_selector):
     return counts
 
 
-def _filesystem(expr_tail):
-    fs = f'{NODE}, fstype!="", mountpoint!=""'
-    return (f"(node_filesystem_avail_bytes{{{fs}}} / node_filesystem_size_bytes{{{fs}}} * 100 {expr_tail}"
-            f"\nand on (instance, device, mountpoint) node_filesystem_readonly{{{fs}}} == 0)")
+FS = f'{NODE}, fstype!="", mountpoint!=""'
+
+
+def _disk_used_above(free_below, fill_within_hours=None):
+    """여유가 free_below% 미만(= 사용이 100 - free_below% 초과)인 파일 시스템. 값은 사용 비율로 돌려준다 —
+    여유 비율을 돌려주면 꽉 찼을 때(여유 0) 값이 0이 되어 조건 '> 0'이 거짓, 가장 나쁜 순간에 알림이 풀린다"""
+    expr = (f"100 - node_filesystem_avail_bytes{{{FS}}} / node_filesystem_size_bytes{{{FS}}} * 100 "
+            f"> {100 - free_below}")
+    if fill_within_hours:
+        expr += (f"\nand predict_linear(node_filesystem_avail_bytes{{{FS}}}[6h], {fill_within_hours} * 3600) < 0")
+    return f"({expr}\nand on (instance, device, mountpoint) node_filesystem_readonly{{{FS}}} == 0)"
 
 
 def build_rules():
@@ -179,15 +186,16 @@ def build_rules():
         Rule(
             uid="cb-yes24-daily-limit", tier=URGENT, title="YES24 하루 한도 소진(RATE_002)",
             expr=increase("yes24_rate_limited_total", f'{APP}, by="remote", kind="day"', "10m") + " > 0",
-            summary="YES24가 하루 한도 초과(RATE_002)를 돌려줬습니다 — 우리 셈(차단선 19,000)보다 먼저 막힘",
+            summary="YES24가 하루 한도 초과(RATE_002)를 돌려줬습니다 — 우리 셈의 차단선보다 먼저 막힘",
             runbook=[
-                "우리 셈과 비교: Explore `max(external_budget_used{provider=\"yes24\"})`, `yes24_remaining_day`",
+                "우리 셈과 비교: Explore `max(external_budget_used{provider=\"yes24\"})`와 "
+                "`max(external_budget_limit{provider=\"yes24\"})`, `yes24_remaining_day`",
                 "우리 셈이 한참 아래면 키가 다른 곳에서 쓰이는 것 — YES24 키 교체 검토",
                 "로그: " + APP_LOGS + " | grep RATE_002",
             ]),
         Rule(
             uid="cb-disk-full", tier=URGENT, title="디스크 거의 참",
-            expr=_filesystem("< 10"), for_="5m",
+            expr=_disk_used_above(10), for_="5m",
             summary="{{ $labels.mountpoint }} 여유 공간 10% 미만 — DB가 같은 디스크라 곧 멈춥니다",
             runbook=[
                 "`df -h`, `sudo du -xh / --max-depth=2 2>/dev/null | sort -rh | head -20`",
@@ -195,8 +203,7 @@ def build_rules():
             ]),
         Rule(
             uid="cb-disk-filling-fast", tier=URGENT, title="디스크가 4시간 안에 찰 것으로 보임",
-            expr=_filesystem(f"< 20\nand predict_linear(node_filesystem_avail_bytes{{{NODE}, fstype!=\"\", "
-                             f"mountpoint!=\"\"}}[6h], 4 * 3600) < 0"),
+            expr=_disk_used_above(20, fill_within_hours=4),
             for_="1h",
             summary="{{ $labels.mountpoint }} 여유 20% 미만이고 지난 6시간 추세로 4시간 안에 찹니다",
             runbook=["무엇이 늘고 있는지: `sudo du -xh / --max-depth=3 2>/dev/null | sort -rh | head -20` (로그 폭주가 흔함)"]),
@@ -232,10 +239,13 @@ def build_rules():
             lazy_metrics=("http_client_requests_seconds_count", "http_client_requests_seconds_bucket")),
         Rule(
             uid="cb-server-5xx", tier=INFO, title="서버 5xx 발생",
-            # increase()는 처음 생기는 시리즈의 첫 값을 못 센다(앱에서 미리 못 만듦) — 5분 전엔 없던 시리즈의 값을 따로 본다
+            # increase()는 처음 생기는 시리즈의 첫 값을 못 센다(앱에서 미리 못 만듦) — 5분 전엔 없던 시리즈의 값을 따로 본다.
+            # 단 그 칸이 5분 전에도 수집되고 있었을 때만: 수집이 끊겼다 돌아오면 옛 5xx 시리즈가 '새로' 보여 거짓으로 울린다.
+            # 대기 칸도 up=0 시리즈는 있으므로 새로 뜬 칸의 첫 5xx는 잡는다
             expr=(f"(sum (increase(http_server_requests_seconds_count{{{five_xx}}}[5m])) > 0)\n"
                   f" or (sum (http_server_requests_seconds_count{{{five_xx}}}\n"
-                  f"     unless http_server_requests_seconds_count{{{five_xx}}} offset 5m) > 0)"),
+                  f"     unless http_server_requests_seconds_count{{{five_xx}}} offset 5m\n"
+                  f"     and on (slot) up{{{APP}}} offset 5m) > 0)"),
             summary="사용자 API에서 5xx가 났습니다",
             runbook=[
                 "경로: Explore `sum by (uri, status) (increase(http_server_requests_seconds_count{" + five_xx + "}[1h]))`",
@@ -299,13 +309,13 @@ def build_rules():
                 "vendor", {"kyobo": 14, "bookcube": 14}, 0.5, "1h"),
             summary="{{ $labels.vendor }} 전자도서관 수집의 절반 넘게 구조 변경·파싱 실패입니다({{ $values.A }})",
             runbook=[
-                "한 사이트 반복인지: Explore(로그) `" + LOKI_APP + ' |= "전자도서관"` 에서 id가 하나뿐인지',
+                "한 사이트 반복인지: Explore(로그) `" + LOKI_APP + ' |= "전자도서관 검색 실패" '
+                '|~ "outcome=(structure_changed|parse_failed|endpoint_not_found)"` 에서 id가 하나뿐인지',
                 "여러 사이트면 업체 템플릿 변경 — 해당 클라이언트(Kyobo·BookcubeELibClient) 선택자 수정 필요",
             ]),
         Rule(
             uid="cb-disk-filling", tier=INFO, title="디스크가 하루 안에 찰 것으로 보임",
-            expr=_filesystem(f"< 40\nand predict_linear(node_filesystem_avail_bytes{{{NODE}, fstype!=\"\", "
-                             f"mountpoint!=\"\"}}[6h], 24 * 3600) < 0"),
+            expr=_disk_used_above(40, fill_within_hours=24),
             for_="1h",
             summary="{{ $labels.mountpoint }} 여유 40% 미만이고 지난 6시간 추세로 하루 안에 찹니다",
             runbook=["`df -h`, `sudo docker system df`, `journalctl --disk-usage`"]),
@@ -327,16 +337,19 @@ def metric_names(expr):
 
 def _metrics_missing_rule(rules):
     """규칙들이 보는 앱 지표가 사라지면 알린다. 비율·사건 규칙은 조건을 넘지 않으면 '데이터 없음 = 정상'이라
-    지표 이름이 바뀌어도 조용히 정상으로 보인다. 앱이 살아 있을 때만 본다(죽었으면 '앱 지표 끊김'이 온다)"""
+    지표 이름이 바뀌어도 조용히 정상으로 보인다. 앱이 살아 있을 때만 본다(죽었으면 '앱 지표 끊김'이 온다).
+    평소에도 없을 수 있는 지표(lazy_metrics)는 못 본다. 요청 제한을 끈 프로필(부하 측정)은 한도 게이지가 없어
+    울리지만 그 프로필은 운영에서 수집하지 않는다"""
     lazy = {m for r in rules for m in r.lazy_metrics}
     watched = sorted({m for r in rules if r.datasource == "prom" for m in metric_names(r.expr)
                       if m not in lazy and m != "up" and not m.startswith("node_")})
-    absent = "\n or ".join(f"absent({m}{{{APP}}})" for m in watched)
+    # absent() 결과는 모두 {job="checkbook-app"}라 or가 하나로 합친다 — 지표마다 metric 라벨을 달아 따로 남긴다
+    absent = "\n or ".join(f'label_replace(absent({m}{{{APP}}}), "metric", "{m}", "", "")' for m in watched)
     return Rule(
         uid="cb-app-metrics-missing", tier=INFO, title="알림이 보는 지표가 사라짐",
         expr=f"(\n {absent}\n)\nand on () (max (up{{{APP}}}) == 1)",
         for_="15m",
-        summary="알림 규칙이 보는 지표가 앱에서 사라졌습니다 — 그 규칙들은 지금 아무것도 감지하지 못합니다",
+        summary="알림 규칙이 보는 지표 {{ $labels.metric }}가 앱에서 사라졌습니다 — 그 지표를 보는 규칙은 지금 아무것도 감지하지 못합니다",
         runbook=["지표 이름·태그를 바꾼 배포가 있었는지 확인하고 deploy/grafana/rules.py를 맞춘 뒤 다시 반영"])
 
 

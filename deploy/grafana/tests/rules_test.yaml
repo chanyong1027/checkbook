@@ -39,6 +39,8 @@ tests:
   - name: 처음 생기는 5xx 시리즈도 잡고, 5분 지나면 풀린다
     interval: 1m
     input_series:
+      - series: 'up{job="checkbook-app", slot="blue", instance="127.0.0.1:8081"}'
+        values: '1x20'
       - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="blue", uri="/api/search", status="200"}'
         values: '0+1x20'
       # 10분에 처음 생김(값 1) — increase()만으로는 못 센다
@@ -114,14 +116,15 @@ tests:
         exp_alerts:
           - exp_labels: {tier: info, section: PUBLIC_LIBRARY}
 
-  - name: 칸이 바뀌어 카운터가 새로 생겨도 실패로 세지 않는다
+  - name: 창 밖의 옛 실패와 칸 전환은 세지 않는다(누적값이 아니라 창 안의 증가만)
     interval: 1m
     input_series:
-      # 블루가 30분에 내려가고 그린이 0부터 센다(기동 때 0으로 만든 카운터) — 성공만 있다
+      # 블루는 기동 뒤 오래전에 실패 50건이 쌓여 있고(이 창에선 늘지 않음) 30분에 내려간다. 그린은 0부터 성공만 센다.
+      # 누적값을 그대로 쓰면 50 / 성공 수로 울린다
       - series: 'search_section_total{job="checkbook-app", slot="blue", section="PUBLIC_LIBRARY", status="SUCCESS", reason="NONE"}'
-        values: '0+1x30'
+        values: '100+1x30'
       - series: 'search_section_total{job="checkbook-app", slot="blue", section="PUBLIC_LIBRARY", status="FAILED", reason="TIMEOUT"}'
-        values: '0x30'
+        values: '50x30'
       - series: 'search_section_total{job="checkbook-app", slot="green", section="PUBLIC_LIBRARY", status="SUCCESS", reason="NONE"}'
         values: '_x29 0+1x40'
       - series: 'search_section_total{job="checkbook-app", slot="green", section="PUBLIC_LIBRARY", status="FAILED", reason="TIMEOUT"}'
@@ -195,11 +198,13 @@ tests:
           - exp_labels: {tier: urgent, provider: yes24}
 
   # ---------- YES24 RATE_002 ----------
-  - name: 원격 하루 한도만 즉시 알리고, 재시작으로 카운터가 0이 돼도 다시 울리지 않는다
+  - name: 원격 하루 한도만 즉시 알리고, 10분 뒤 풀리며, 재시작 뒤 새 사건은 다시 잡는다
     interval: 1m
     input_series:
+      # 6분에 RATE_002, 11분에 재시작(0), 21분에 재시작 뒤 첫 RATE_002(0 → 1, 기동 때 0으로 만든 덕에 셀 수 있음)
       - series: 'yes24_rate_limited_total{job="checkbook-app", slot="blue", by="remote", kind="day"}'
-        values: '0x5 1x5 0x20'
+        values: '0x5 1x4 0x10 1x10'
+      # 우리 쪽 선제한(self)은 즉시 알림 대상이 아니다
       - series: 'yes24_rate_limited_total{job="checkbook-app", slot="blue", by="self", kind="day"}'
         values: '0x5 5x25'
     alert_rule_test:
@@ -207,9 +212,13 @@ tests:
         alertname: cb-yes24-daily-limit
         exp_alerts:
           - exp_labels: {tier: urgent}
-      - eval_time: 25m
+      - eval_time: 18m
         alertname: cb-yes24-daily-limit
         exp_alerts: []
+      - eval_time: 22m
+        alertname: cb-yes24-daily-limit
+        exp_alerts:
+          - exp_labels: {tier: urgent}
 
   # ---------- featured ----------
   - name: 만료 1시간 넘게 10분 지속되면 울리고, NaN인 칸은 무시한다
@@ -282,11 +291,28 @@ tests:
         exp_alerts: []
 
   # ---------- 지표 사라짐 ----------
-  - name: 앱은 살아 있는데 규칙이 보는 지표가 없으면 15분 뒤 울린다
+  - name: 앱은 살아 있는데 규칙이 보는 지표 하나가 없으면 15분 뒤 그 이름으로 울린다
     interval: 1m
     input_series:
       - series: 'up{job="checkbook-app", slot="blue", instance="127.0.0.1:8081"}'
         values: '1x30'
+      - series: 'elibrary_scrape_seconds_count{job="checkbook-app", slot="blue", vendor="kyobo", outcome="found"}'
+        values: '0x30'
+      - series: 'external_budget_limit{job="checkbook-app", slot="blue", provider="yes24", kind="block"}'
+        values: '19000x30'
+      - series: 'external_budget_used{job="checkbook-app", slot="blue", provider="yes24"}'
+        values: '0x30'
+      - series: 'featured_refresh_total{job="checkbook-app", slot="blue", type="NEW", result="failure"}'
+        values: '0x30'
+      - series: 'featured_snapshot_age_seconds{job="checkbook-app", slot="blue", type="NEW"}'
+        values: '0x30'
+      # featured_snapshot_expiry_seconds만 없다(예: 이름을 바꾼 배포)
+      - series: 'resilience4j_circuitbreaker_not_permitted_calls_total{job="checkbook-app", slot="blue", name="datanaru", kind="not_permitted"}'
+        values: '0x30'
+      - series: 'search_section_total{job="checkbook-app", slot="blue", section="NEW_BOOK", status="FAILED", reason="TIMEOUT"}'
+        values: '0x30'
+      - series: 'yes24_rate_limited_total{job="checkbook-app", slot="blue", by="remote", kind="day"}'
+        values: '0x30'
     alert_rule_test:
       - eval_time: 10m
         alertname: cb-app-metrics-missing
@@ -294,7 +320,17 @@ tests:
       - eval_time: 20m
         alertname: cb-app-metrics-missing
         exp_alerts:
-          - exp_labels: {tier: info, job: checkbook-app}
+          - exp_labels: {tier: info, job: checkbook-app, metric: featured_snapshot_expiry_seconds}
+
+  - name: 앱이 죽었으면 지표 사라짐은 울리지 않는다(앱 지표 끊김이 맡음)
+    interval: 1m
+    input_series:
+      - series: 'up{job="checkbook-app", slot="blue", instance="127.0.0.1:8081"}'
+        values: '0x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: cb-app-metrics-missing
+        exp_alerts: []
 
   # ---------- 디스크 ----------
   - name: 여유 10% 미만이 5분 지속되면 즉시
@@ -311,3 +347,116 @@ tests:
         alertname: cb-disk-full
         exp_alerts:
           - exp_labels: {tier: urgent, job: integrations/node_exporter, instance: checkbook, device: /dev/sda1, fstype: ext4, mountpoint: /}
+
+  - name: 여유가 0%면(가장 나쁜 순간) 계속 울린다 — 값이 여유 비율이면 0이 되어 풀린다
+    interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{job="integrations/node_exporter", instance="checkbook", device="/dev/sda1", fstype="ext4", mountpoint="/"}'
+        values: '5x5 0x10'
+      - series: 'node_filesystem_size_bytes{job="integrations/node_exporter", instance="checkbook", device="/dev/sda1", fstype="ext4", mountpoint="/"}'
+        values: '100x15'
+      - series: 'node_filesystem_readonly{job="integrations/node_exporter", instance="checkbook", device="/dev/sda1", fstype="ext4", mountpoint="/"}'
+        values: '0x15'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: cb-disk-full
+        exp_alerts:
+          - exp_labels: {tier: urgent, job: integrations/node_exporter, instance: checkbook, device: /dev/sda1, fstype: ext4, mountpoint: /}
+
+  - name: 추세로 하루 안에 차면 낮 등급, 4시간 안은 아니면 즉시 등급은 조용
+    # 분당 0.05%씩 준다 — 8시간째 여유 15%: 하루면 72% 줄어 참, 4시간이면 12%라 안 참.
+    # 표본 간격은 1분(평가 1분, 5분 넘은 표본은 '없음'이라 간격이 길면 for 1h가 끊긴다)
+    interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{job="integrations/node_exporter", instance="checkbook", device="/dev/sda1", fstype="ext4", mountpoint="/"}'
+        values: '39-0.05x480'
+      - series: 'node_filesystem_size_bytes{job="integrations/node_exporter", instance="checkbook", device="/dev/sda1", fstype="ext4", mountpoint="/"}'
+        values: '100x480'
+      - series: 'node_filesystem_readonly{job="integrations/node_exporter", instance="checkbook", device="/dev/sda1", fstype="ext4", mountpoint="/"}'
+        values: '0x480'
+    alert_rule_test:
+      - eval_time: 8h
+        alertname: cb-disk-filling
+        exp_alerts:
+          - exp_labels: {tier: info, job: integrations/node_exporter, instance: checkbook, device: /dev/sda1, fstype: ext4, mountpoint: /}
+      - eval_time: 8h
+        alertname: cb-disk-filling-fast
+        exp_alerts: []
+
+  - name: 메모리 90%가 15분 지속되면 낮 등급
+    interval: 1m
+    input_series:
+      - series: 'node_memory_MemAvailable_bytes{job="integrations/node_exporter", instance="checkbook"}'
+        values: '50x5 5x20'
+      - series: 'node_memory_MemTotal_bytes{job="integrations/node_exporter", instance="checkbook"}'
+        values: '100x25'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: cb-memory-high
+        exp_alerts: []
+      - eval_time: 22m
+        alertname: cb-memory-high
+        exp_alerts:
+          - exp_labels: {tier: info, job: integrations/node_exporter, instance: checkbook}
+
+  # ---------- 소진율: 6시간 창과 회복 ----------
+  - name: 실패 8%면 6시간 창으로 울린다(1시간 창 14.4%엔 못 미침). 6시간이 다 안 차도 있는 데이터로 계산한다
+    interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="blue", uri="/api/search", status="200"}'
+        values: '0+1x400'
+      - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="blue", uri="/api/search", status="500"}'
+        values: '0+0.09x400'
+    alert_rule_test:
+      # 30분: 약 33건으로 6시간 경로 최소 건수(34) 미달
+      - eval_time: 30m
+        alertname: cb-server-5xx-burn
+        exp_alerts: []
+      - eval_time: 390m
+        alertname: cb-server-5xx-burn
+        exp_alerts:
+          - exp_labels: {tier: urgent}
+
+  - name: 실패가 멈추면 짧은 창 덕에 바로 풀린다(긴 창은 아직 높아도)
+    interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="blue", uri="/api/search", status="200"}'
+        values: '0+1x80'
+      # 10~40분에 분당 1건 실패, 그 뒤 멈춤
+      - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="blue", uri="/api/search", status="500"}'
+        values: '0x10 1+1x30 31x40'
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: cb-server-5xx-burn
+        exp_alerts:
+          - exp_labels: {tier: urgent}
+      - eval_time: 75m
+        alertname: cb-server-5xx-burn
+        exp_alerts: []
+
+  # ---------- 서버 5xx 1건: 수집 공백 ----------
+  - name: 수집이 끊겼다 돌아와 옛 5xx 시리즈가 다시 보여도 새 5xx로 세지 않는다
+    interval: 1m
+    input_series:
+      # 10~20분 수집 공백(Alloy 중단 등). 앱은 그대로라 5xx 누적 3이 그대로 돌아온다
+      - series: 'up{job="checkbook-app", slot="blue", instance="127.0.0.1:8081"}'
+        values: '1x9 _x11 1x10'
+      - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="blue", uri="/api/search", status="500"}'
+        values: '3x9 _x11 3x10'
+    alert_rule_test:
+      - eval_time: 22m
+        alertname: cb-server-5xx
+        exp_alerts: []
+
+  - name: 막 뜬 칸(대기 칸이라 up=0이던)의 첫 5xx는 잡는다
+    interval: 1m
+    input_series:
+      - series: 'up{job="checkbook-app", slot="green", instance="127.0.0.1:8082"}'
+        values: '0x9 1x10'
+      - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="green", uri="/api/search", status="502"}'
+        values: '_x14 1x5'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: cb-server-5xx
+        exp_alerts:
+          - exp_labels: {tier: info}

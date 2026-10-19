@@ -32,13 +32,16 @@ class RuleSourceTest(unittest.TestCase):
         # {{ $labels.section }}을 쓰는데 식이 section으로 묶지 않으면 Slack에 빈 값이 나간다
         for r in RULES:
             for label in re.findall(r"\$labels\.(\w+)", r.summary + " ".join(r.runbook)):
-                self.assertTrue(re.search(rf"by \([^)]*\b{label}\b", r.expr) or f"{label}=" in r.expr
-                                or label in ("mountpoint",) and "node_filesystem" in r.expr,
-                                f"{r.uid}: $labels.{label}")
+                kept = (re.search(rf"by \([^)]*\b{label}\b", r.expr)
+                        or f'"{label}", "' in r.expr  # label_replace로 단 라벨
+                        # 묶지 않는 서버 규칙은 node_filesystem 시리즈의 라벨이 그대로 남는다
+                        or (label == "mountpoint" and "node_filesystem" in r.expr and "sum" not in r.expr))
+                self.assertTrue(kept, f"{r.uid}: $labels.{label}")
 
     def test_사라짐_감시는_규칙이_보는_앱_지표를_다_덮는다(self):
         missing = next(r for r in RULES if r.uid == "cb-app-metrics-missing")
         watched = set(re.findall(r"absent\((\w+)\{", missing.expr))
+        self.assertEqual(watched, set(re.findall(r'"metric", "(\w+)"', missing.expr)), "라벨과 지표 이름이 짝이 맞아야 한다")
         lazy = {m for r in RULES for m in r.lazy_metrics}
         for r in RULES:
             if r.datasource != "prom" or r is missing:
@@ -59,6 +62,13 @@ class RuleSourceTest(unittest.TestCase):
         r = next(r for r in RULES if r.uid == "cb-server-5xx-burn")
         self.assertIn('uri=~"/api/.+", uri!="/api/health"', r.expr)
         self.assertNotIn("actuator", r.expr)
+
+    def test_조건을_넘은_값이_0이_되는_규칙이_없다(self):
+        # 조건 B가 'A > 0'이라 A의 값이 0이면 조건을 넘었는데도 안 울린다(디스크 여유 0%가 그랬다)
+        disk = [r for r in RULES if "node_filesystem" in r.expr]
+        self.assertTrue(disk)
+        for r in disk:
+            self.assertIn("100 - node_filesystem_avail_bytes", r.expr, f"{r.uid}: 값은 사용 비율이어야 한다")
 
     def test_예산_게이지는_칸끼리_더하지_않는다(self):
         # 각 칸이 DB 합계를 반영해 이미 전체 사용량이라 sum이면 2배가 된다
