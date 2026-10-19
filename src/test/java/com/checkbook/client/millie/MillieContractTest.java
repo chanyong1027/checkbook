@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.ConfigDataApplicationContextInitializer;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.web.client.RestClient;
 
 import java.io.IOException;
 import java.net.URI;
@@ -63,6 +64,7 @@ class MillieContractTest {
     void searchMatchAndDetailPageStillWork() {
         MillieProperties properties = propertiesFromApplicationYaml();
         MillieClient client = new MillieClient(
+                RestClient.builder(),
                 new MillieProperties(properties.baseUrl(), TIMEOUT_MS, properties.searchPath(), properties.detailUrlBase()),
                 ExternalCallBudget.unlimited());
 

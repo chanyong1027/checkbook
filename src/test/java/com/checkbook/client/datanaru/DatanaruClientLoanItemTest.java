@@ -9,6 +9,7 @@ import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.client.RestClient;
 
 import java.util.List;
 
@@ -25,6 +26,7 @@ class DatanaruClientLoanItemTest {
         server = new MockWebServer();
         server.start();
         client = new DatanaruClient(
+                RestClient.builder(),
                 new DatanaruProperties(server.url("/").toString(), "AUTHKEY", 2000, 10000), new SimpleMeterRegistry(), ExternalCallBudget.unlimited());
     }
 

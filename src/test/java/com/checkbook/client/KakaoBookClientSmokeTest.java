@@ -5,6 +5,7 @@ import com.checkbook.client.kakao.KakaoBookProperties;
 import com.checkbook.client.kakao.dto.KakaoBookResponse;
 import com.checkbook.common.ratelimit.ExternalCallBudget;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.client.RestClient;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -22,7 +23,7 @@ class KakaoBookClientSmokeTest {
         assumeTrue(restApiKey != null && !restApiKey.isBlank(),
                 "KAKAO_BOOK_REST_API_KEY is not configured");
 
-        KakaoBookClient client = new KakaoBookClient(new KakaoBookProperties(
+        KakaoBookClient client = new KakaoBookClient(RestClient.builder(), new KakaoBookProperties(
                 "https://dapi.kakao.com",
                 restApiKey,
                 5000

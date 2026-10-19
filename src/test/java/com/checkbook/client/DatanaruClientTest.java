@@ -11,6 +11,7 @@ import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.client.RestClient;
 
 import java.util.List;
 
@@ -48,6 +49,7 @@ class DatanaruClientTest {
         server.start();
 
         DatanaruClient client = new DatanaruClient(
+                RestClient.builder(),
                 new DatanaruProperties(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000),
                 new SimpleMeterRegistry(), ExternalCallBudget.unlimited());
 
@@ -96,6 +98,7 @@ class DatanaruClientTest {
         server.start();
 
         DatanaruClient client = new DatanaruClient(
+                RestClient.builder(),
                 new DatanaruProperties(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000),
                 new SimpleMeterRegistry(), ExternalCallBudget.unlimited());
 
@@ -109,6 +112,7 @@ class DatanaruClientTest {
     @Test
     void bookExistThrowsOnNetworkFailure() {
         DatanaruClient client = new DatanaruClient(
+                RestClient.builder(),
                 new DatanaruProperties("http://127.0.0.1:1/api", "test-key", 50, 50), new SimpleMeterRegistry(), ExternalCallBudget.unlimited());
 
         assertThatThrownBy(() -> client.bookExist("9788936439743", "111111"))
@@ -118,6 +122,7 @@ class DatanaruClientTest {
     @Test
     void libSrchThrowsOnNetworkFailure() {
         DatanaruClient client = new DatanaruClient(
+                RestClient.builder(),
                 new DatanaruProperties("http://127.0.0.1:1/api", "test-key", 50, 50), new SimpleMeterRegistry(), ExternalCallBudget.unlimited());
 
         assertThatThrownBy(() -> client.libSrch(1, 100))
@@ -132,6 +137,7 @@ class DatanaruClientTest {
 
         SimpleMeterRegistry registry = new SimpleMeterRegistry();
         DatanaruClient client = new DatanaruClient(
+                RestClient.builder(),
                 new DatanaruProperties(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000), registry, ExternalCallBudget.unlimited());
 
         assertThatThrownBy(() -> client.bookExist("9788936439743", "111111"))
