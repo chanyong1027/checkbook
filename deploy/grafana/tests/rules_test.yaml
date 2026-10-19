@@ -1,0 +1,313 @@
+# promtool 규칙 시험 — rules.py가 만든 식을 합성 시리즈에 돌려 본다. 실행: bash deploy/grafana/tests/run-promtool.sh
+# 값 표기: 'a+bxn'은 a에서 시작해 b씩 n번 더함(점 n+1개), '_'는 그 시각에 표본 없음. 시각 0은 epoch 0
+rule_files:
+  - rules.json
+
+evaluation_interval: 1m
+
+tests:
+  # ---------- 앱 지표 끊김 ----------
+  - name: 두 칸 모두 0이면 3분 뒤 울린다
+    interval: 1m
+    input_series:
+      - series: 'up{job="checkbook-app", slot="blue", instance="127.0.0.1:8081"}'
+        values: '1x5 0x10'
+      - series: 'up{job="checkbook-app", slot="green", instance="127.0.0.1:8082"}'
+        values: '0x15'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: cb-app-down
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: cb-app-down
+        exp_alerts:
+          - exp_labels: {tier: urgent}
+
+  - name: 블루에서 그린으로 바뀌는 동안은 울리지 않는다(대기 칸 0은 정상)
+    interval: 1m
+    input_series:
+      - series: 'up{job="checkbook-app", slot="blue", instance="127.0.0.1:8081"}'
+        values: '1x5 0x10'
+      - series: 'up{job="checkbook-app", slot="green", instance="127.0.0.1:8082"}'
+        values: '0x4 1x11'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: cb-app-down
+        exp_alerts: []
+
+  # ---------- 서버 5xx 1건 ----------
+  - name: 처음 생기는 5xx 시리즈도 잡고, 5분 지나면 풀린다
+    interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="blue", uri="/api/search", status="200"}'
+        values: '0+1x20'
+      # 10분에 처음 생김(값 1) — increase()만으로는 못 센다
+      - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="blue", uri="/api/search", status="500"}'
+        values: '_x9 1x10'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: cb-server-5xx
+        exp_alerts:
+          - exp_labels: {tier: info}
+      - eval_time: 17m
+        alertname: cb-server-5xx
+        exp_alerts: []
+
+  - name: health 503과 actuator는 사용자 5xx가 아니다
+    interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="blue", uri="/api/health", status="503"}'
+        values: '_x4 1+1x10'
+      - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="blue", uri="/actuator/prometheus", status="500"}'
+        values: '_x4 1+1x10'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: cb-server-5xx
+        exp_alerts: []
+
+  # ---------- 서버 5xx 소진율 ----------
+  - name: 1시간 14건 이상에서 실패가 14.4%를 넘으면 울린다
+    interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="blue", uri="/api/search", status="200"}'
+        values: '0+1x70'
+      - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="blue", uri="/api/search", status="500"}'
+        values: '0x40 1+1x30'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: cb-server-5xx-burn
+        exp_alerts:
+          - exp_labels: {tier: urgent}
+
+  - name: 요청이 최소 건수보다 적으면 비율이 높아도 판단하지 않는다
+    interval: 1m
+    input_series:
+      # 1시간 동안 4건 중 2건 실패(50%) — 적은 트래픽의 실패 1~2건은 깨우지 않는다
+      - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="blue", uri="/api/search", status="200"}'
+        values: '0x50 1 1 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2'
+      - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="blue", uri="/api/search", status="500"}'
+        values: '0x60 1 2 2 2 2 2 2 2 2 2'
+    alert_rule_test:
+      - eval_time: 65m
+        alertname: cb-server-5xx-burn
+        exp_alerts: []
+
+  # ---------- 검색 섹션 실패 소진율 ----------
+  - name: 섹션마다 최소 건수가 다르다(도서관 14, 새 책 28)
+    interval: 1m
+    input_series:
+      # 두 섹션 모두 1시간 약 20건 중 절반 실패 — 도서관은 울리고 새 책(YES24 기준선이 높아 28건 필요)은 아니다
+      - series: 'search_section_total{job="checkbook-app", slot="blue", section="PUBLIC_LIBRARY", status="SUCCESS", reason="NONE"}'
+        values: '0x40 0+0.34x30'
+      - series: 'search_section_total{job="checkbook-app", slot="blue", section="PUBLIC_LIBRARY", status="FAILED", reason="TIMEOUT"}'
+        values: '0x40 0+0.34x30'
+      - series: 'search_section_total{job="checkbook-app", slot="blue", section="NEW_BOOK", status="SUCCESS", reason="NONE"}'
+        values: '0x40 0+0.34x30'
+      - series: 'search_section_total{job="checkbook-app", slot="blue", section="NEW_BOOK", status="FAILED", reason="TIMEOUT"}'
+        values: '0x40 0+0.34x30'
+      # SKIPPED(위치 없음 등)는 공급자에 묻지 않은 것이라 분모에 넣지 않는다 — 넣으면 비율이 묽어져 안 울린다
+      - series: 'search_section_total{job="checkbook-app", slot="blue", section="PUBLIC_LIBRARY", status="SKIPPED", reason="NO_LOCATION"}'
+        values: '0x40 0+5x30'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: cb-section-failed-burn
+        exp_alerts:
+          - exp_labels: {tier: info, section: PUBLIC_LIBRARY}
+
+  - name: 칸이 바뀌어 카운터가 새로 생겨도 실패로 세지 않는다
+    interval: 1m
+    input_series:
+      # 블루가 30분에 내려가고 그린이 0부터 센다(기동 때 0으로 만든 카운터) — 성공만 있다
+      - series: 'search_section_total{job="checkbook-app", slot="blue", section="PUBLIC_LIBRARY", status="SUCCESS", reason="NONE"}'
+        values: '0+1x30'
+      - series: 'search_section_total{job="checkbook-app", slot="blue", section="PUBLIC_LIBRARY", status="FAILED", reason="TIMEOUT"}'
+        values: '0x30'
+      - series: 'search_section_total{job="checkbook-app", slot="green", section="PUBLIC_LIBRARY", status="SUCCESS", reason="NONE"}'
+        values: '_x29 0+1x40'
+      - series: 'search_section_total{job="checkbook-app", slot="green", section="PUBLIC_LIBRARY", status="FAILED", reason="TIMEOUT"}'
+        values: '_x29 0x40'
+    alert_rule_test:
+      - eval_time: 35m
+        alertname: cb-section-failed-burn
+        exp_alerts: []
+
+  # ---------- 외부 호출 느림 ----------
+  - name: 1초 넘는 호출이 절반이면 공급자별로 울린다
+    interval: 1m
+    input_series:
+      - series: 'http_client_requests_seconds_count{job="checkbook-app", slot="blue", client_name="apis.yes24.com", outcome="SUCCESS"}'
+        values: '0x10 0+2x60'
+      - series: 'http_client_requests_seconds_bucket{job="checkbook-app", slot="blue", client_name="apis.yes24.com", outcome="SUCCESS", le="1.073741824"}'
+        values: '0x10 0+1x60'
+      - series: 'http_client_requests_seconds_count{job="checkbook-app", slot="blue", client_name="dapi.kakao.com", outcome="SUCCESS"}'
+        values: '0x10 0+2x60'
+      - series: 'http_client_requests_seconds_bucket{job="checkbook-app", slot="blue", client_name="dapi.kakao.com", outcome="SUCCESS", le="1.073741824"}'
+        values: '0x10 0+2x60'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: cb-client-slow-burn
+        exp_alerts:
+          - exp_labels: {tier: info, client_name: apis.yes24.com}
+
+  # ---------- 예산 ----------
+  - name: 예산 게이지는 칸끼리 더하지 않는다(각 칸이 이미 전체 사용량)
+    interval: 1m
+    input_series:
+      # 두 칸이 다 10,000 — 더하면 20,000 ≥ 19,000으로 거짓 차단선 알림
+      - series: 'external_budget_used{job="checkbook-app", slot="blue", provider="yes24"}'
+        values: '10000x10'
+      - series: 'external_budget_used{job="checkbook-app", slot="green", provider="yes24"}'
+        values: '10000x10'
+      - series: 'external_budget_limit{job="checkbook-app", slot="blue", provider="yes24", kind="block"}'
+        values: '19000x10'
+      - series: 'external_budget_limit{job="checkbook-app", slot="green", provider="yes24", kind="block"}'
+        values: '19000x10'
+      - series: 'external_budget_limit{job="checkbook-app", slot="blue", provider="yes24", kind="daily"}'
+        values: '20000x10'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: cb-budget-blocked
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: cb-budget-80
+        exp_alerts: []
+
+  - name: 차단선과 80%
+    interval: 1m
+    input_series:
+      - series: 'external_budget_used{job="checkbook-app", slot="blue", provider="yes24"}'
+        values: '16500 19000 19000'
+      - series: 'external_budget_limit{job="checkbook-app", slot="blue", provider="yes24", kind="block"}'
+        values: '19000x2'
+      - series: 'external_budget_limit{job="checkbook-app", slot="blue", provider="yes24", kind="daily"}'
+        values: '20000x2'
+    alert_rule_test:
+      - eval_time: 0m
+        alertname: cb-budget-80
+        exp_alerts:
+          - exp_labels: {tier: info, provider: yes24}
+      - eval_time: 0m
+        alertname: cb-budget-blocked
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: cb-budget-blocked
+        exp_alerts:
+          - exp_labels: {tier: urgent, provider: yes24}
+
+  # ---------- YES24 RATE_002 ----------
+  - name: 원격 하루 한도만 즉시 알리고, 재시작으로 카운터가 0이 돼도 다시 울리지 않는다
+    interval: 1m
+    input_series:
+      - series: 'yes24_rate_limited_total{job="checkbook-app", slot="blue", by="remote", kind="day"}'
+        values: '0x5 1x5 0x20'
+      - series: 'yes24_rate_limited_total{job="checkbook-app", slot="blue", by="self", kind="day"}'
+        values: '0x5 5x25'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: cb-yes24-daily-limit
+        exp_alerts:
+          - exp_labels: {tier: urgent}
+      - eval_time: 25m
+        alertname: cb-yes24-daily-limit
+        exp_alerts: []
+
+  # ---------- featured ----------
+  - name: 만료 1시간 넘게 10분 지속되면 울리고, NaN인 칸은 무시한다
+    interval: 1m
+    input_series:
+      # 시각 0 = epoch 0. 만료 시각 0이면 61분에 '만료 뒤 1시간'을 넘는다
+      - series: 'featured_snapshot_expiry_seconds{job="checkbook-app", slot="blue", type="NEW"}'
+        values: '0x80'
+      - series: 'featured_snapshot_expiry_seconds{job="checkbook-app", slot="green", type="NEW"}'
+        values: 'NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN'
+      - series: 'featured_snapshot_expiry_seconds{job="checkbook-app", slot="blue", type="BESTSELLER"}'
+        values: '100000x80'
+    alert_rule_test:
+      - eval_time: 65m
+        alertname: cb-featured-expired
+        exp_alerts: []
+      - eval_time: 75m
+        alertname: cb-featured-expired
+        exp_alerts:
+          - exp_labels: {tier: info, type: NEW}
+
+  - name: 받은 적 없는(NaN) 섹션은 30분 뒤 울린다
+    interval: 1m
+    input_series:
+      - series: 'featured_snapshot_age_seconds{job="checkbook-app", slot="blue", type="LOAN"}'
+        values: 'NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN NaN'
+      - series: 'featured_snapshot_age_seconds{job="checkbook-app", slot="blue", type="NEW"}'
+        values: '0+60x40'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: cb-featured-never-fetched
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: cb-featured-never-fetched
+        exp_alerts:
+          - exp_labels: {tier: info, type: LOAN}
+
+  # ---------- 전자도서관 ----------
+  - name: 업체 수집의 절반 넘게 구조 변경이면 울리고, 우리 쪽 거절은 분모에서 뺀다
+    interval: 1m
+    input_series:
+      - series: 'elibrary_scrape_seconds_count{job="checkbook-app", slot="blue", vendor="kyobo", outcome="structure_changed"}'
+        values: '0x10 0+1x60'
+      - series: 'elibrary_scrape_seconds_count{job="checkbook-app", slot="blue", vendor="kyobo", outcome="found"}'
+        values: '0x10 0+0.5x60'
+      # 우리 풀이 차서 거절한 것 — 넣으면 비율이 묽어져 업체 변경을 놓친다
+      - series: 'elibrary_scrape_seconds_count{job="checkbook-app", slot="blue", vendor="kyobo", outcome="rejected"}'
+        values: '0x10 0+10x60'
+      - series: 'elibrary_scrape_seconds_count{job="checkbook-app", slot="blue", vendor="bookcube", outcome="connection_failed"}'
+        values: '0x10 0+1x60'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: cb-elibrary-vendor-changed
+        exp_alerts:
+          - exp_labels: {tier: info, vendor: kyobo}
+
+  # ---------- 서킷 ----------
+  - name: 서킷이 막은 호출이 있으면 울린다
+    interval: 1m
+    input_series:
+      - series: 'resilience4j_circuitbreaker_not_permitted_calls_total{job="checkbook-app", slot="blue", name="datanaru", kind="not_permitted"}'
+        values: '0x5 3x20'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: cb-circuit-open
+        exp_alerts:
+          - exp_labels: {tier: info, name: datanaru}
+      - eval_time: 20m
+        alertname: cb-circuit-open
+        exp_alerts: []
+
+  # ---------- 지표 사라짐 ----------
+  - name: 앱은 살아 있는데 규칙이 보는 지표가 없으면 15분 뒤 울린다
+    interval: 1m
+    input_series:
+      - series: 'up{job="checkbook-app", slot="blue", instance="127.0.0.1:8081"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: cb-app-metrics-missing
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: cb-app-metrics-missing
+        exp_alerts:
+          - exp_labels: {tier: info, job: checkbook-app}
+
+  # ---------- 디스크 ----------
+  - name: 여유 10% 미만이 5분 지속되면 즉시
+    interval: 1m
+    input_series:
+      - series: 'node_filesystem_avail_bytes{job="integrations/node_exporter", instance="checkbook", device="/dev/sda1", fstype="ext4", mountpoint="/"}'
+        values: '5x10'
+      - series: 'node_filesystem_size_bytes{job="integrations/node_exporter", instance="checkbook", device="/dev/sda1", fstype="ext4", mountpoint="/"}'
+        values: '100x10'
+      - series: 'node_filesystem_readonly{job="integrations/node_exporter", instance="checkbook", device="/dev/sda1", fstype="ext4", mountpoint="/"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: cb-disk-full
+        exp_alerts:
+          - exp_labels: {tier: urgent, job: integrations/node_exporter, instance: checkbook, device: /dev/sda1, fstype: ext4, mountpoint: /}
