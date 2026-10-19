@@ -8,6 +8,7 @@ import com.checkbook.common.ratelimit.DailyBudgetExceededException;
 import com.checkbook.common.ratelimit.ExternalCallBudget;
 import com.checkbook.common.ratelimit.ExternalProvider;
 import io.github.resilience4j.ratelimiter.RateLimiter;
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
@@ -103,6 +104,14 @@ public class Yes24Client {
         Gauge.builder("yes24.remaining.day", remainingDay, AtomicReference::get)
                 .description("YES24 일일 호출 잔량 (마지막 응답 헤더 관측치)")
                 .register(meterRegistry);
+        // countRateLimited가 세는 조합을 기동 때 0으로 미리 만든다. RATE_002처럼 드문 사건이 처음 나는 순간에 생기면
+        // 첫 값이 1이라 increase()가 그 사건을 못 센다(알림이 첫 사건을 놓침)
+        for (String kind : List.of("day", "budget", "second")) {
+            rateLimitedCounter("self", kind);
+        }
+        for (String kind : List.of("day", "second")) {
+            rateLimitedCounter("remote", kind);
+        }
     }
 
     public Optional<Yes24Book> lookupByIsbn(String isbn13) {
@@ -352,7 +361,11 @@ public class Yes24Client {
     }
 
     private void countRateLimited(String by, String kind) {
-        meterRegistry.counter("yes24.rate.limited", "by", by, "kind", kind).increment();
+        rateLimitedCounter(by, kind).increment();
+    }
+
+    private Counter rateLimitedCounter(String by, String kind) {
+        return meterRegistry.counter("yes24.rate.limited", "by", by, "kind", kind);
     }
 
     private static boolean isTimeout(Throwable e) {

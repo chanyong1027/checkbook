@@ -51,7 +51,23 @@ public class ExternalCallBudget {
                     .description("공급자별 오늘(KST) 나간 외부 호출 수")
                     .tag("provider", provider.tag())
                     .register(meterRegistry);
+            // 알림 규칙이 한도 숫자를 따로 적지 않고 이 값과 사용량을 비교한다(설정을 바꿔도 어긋나지 않게).
+            // 꺼져 있으면(부하 측정용) 막지 않으므로 둘 다 내보내지 않는다 — 내보내면 '차단선 도달' 알림이 거짓으로 울린다.
+            // 80% 알림(daily 기준)도 같이 꺼지는데, 막지 않는 동안엔 예고할 차단도 없어 의도한 것이다
+            RateLimitProperties.Provider limits = providers.get(provider);
+            if (enabled && limits != null) {
+                registerLimit(meterRegistry, provider, "daily", limits.dailyLimit());
+                registerLimit(meterRegistry, provider, "block", limits.blockAt());
+            }
         }
+    }
+
+    private static void registerLimit(MeterRegistry meterRegistry, ExternalProvider provider, String kind, int value) {
+        Gauge.builder("external.budget.limit", () -> value)
+                .description("공급자별 하루 한도(daily)와 사용자 요청을 막기 시작하는 사용량(block)")
+                .tag("provider", provider.tag())
+                .tag("kind", kind)
+                .register(meterRegistry);
     }
 
     /** 테스트·도구용: 막지 않는 예산 */
