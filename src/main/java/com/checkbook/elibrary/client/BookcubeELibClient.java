@@ -60,8 +60,9 @@ public class BookcubeELibClient implements ELibClient {
 
             return parseResults(document, baseUrl);
         } catch (IOException e) {
-            log.error("북큐브 전자도서관 검색 실패: {}", baseUrl, e);
-            throw new ELibraryClientException("북큐브 전자도서관 접속 실패", e);
+            // 사이트 하나의 실패는 흔하고 사람이 고칠 일이 아니라 WARN — ERROR는 알림 대상이라 쓰지 않는다
+            log.warn("북큐브 전자도서관 검색 실패: {}", baseUrl, e);
+            throw ELibraryClientException.ofIo("북큐브 전자도서관 접속 실패", e);
         }
     }
 
@@ -71,7 +72,7 @@ public class BookcubeELibClient implements ELibClient {
             if (isEmptyResultPage(document)) {
                 return List.of();
             }
-            throw new ELibraryClientException("북큐브 검색 결과 DOM을 찾을 수 없습니다.");
+            throw new ELibraryClientException(ELibraryClientException.Kind.STRUCTURE_CHANGED, "북큐브 검색 결과 DOM을 찾을 수 없습니다.");
         }
 
         List<ELibrarySearchResponse.ELibraryBook> results = new ArrayList<>();
@@ -86,7 +87,7 @@ public class BookcubeELibClient implements ELibClient {
         }
 
         if (!books.isEmpty() && results.isEmpty()) {
-            throw new ELibraryClientException("북큐브 검색 결과를 파싱하지 못했습니다.");
+            throw new ELibraryClientException(ELibraryClientException.Kind.PARSE_FAILED, "북큐브 검색 결과를 파싱하지 못했습니다.");
         }
 
         return results;
@@ -101,7 +102,7 @@ public class BookcubeELibClient implements ELibClient {
         Element titleLink = book.selectFirst("div.subject > a");
         String title = titleLink != null ? titleLink.text().trim() : "";
         if (title.isBlank()) {
-            throw new ELibraryClientException("북큐브 도서 제목 파싱 실패");
+            throw new ELibraryClientException(ELibraryClientException.Kind.PARSE_FAILED, "북큐브 도서 제목 파싱 실패");
         }
         String detailUrl = titleLink == null ? null : normalizeUrl(baseUrl, titleLink.attr("href"));
 
