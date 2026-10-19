@@ -102,7 +102,9 @@ featured:
     ttl-hours: 168
   new:
     cron: "0 0 4 * * MON,THU"
-    ttl-hours: 84
+    # TTL은 다음 갱신까지 덮어야 한다. 간격이 월→목 72h, 목→월 96h로 고르지 않아 긴 쪽 96h + 여유 4h
+    # (84h였을 때 목요일 목록이 매주 일 16:00 ~ 월 04:00 만료 상태였다, PR-B 결정 카드)
+    ttl-hours: 100
   loan:
     cron: "0 0 4 * * MON"
     ttl-hours: 168

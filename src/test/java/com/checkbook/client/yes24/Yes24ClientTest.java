@@ -56,6 +56,20 @@ class Yes24ClientTest {
         server.shutdown();
     }
 
+    // ---- 지표 ----
+
+    @Test
+    void 한도_카운터를_기동_때_0으로_만든다() {
+        newClient();
+
+        // 처음 걸리는 순간에 생기면 첫 값이 1이라 increase()가 그 사건(RATE_002 등)을 못 센다
+        var counters = meterRegistry.find("yes24.rate.limited").counters();
+        assertThat(counters)
+                .extracting(c -> c.getId().getTag("by") + "/" + c.getId().getTag("kind"))
+                .containsExactlyInAnyOrder("self/day", "self/budget", "self/second", "remote/day", "remote/second");
+        assertThat(counters).allSatisfy(c -> assertThat(c.count()).isZero());
+    }
+
     // ---- 찾음 / 없음 ----
 
     @Test

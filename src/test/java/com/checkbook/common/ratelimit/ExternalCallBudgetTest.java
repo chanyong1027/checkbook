@@ -138,6 +138,29 @@ class ExternalCallBudgetTest {
     }
 
     @Test
+    void 한도와_차단선을_게이지로_내보낸다() {
+        budget(true);
+
+        assertThat(limitGauge("yes24", "daily")).isEqualTo(10.0);
+        assertThat(limitGauge("yes24", "block")).isEqualTo(8.0);
+        assertThat(limitGauge("datanaru", "block")).isEqualTo(9.0);
+        // 설정이 없는 공급자는 막지 않으니 차단선 알림도 없다
+        assertThat(meterRegistry.find("external.budget.limit").tag("provider", "millie").gauges()).isEmpty();
+    }
+
+    @Test
+    void 꺼져_있으면_한도_게이지를_내보내지_않는다() {
+        budget(false);
+
+        // 막지 않는데 차단선을 내보내면 사용량이 넘을 때 '막혔다'는 알림이 거짓으로 울린다
+        assertThat(meterRegistry.find("external.budget.limit").gauges()).isEmpty();
+    }
+
+    private double limitGauge(String provider, String kind) {
+        return meterRegistry.get("external.budget.limit").tag("provider", provider).tag("kind", kind).gauge().value();
+    }
+
+    @Test
     void unlimited는_아무것도_막지_않는다() {
         ExternalCallBudget budget = ExternalCallBudget.unlimited();
         for (int i = 0; i < 100_000; i++) {
