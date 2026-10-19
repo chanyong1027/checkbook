@@ -39,8 +39,8 @@ public class MillieBookService {
             return MillieAvailability.unavailable();
         }
 
-        // 풀타이틀(부제 포함)로 검색하면 밀리에서 0건 나오는 경우가 잦아
-        // 부제 잘라낸 키워드로 검색. 정확도는 이후 matcher가 책임.
+        // 풀타이틀(부제·판 정보 괄호 포함)로 검색하면 밀리에서 0건 나오는 경우가 잦아
+        // 부제와 판 정보 괄호를 뗀 키워드로 검색. 정확도는 이후 matcher가 책임.
         String keyword = normalizer.searchKeyword(book.title());
         List<MillieBookItem> candidates = millieClient.searchByTitle(keyword);
         if (candidates.isEmpty()) {

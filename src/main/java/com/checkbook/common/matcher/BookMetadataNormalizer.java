@@ -42,6 +42,9 @@ public class BookMetadataNormalizer {
 
     private static final Pattern SUBTITLE_SPLIT = Pattern.compile(":| - ");
 
+    // 검색어에서 떼는 판 정보 괄호. 짝이 맞는 ( ) [ ] 【】만 — 「」『』〈〉《》는 제목 속 제목 표시라 떼면 책 제목이 사라진다
+    private static final Pattern EDITION_BRACKET = Pattern.compile("\\([^()]*\\)|\\[[^\\[\\]]*]|【[^【】]*】");
+
     private static final List<String> AUTHOR_ROLE_WORDS = List.of(
             "지음", "옮김", "번역", "편역", "엮음", "편저", "공저", "감수", "원저",
             "저자", "그림", "글", "편", "저"
@@ -96,10 +99,36 @@ public class BookMetadataNormalizer {
         return normalizeTitle(parts[0]);
     }
 
+    /**
+     * 밀리 검색어. 밀리 검색은 검색어 전체가 든 제목을 찾아서 "(양장 특별판)" 같은 서점 판 정보가 남으면 0건이 된다(F-T21-1).
+     * normalizeTitle처럼 권 정보 괄호((상)·(1)·(제2권) 등)는 남기고 판 정보 괄호는 떼되, 괄호 종류는 EDITION_BRACKET으로 좁힌다.
+     * 괄호를 먼저 떼야 괄호 안의 ':'에서 잘려 닫히지 않은 검색어가 되지 않는다.
+     */
     public String searchKeyword(String raw) {
         if (raw == null || raw.isBlank()) return "";
-        String[] parts = SUBTITLE_SPLIT.split(raw, 2);
-        return parts[0].trim();
+        String s = raw;
+        // 중첩 괄호는 안쪽부터 한 겹씩 뗀다. 권 정보는 그대로 다시 써서 더 바뀌지 않으면 끝
+        String previous;
+        do {
+            previous = s;
+            Matcher m = EDITION_BRACKET.matcher(s);
+            StringBuilder out = new StringBuilder();
+            while (m.find()) {
+                m.appendReplacement(out, Matcher.quoteReplacement(isVolumeMarker(m.group()) ? m.group() : " "));
+            }
+            m.appendTail(out);
+            s = out.toString();
+        } while (!s.equals(previous));
+        String keyword = WHITESPACE.matcher(SUBTITLE_SPLIT.split(s, 2)[0]).replaceAll(" ").trim();
+        // 괄호뿐인 제목은 다 떼면 비어 밀리를 부르지 않게 되므로 원래대로 둔다
+        return keyword.isEmpty() ? SUBTITLE_SPLIT.split(raw, 2)[0].trim() : keyword;
+    }
+
+    private static boolean isVolumeMarker(String bracketed) {
+        for (Pattern p : VOLUME_PATTERNS) {
+            if (p.matcher(bracketed).matches()) return true;
+        }
+        return false;
     }
 
     public Set<String> normalizeAuthorTokens(String raw) {
