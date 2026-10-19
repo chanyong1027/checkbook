@@ -58,6 +58,7 @@ public class KyoboELibClient implements ELibClient {
         List<String> candidates = buildCandidates(baseUrl);
         IOException lastException = null;
 
+        // 사이트 하나의 실패는 흔하고(1,964곳) 사람이 고칠 일이 아니라 WARN — ERROR는 알림 대상이라 쓰지 않는다
         for (String candidate : candidates) {
             try {
                 return doSearch(candidate, encoded);
@@ -66,17 +67,24 @@ public class KyoboELibClient implements ELibClient {
                     log.debug("교보 전자도서관 404, 다음 경로 시도: {}", candidate);
                     lastException = e;
                 } else {
-                    log.error("교보 전자도서관 검색 실패: {}", candidate, e);
-                    throw new ELibraryClientException("교보 전자도서관 접속 실패", e);
+                    log.warn("교보 전자도서관 검색 실패: {}", candidate, e);
+                    throw ELibraryClientException.ofIo("교보 전자도서관 접속 실패", e);
                 }
             } catch (IOException e) {
-                log.error("교보 전자도서관 검색 실패: {}", candidate, e);
-                throw new ELibraryClientException("교보 전자도서관 접속 실패", e);
+                // http 주소를 https로 바꿔 본 마지막 후보만 추측이다 — 앞 경로들이 404였다면 그 실패는 '검색 주소 없음'으로 본다.
+                // /elibrary-front는 실제로 쓰이는 경로라, 거기서 접속이 끊기면 사이트가 죽은 것이다(CodeRabbit #47)
+                if (lastException != null && candidate.startsWith("https://") && baseUrl.startsWith("http://")) {
+                    log.debug("교보 전자도서관 https 대체 경로도 실패: {}", candidate, e);
+                    continue;
+                }
+                log.warn("교보 전자도서관 검색 실패: {}", candidate, e);
+                throw ELibraryClientException.ofIo("교보 전자도서관 접속 실패", e);
             }
         }
 
-        log.error("교보 전자도서관 모든 경로 실패: {}", baseUrl);
-        throw new ELibraryClientException("교보 전자도서관 접속 실패", lastException);
+        // 업체가 검색 주소를 바꾸면 모든 사이트가 여기로 온다 — 사이트 하나의 HTTP 오류와 나눈다
+        log.warn("교보 전자도서관 모든 경로 실패: {}", baseUrl);
+        throw new ELibraryClientException(ELibraryClientException.Kind.ENDPOINT_NOT_FOUND, "교보 전자도서관 접속 실패", lastException);
     }
 
     private List<String> buildCandidates(String baseUrl) {
@@ -110,7 +118,7 @@ public class KyoboELibClient implements ELibClient {
             if (isEmptyResultPage(document)) {
                 return List.of();
             }
-            throw new ELibraryClientException("교보 검색 결과 DOM을 찾을 수 없습니다.");
+            throw new ELibraryClientException(ELibraryClientException.Kind.STRUCTURE_CHANGED, "교보 검색 결과 DOM을 찾을 수 없습니다.");
         }
 
         List<ELibrarySearchResponse.ELibraryBook> results = new ArrayList<>();
@@ -125,7 +133,7 @@ public class KyoboELibClient implements ELibClient {
         }
 
         if (!books.isEmpty() && results.isEmpty()) {
-            throw new ELibraryClientException("교보 검색 결과를 파싱하지 못했습니다.");
+            throw new ELibraryClientException(ELibraryClientException.Kind.PARSE_FAILED, "교보 검색 결과를 파싱하지 못했습니다.");
         }
 
         return results;
@@ -139,7 +147,7 @@ public class KyoboELibClient implements ELibClient {
     private ELibrarySearchResponse.ELibraryBook parseBook(Element book, String baseUrl) {
         String title = book.select("li.tit > a").text().trim();
         if (title.isBlank()) {
-            throw new ELibraryClientException("교보 도서 제목 파싱 실패");
+            throw new ELibraryClientException(ELibraryClientException.Kind.PARSE_FAILED, "교보 도서 제목 파싱 실패");
         }
         Element writerElement = book.selectFirst("li.writer");
         String author = "";

@@ -9,6 +9,7 @@ import com.checkbook.client.yes24.dto.Yes24CategoryListResponse.Item;
 import com.checkbook.featured.snapshot.domain.FeaturedBook;
 import com.checkbook.featured.snapshot.domain.FeaturedSectionType;
 import com.checkbook.featured.snapshot.domain.FeaturedSource;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -42,7 +43,7 @@ class FeaturedBooksRefresherTest {
     @Mock FeaturedBooksWriter writer;
 
     private FeaturedBooksRefresher refresher() {
-        return new FeaturedBooksRefresher(yes24Client, datanaruClient, writer,
+        return new FeaturedBooksRefresher(yes24Client, datanaruClient, writer, new SimpleMeterRegistry(),
                 15, 30, 168, 84, 168);
     }
 
@@ -55,6 +56,20 @@ class FeaturedBooksRefresherTest {
         ArgumentCaptor<List<FeaturedBook>> booksCap = ArgumentCaptor.forClass(List.class);
         verify(writer).replaceSection(eq(type), eq(FeaturedSource.YES24), booksCap.capture(), eq(ttl));
         return booksCap.getValue();
+    }
+
+    @Test
+    void 섹션별_성공_실패_카운터가_기동_때_0으로_있다() {
+        // 실패 순간에 처음 생기면 첫 값이 1이라 increase()가 못 센다 — 주간 배치는 다음 실패까지 일주일을 기다린다
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        new FeaturedBooksRefresher(yes24Client, datanaruClient, writer, registry, 15, 30, 168, 84, 168);
+
+        for (FeaturedSectionType type : FeaturedSectionType.values()) {
+            assertThat(registry.get("featured.refresh").tags("type", type.name(), "result", "failure").counter().count())
+                    .isZero();
+            assertThat(registry.get("featured.refresh").tags("type", type.name(), "result", "success").counter().count())
+                    .isZero();
+        }
     }
 
     @Test

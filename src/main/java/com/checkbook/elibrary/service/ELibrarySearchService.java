@@ -8,11 +8,15 @@ import com.checkbook.common.ratelimit.DailyBudgetExceededException;
 import com.checkbook.common.ratelimit.ExternalCallBudget;
 import com.checkbook.elibrary.client.ELibClient;
 import com.checkbook.elibrary.client.ELibClientResolver;
+import com.checkbook.elibrary.client.ELibraryClientException;
 import com.checkbook.elibrary.domain.ELibrary;
 import com.checkbook.elibrary.domain.ELibraryStatus;
+import com.checkbook.elibrary.domain.VendorType;
 import com.checkbook.elibrary.dto.ELibrarySearchResponse;
 import com.checkbook.elibrary.dto.ELibrarySearchStatus;
 import com.checkbook.elibrary.repository.ELibraryRepository;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,6 +28,7 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -44,6 +49,10 @@ public class ELibrarySearchService {
     private final BookMatcher matcher;
     private final BookMetadataNormalizer normalizer;
     private final ExternalCallBudget budget;
+    private final MeterRegistry meterRegistry;
+
+    /** elibrary.scrape의 outcome 값 전부(수집 결과 + 크롤러 실패 종류) */
+    private static final List<String> SCRAPE_OUTCOMES = scrapeOutcomes();
 
     @Value("${elibrary.per-library-timeout:15000}")
     private long perLibraryTimeoutMs = 15_000;
@@ -57,7 +66,8 @@ public class ELibrarySearchService {
             @Qualifier("eLibraryExecutor") ExecutorService eLibraryExecutor,
             BookMatcher matcher,
             BookMetadataNormalizer normalizer,
-            ExternalCallBudget budget
+            ExternalCallBudget budget,
+            MeterRegistry meterRegistry
     ) {
         this.eLibraryRepository = eLibraryRepository;
         this.eLibClientResolver = eLibClientResolver;
@@ -65,6 +75,14 @@ public class ELibrarySearchService {
         this.matcher = matcher;
         this.normalizer = normalizer;
         this.budget = budget;
+        this.meterRegistry = meterRegistry;
+        // 업체 × 결과를 기동 때 0으로 미리 만든다. 구조 변경처럼 드문 결과가 처음 나는 순간에 생기면
+        // 첫 값이 1이라 increase()가 그 사건을 못 센다(업체 구조 변경 알림의 첫 사건을 놓침)
+        for (VendorType vendor : VendorType.values()) {
+            for (String outcome : SCRAPE_OUTCOMES) {
+                scrapeTimer(vendor, outcome);
+            }
+        }
     }
 
     public ELibrarySearchResponse search(String title, String author, String libraryIds) {
@@ -227,11 +245,13 @@ public class ELibrarySearchService {
         CompletableFuture<ScrapeOutcome> future = scrapeTask.future();
         if (!future.isDone()) {
             long elapsedMs = Math.max(1L, System.currentTimeMillis() - scrapeTask.startedAt());
+            recordScrape(library, "timeout", elapsedMs);
             return timedOutResult(library, elapsedMs);
         }
 
         try {
             ScrapeOutcome outcome = future.join();
+            recordScrape(library, outcome.books().isEmpty() ? "empty" : "found", outcome.elapsedMs());
             return new ELibrarySearchResponse.ELibraryResult(
                     library.getId(),
                     library.getName(),
@@ -243,17 +263,22 @@ public class ELibrarySearchService {
         } catch (CompletionException exception) {
             Throwable cause = exception.getCause();
             if (cause instanceof DailyBudgetExceededException) {
+                recordScrape(library, "daily_limit", 0);
                 return new ELibrarySearchResponse.ELibraryResult(
                         library.getId(), library.getName(), library.getVendorType().name(),
                         List.of(), ELibrarySearchStatus.DAILY_LIMIT, 0);
             }
             if (cause instanceof TimeoutException) {
                 long elapsedMs = Math.max(1L, System.currentTimeMillis() - scrapeTask.startedAt());
+                recordScrape(library, "timeout", elapsedMs);
                 return timedOutResult(library, elapsedMs);
             }
 
-            log.warn("전자도서관 검색 실패: {}", library.getName(), cause);
+            // 지표는 업체 단위라 어느 사이트인지는 이 로그로 본다(같은 사이트 반복인지, 여러 사이트인지)
+            String outcome = failureOutcome(cause);
+            log.warn("전자도서관 검색 실패: id={}, name={}, outcome={}", library.getId(), library.getName(), outcome, cause);
             long elapsedMs = Math.max(1L, System.currentTimeMillis() - scrapeTask.startedAt());
+            recordScrape(library, outcome, elapsedMs);
             return new ELibrarySearchResponse.ELibraryResult(
                     library.getId(),
                     library.getName(),
@@ -263,6 +288,40 @@ public class ELibrarySearchService {
                     elapsedMs
             );
         }
+    }
+
+    /**
+     * 수집 한 번의 결과와 시간. 태그는 업체 × 결과뿐이다 — 사이트(1,964곳)를 태그에 넣으면 시리즈가 폭증한다.
+     * 업체 템플릿이 바뀌면 한 업체의 structure_changed·parse_failed·endpoint_not_found가 여러 사이트에서 한꺼번에 늘어난다.
+     * timeout은 제출 시점부터 잰다(orTimeout) — 우리 풀이 붐벼 큐에서 기다린 시간도 들어가 사이트 탓만은 아니다
+     */
+    private void recordScrape(ELibrary library, String outcome, long elapsedMs) {
+        scrapeTimer(library.getVendorType(), outcome).record(elapsedMs, TimeUnit.MILLISECONDS);
+    }
+
+    private static List<String> scrapeOutcomes() {
+        LinkedHashSet<String> outcomes = new LinkedHashSet<>(
+                List.of("found", "empty", "timeout", "daily_limit", "rejected", "error"));
+        for (ELibraryClientException.Kind kind : ELibraryClientException.Kind.values()) {
+            outcomes.add(kind.name().toLowerCase(Locale.ROOT));
+        }
+        return List.copyOf(outcomes);
+    }
+
+    private Timer scrapeTimer(VendorType vendor, String outcome) {
+        return Timer.builder("elibrary.scrape")
+                .description("전자도서관 사이트 수집 한 번의 결과와 걸린 시간")
+                .tag("vendor", vendor.name().toLowerCase(Locale.ROOT))
+                .tag("outcome", outcome)
+                .register(meterRegistry);
+    }
+
+    private static String failureOutcome(Throwable cause) {
+        if (cause instanceof ELibraryClientException e) {
+            return e.kind().name().toLowerCase(Locale.ROOT);
+        }
+        // 우리 풀이 가득 차 수집을 못 함 — 사이트 탓이 아니다
+        return cause instanceof RejectedExecutionException ? "rejected" : "error";
     }
 
     private ELibrarySearchResponse.ELibraryResult timedOutResult(ELibrary library, long elapsedMs) {

@@ -11,6 +11,7 @@ import com.checkbook.search.dto.IdentificationResult;
 import com.checkbook.search.dto.IdentifiedBook;
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.SearchResponse;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -70,7 +71,7 @@ class SharedPoolStarvationTest {
             ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
             ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
             SearchService service = new SearchService(
-                    identificationService, millieBookService, availabilityService, sharedPool);
+                    identificationService, millieBookService, availabilityService, sharedPool, new SimpleMeterRegistry());
 
             long start = System.currentTimeMillis();
             SearchResponse response = service.search(TEST_ISBN, 37.5665, 126.9780, null);
@@ -97,7 +98,7 @@ class SharedPoolStarvationTest {
             ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
             ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
             SearchService service = new SearchService(
-                    identificationService, millieBookService, availabilityService, searchPool);
+                    identificationService, millieBookService, availabilityService, searchPool, new SimpleMeterRegistry());
 
             long start = System.currentTimeMillis();
             SearchResponse response = service.search(TEST_ISBN, 37.5665, 126.9780, null);

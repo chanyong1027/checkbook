@@ -13,6 +13,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.web.client.RestClient;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -45,6 +46,7 @@ class MillieClientTest {
 
     private MillieClient newClient(int timeoutMs, String searchPath) {
         return new MillieClient(
+                RestClient.builder(),
                 new MillieProperties(baseUrl(), timeoutMs, searchPath, "https://millie.example/book/"),
                 ExternalCallBudget.unlimited());
     }

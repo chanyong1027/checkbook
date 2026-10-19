@@ -8,6 +8,7 @@ import com.checkbook.common.ratelimit.ExternalCallBudget;
 import com.checkbook.common.ratelimit.RateLimitProperties;
 import com.checkbook.elibrary.client.ELibClient;
 import com.checkbook.elibrary.client.ELibClientResolver;
+import com.checkbook.elibrary.client.ELibraryClientException;
 import com.checkbook.elibrary.domain.ELibrary;
 import com.checkbook.elibrary.domain.ELibraryStatus;
 import com.checkbook.elibrary.domain.VendorType;
@@ -31,6 +32,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -54,6 +56,7 @@ class ELibrarySearchServiceTest {
     private ExecutorService eLibraryExecutor;
     private final ExternalCallBudget budget = new ExternalCallBudget(
             new RateLimitProperties(true, null, Map.of(), 1), new SimpleMeterRegistry(), Clock.systemUTC());
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private ELibrarySearchService service;
 
     @BeforeEach
@@ -61,7 +64,7 @@ class ELibrarySearchServiceTest {
         eLibraryExecutor = Executors.newFixedThreadPool(5);
         BookMetadataNormalizer normalizer = new BookMetadataNormalizer();
         service = new ELibrarySearchService(eLibraryRepository, clientResolver, eLibraryExecutor,
-                new BookMatcher(normalizer), normalizer, budget);
+                new BookMatcher(normalizer), normalizer, budget, meterRegistry);
     }
 
     @AfterEach
@@ -95,7 +98,7 @@ class ELibrarySearchServiceTest {
                 new SynchronousQueue<>(), new ThreadPoolExecutor.AbortPolicy());
         rejecting.shutdown(); // 이후 제출은 전부 거절된다
         ELibrarySearchService saturated = new ELibrarySearchService(eLibraryRepository, clientResolver, rejecting,
-                new BookMatcher(normalizer), normalizer, budget);
+                new BookMatcher(normalizer), normalizer, budget, meterRegistry);
 
         ELibrarySearchResponse first = saturated.search("자바의 정석", "남궁성", "1");
         assertThat(first.results()).extracting(ELibrarySearchResponse.ELibraryResult::status)
@@ -107,6 +110,37 @@ class ELibrarySearchServiceTest {
         ELibrarySearchResponse second = service.search("자바의 정석", "남궁성", "1");
         assertThat(second.results()).extracting(ELibrarySearchResponse.ELibraryResult::status)
                 .containsExactly(ELibrarySearchStatus.SUCCESS);
+    }
+
+    @Test
+    void 업체와_결과_조합은_수집_전에_0으로_있다() {
+        // 구조 변경처럼 드문 결과가 처음 나는 순간에 생기면 increase()가 그 첫 사건을 못 센다
+        assertThat(meterRegistry.get("elibrary.scrape").tags("vendor", "bookcube", "outcome", "structure_changed")
+                .timer().count()).isZero();
+        assertThat(meterRegistry.get("elibrary.scrape").tags("vendor", "kyobo", "outcome", "endpoint_not_found")
+                .timer().count()).isZero();
+    }
+
+    @Test
+    void 수집_결과를_업체와_결과_종류로_센다() {
+        // 업체 구조 변경 알림이 이 숫자를 믿는다 — 사이트가 아니라 업체 단위로, 실패 종류를 그대로 남겨야 한다
+        when(eLibraryRepository.findAllById(List.of(1L, 2L))).thenReturn(List.of(activeLibrary(1L), activeLibrary(2L)));
+        when(clientResolver.resolve(VendorType.KYOBO)).thenReturn(mockClient);
+        AtomicInteger calls = new AtomicInteger();
+        // 두 사이트 중 먼저 불린 쪽은 0건, 나머지는 구조 변경(순서는 풀에 달려 있어 어느 쪽이든 각 1건)
+        when(mockClient.search(anyString(), anyString())).thenAnswer(invocation -> {
+            if (calls.getAndIncrement() > 0) {
+                throw new ELibraryClientException(ELibraryClientException.Kind.STRUCTURE_CHANGED, "DOM 없음");
+            }
+            return List.of();
+        });
+
+        service.search("자바의 정석", "남궁성", "1,2");
+
+        assertThat(meterRegistry.get("elibrary.scrape").tags("vendor", "kyobo", "outcome", "empty").timer().count())
+                .isEqualTo(1);
+        assertThat(meterRegistry.get("elibrary.scrape").tags("vendor", "kyobo", "outcome", "structure_changed").timer().count())
+                .isEqualTo(1);
     }
 
     @Test

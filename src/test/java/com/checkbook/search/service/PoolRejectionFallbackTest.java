@@ -10,6 +10,7 @@ import com.checkbook.search.dto.IdentifiedBook;
 import com.checkbook.search.dto.SearchResponse;
 import com.checkbook.search.dto.SearchSection;
 import com.checkbook.search.dto.SearchSectionStatus;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -88,7 +89,7 @@ class PoolRejectionFallbackTest {
             ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
             ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
             SearchService service = new SearchService(
-                    identificationService, millieBookService, availabilityService, saturated);
+                    identificationService, millieBookService, availabilityService, saturated, new SimpleMeterRegistry());
 
             // 헬퍼가 없으면 여기서 RejectedExecutionException이 그대로 터진다
             SearchResponse response = service.search(TEST_ISBN, 37.5665, 126.9780, null);
@@ -149,7 +150,7 @@ class PoolRejectionFallbackTest {
             ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
             ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
             SearchService service = new SearchService(
-                    identificationService, millieBookService, availabilityService, healthyParents);
+                    identificationService, millieBookService, availabilityService, healthyParents, new SimpleMeterRegistry());
 
             SearchResponse response = service.search(TEST_ISBN, 37.5665, 126.9780, null);
 

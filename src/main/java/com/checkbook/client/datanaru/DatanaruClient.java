@@ -29,21 +29,23 @@ public class DatanaruClient {
     private final Counter rateLimitedCounter;
     private final ExternalCallBudget budget;
 
-    public DatanaruClient(DatanaruProperties properties, MeterRegistry meterRegistry, ExternalCallBudget budget) {
+    // builder는 Boot 자동 설정 빌더(prototype)라야 http.client.requests가 남는다 — RestClient.builder()로 만들면 관측이 안 붙는다
+    public DatanaruClient(RestClient.Builder builder, DatanaruProperties properties, MeterRegistry meterRegistry,
+                          ExternalCallBudget budget) {
         this.budget = budget;
         this.authKey = properties.authKey();
-        this.defaultClient = buildClient(properties.baseUrl(), properties.timeout());
-        this.listClient = buildClient(properties.baseUrl(), properties.listTimeout());
+        this.defaultClient = buildClient(builder.clone(), properties.baseUrl(), properties.timeout());
+        this.listClient = buildClient(builder.clone(), properties.baseUrl(), properties.listTimeout());
         this.rateLimitedCounter = Counter.builder("datanaru.rate_limited")
                 .description("정보나루 429 Too Many Requests 수신 횟수 (rate limiter 재도입 트리거)")
                 .register(meterRegistry);
     }
 
-    private static RestClient buildClient(String baseUrl, int timeoutMs) {
+    private static RestClient buildClient(RestClient.Builder builder, String baseUrl, int timeoutMs) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(timeoutMs);
         factory.setReadTimeout(timeoutMs);
-        return RestClient.builder()
+        return builder
                 .baseUrl(baseUrl)
                 .requestFactory(factory)
                 .build();

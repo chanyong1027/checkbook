@@ -8,6 +8,7 @@ import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.client.RestClient;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -40,6 +41,7 @@ class KakaoBookClientTest {
                         """));
         server.start();
         KakaoBookClient client = new KakaoBookClient(
+                RestClient.builder(),
                 new KakaoBookProperties(server.url("/").toString().replaceAll("/$", ""), "test-key", 1000), ExternalCallBudget.unlimited());
 
         KakaoBookResponse response = client.searchBooks("혼모노", 1, 10);

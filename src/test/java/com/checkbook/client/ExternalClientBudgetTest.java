@@ -16,6 +16,7 @@ import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.web.client.RestClient;
 
 import java.time.Clock;
 import java.util.Map;
@@ -53,6 +54,7 @@ class ExternalClientBudgetTest {
     @Test
     void 정보나루_bookExist는_예산_소진이면_보내지_않는다() {
         DatanaruClient client = new DatanaruClient(
+                RestClient.builder(),
                 new DatanaruProperties(baseUrl(), "test-key", 1000, 1000), new SimpleMeterRegistry(), budget);
 
         assertThatThrownBy(() -> client.bookExist("9788936434120", "111"))
@@ -65,6 +67,7 @@ class ExternalClientBudgetTest {
         server.enqueue(new MockResponse().setHeader("Content-Type", "application/json")
                 .setBody("{\"response\":{\"docs\":[]}}"));
         DatanaruClient client = new DatanaruClient(
+                RestClient.builder(),
                 new DatanaruProperties(baseUrl(), "test-key", 1000, 1000), new SimpleMeterRegistry(), budget);
 
         client.loanItemSrch(10);
@@ -75,7 +78,7 @@ class ExternalClientBudgetTest {
 
     @Test
     void 밀리는_예산_소진이면_보내지_않는다() {
-        MillieClient client = new MillieClient(new MillieProperties(baseUrl(), 1000, "/v3/search/total", "https://millie.example/book/"), budget);
+        MillieClient client = new MillieClient(RestClient.builder(), new MillieProperties(baseUrl(), 1000, "/v3/search/total", "https://millie.example/book/"), budget);
 
         assertThatThrownBy(() -> client.searchByTitle("소년이 온다"))
                 .isInstanceOf(DailyBudgetExceededException.class);
@@ -84,7 +87,7 @@ class ExternalClientBudgetTest {
 
     @Test
     void 카카오는_예산_소진이면_빈_결과로_삼키지_않고_던진다() {
-        KakaoBookClient client = new KakaoBookClient(new KakaoBookProperties(baseUrl(), "test-key", 1000), budget);
+        KakaoBookClient client = new KakaoBookClient(RestClient.builder(), new KakaoBookProperties(baseUrl(), "test-key", 1000), budget);
 
         // 다른 실패는 빈 결과로 삼키지만, 예산 소진은 사용자에게 이유를 보여야 한다
         assertThatThrownBy(() -> client.searchBooks("소년이 온다", 1, 10))

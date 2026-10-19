@@ -24,14 +24,15 @@ public class MillieClient {
     private final ExternalCallBudget budget;
     private final String searchPath;
 
-    public MillieClient(MillieProperties properties, ExternalCallBudget budget) {
+    // builder는 Boot 자동 설정 빌더(prototype)라야 http.client.requests가 남는다 — RestClient.builder()로 만들면 관측이 안 붙는다
+    public MillieClient(RestClient.Builder builder, MillieProperties properties, ExternalCallBudget budget) {
         this.budget = budget;
         this.searchPath = properties.searchPath();
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(properties.timeout());
         factory.setReadTimeout(properties.timeout());
 
-        this.restClient = RestClient.builder()
+        this.restClient = builder
                 .baseUrl(properties.baseUrl())
                 .defaultHeader("User-Agent", USER_AGENT)
                 .defaultHeader("Accept", "application/json")

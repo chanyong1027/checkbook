@@ -19,6 +19,7 @@ import com.checkbook.search.dto.SearchResponse;
 import com.checkbook.search.dto.SearchSection;
 import com.checkbook.search.dto.SearchSectionReason;
 import com.checkbook.search.dto.SearchSectionStatus;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -78,13 +79,15 @@ class SearchServiceTest {
     private PublicLibraryAvailabilityService publicLibraryAvailabilityService;
 
     private ExecutorService searchExecutor;
+    private SimpleMeterRegistry meterRegistry;
     private SearchService searchService;
 
     @BeforeEach
     void setUp() {
         searchExecutor = Executors.newFixedThreadPool(3);
+        meterRegistry = new SimpleMeterRegistry();
         searchService = new SearchService(
-                identificationService, millieBookService, publicLibraryAvailabilityService, searchExecutor);
+                identificationService, millieBookService, publicLibraryAvailabilityService, searchExecutor, meterRegistry);
         when(millieBookService.findAvailability(any(), any())).thenReturn(MillieAvailability.unavailable());
         when(publicLibraryAvailabilityService.fetch(ISBN, LAT, LON, 0)).thenReturn(libraryPage());
     }
@@ -145,6 +148,33 @@ class SearchServiceTest {
         assertThat(r.metadata().publicLibraryHasMore()).isTrue();
         assertThat(r.metadata().publicLibraryNextOffset()).isEqualTo(5);
         assertThat(r.metadata().failures()).isEmpty();
+    }
+
+    // 알림의 '증상' 지표 — 응답에 실린 섹션 상태를 그대로 센다
+    @Test
+    void sectionStatusesAreCountedAsSeenByUser() {
+        when(identificationService.identify(ISBN, HINT))
+                .thenReturn(new IdentificationResult(Source.HINT, Yes24Status.TIMEOUT, true, HINT_BOOK, null, null));
+
+        searchService.search(ISBN, null, null, HINT);
+
+        assertThat(meterRegistry.get("search.section")
+                .tags("section", "PUBLIC_LIBRARY", "status", "SKIPPED", "reason", "NO_LOCATION")
+                .counter().count()).isEqualTo(1);
+        // 응답의 섹션 4개만 1씩 늘고 나머지(미리 만든 0)는 그대로다
+        assertThat(meterRegistry.get("search.section").counters().stream().mapToDouble(c -> c.count()).sum())
+                .isEqualTo(4);
+    }
+
+    // 처음 실패하는 순간에 카운터가 생기면 첫 값이 1이라 increase()가 못 센다 — 기동 때 0으로 있어야 한다
+    @Test
+    void failureSectionCountersExistAtZeroBeforeAnySearch() {
+        assertThat(meterRegistry.get("search.section")
+                .tags("section", "SUBSCRIPTION", "status", "FAILED", "reason", "TIMEOUT")
+                .counter().count()).isZero();
+        assertThat(meterRegistry.get("search.section")
+                .tags("section", "PUBLIC_LIBRARY", "status", "SKIPPED", "reason", "DAILY_LIMIT")
+                .counter().count()).isZero();
     }
 
     // (b) 정상 ISBN, YES24 타임아웃, 힌트 있음, 위치 없음
@@ -391,7 +421,7 @@ class SearchServiceTest {
         when(identificationService.identify(ISBN, null)).thenReturn(miss(Yes24Status.NOT_FOUND, true));
         ExecutorService unusedExecutor = org.mockito.Mockito.mock(ExecutorService.class);
         SearchService service = new SearchService(
-                identificationService, millieBookService, publicLibraryAvailabilityService, unusedExecutor);
+                identificationService, millieBookService, publicLibraryAvailabilityService, unusedExecutor, new SimpleMeterRegistry());
 
         SearchResponse response = assertConsistent(service.search(ISBN, null, null, null));
 
