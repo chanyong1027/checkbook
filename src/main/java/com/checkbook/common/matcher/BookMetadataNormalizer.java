@@ -34,6 +34,10 @@ public class BookMetadataNormalizer {
 
     private static final Pattern EDITION_NUMBERED = Pattern.compile("제?\\s*\\d+\\s*판");
 
+    // 서점이 괄호 없이 붙이는 판 단어("초판본 데미안", "돈의 속성 400쇄 리커버", F-T21-2). EDITION_MARKERS와 달리
+    // 단어로 떨어져 있을 때만 뗀다 — 어디서든 떼면 "트라우마 리커버리" → "트라우마 리". '쇄'는 숫자가 붙을 때만("연쇄" 보호)
+    private static final Pattern BARE_EDITION_WORD = Pattern.compile("(?<!\\S)(?:초판본|리커버|신장판|\\d+\\s*쇄)(?!\\S)");
+
     private static final Pattern PUNCT = Pattern.compile(
             "[\\(\\)\\[\\]\\{\\}「」『』【】〈〉《》'\\\"\\,\\.!\\?·•~―—–\\-_/\\\\:;]"
     );
@@ -82,6 +86,7 @@ public class BookMetadataNormalizer {
             s = s.replace(marker, " ");
         }
         s = EDITION_NUMBERED.matcher(s).replaceAll(" ");
+        s = BARE_EDITION_WORD.matcher(s).replaceAll(" ");
 
         for (Map.Entry<String, String> e : sentinels.entrySet()) {
             s = s.replace(e.getKey(), normalizeVolumeMarker(e.getValue()));
@@ -119,8 +124,9 @@ public class BookMetadataNormalizer {
             m.appendTail(out);
             s = out.toString();
         } while (!s.equals(previous));
+        s = BARE_EDITION_WORD.matcher(s).replaceAll(" ");
         String keyword = WHITESPACE.matcher(SUBTITLE_SPLIT.split(s, 2)[0]).replaceAll(" ").trim();
-        // 괄호뿐인 제목은 다 떼면 비어 밀리를 부르지 않게 되므로 원래대로 둔다
+        // 괄호·판 단어뿐인 제목은 다 떼면 비어 밀리를 부르지 않게 되므로 원래대로 둔다
         return keyword.isEmpty() ? SUBTITLE_SPLIT.split(raw, 2)[0].trim() : keyword;
     }
 

@@ -144,6 +144,29 @@ class BookMatcherTest {
         }
     }
 
+    // F-T21-2: 서점은 판 단어를 괄호 없이 붙이고 밀리는 원래 제목(또는 다른 판 단어)으로 갖고 있다
+    @Nested
+    class BareEditionWords {
+        @Test
+        void firstEditionPrefixMatchesPlainTitle() {
+            MatchResult r = matcher.match("데미안", "헤르만 헤세", new Selected("초판본 데미안", "헤르만 헤세 저/이미영 역"));
+            assertThat(r.matched()).isTrue();
+        }
+
+        @Test
+        void recoverMatchesOtherEditionOfSameBook() {
+            MatchResult r = matcher.match("돈의 속성 400쇄 개정증보판", "김승호", new Selected("돈의 속성 400쇄 리커버", "김승호 저"));
+            assertThat(r.matched()).isTrue();
+        }
+
+        // 판 단어만 있는 부제 앞부분은 둘 다 빈 값이 되는데, 빈 값끼리를 같은 제목으로 보면 다른 책이 맞는다
+        @Test
+        void editionWordOnlyPrefixesDoNotMatchEachOther() {
+            MatchResult r = matcher.match("리커버: 수레바퀴 아래서", "헤르만 헤세", new Selected("초판본: 데미안", "헤르만 헤세"));
+            assertThat(r.matched()).isFalse();
+        }
+    }
+
     @Nested
     class EmptyNormalizationGuard {
         @Test

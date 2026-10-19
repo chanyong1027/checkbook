@@ -86,5 +86,56 @@ class BookMetadataNormalizerTest {
             assertThat(normalizer.searchKeyword(null)).isEmpty();
             assertThat(normalizer.searchKeyword("  ")).isEmpty();
         }
+
+        // F-T21-2: YES24가 괄호 없이 붙이는 판 단어
+        @ParameterizedTest(name = "{0} → {1}")
+        @CsvSource(delimiter = '|', value = {
+                "초판본 데미안|데미안",
+                "초판본 노인과 바다|노인과 바다",
+                "돈의 속성 400쇄 리커버|돈의 속성",
+                "듄 신장판 1|듄 1"
+        })
+        void stripsBareEditionWords(String title, String expected) {
+            assertThat(normalizer.searchKeyword(title)).isEqualTo(expected);
+        }
+
+        // 단어로 떨어져 있을 때만 뗀다 — 단어 안에 든 경우와 숫자 없는 '쇄'는 제목 일부
+        @ParameterizedTest(name = "{0}")
+        @ValueSource(strings = {"트라우마 리커버리", "연쇄 살인", "봉쇄", "초판본의 비밀"})
+        void keepsEditionWordsInsideOtherWords(String title) {
+            assertThat(normalizer.searchKeyword(title)).isEqualTo(title);
+        }
+
+        @Test
+        void keepsOriginalWhenOnlyEditionWord() {
+            assertThat(normalizer.searchKeyword("리커버")).isEqualTo("리커버");
+        }
+    }
+
+    // 매처 쪽도 같은 판 단어를 떼야 "초판본 데미안"과 밀리 "데미안"이 같은 제목이 된다(F-T21-2)
+    @Nested
+    class NormalizeTitle {
+
+        @ParameterizedTest(name = "{0} = {1}")
+        @CsvSource(delimiter = '|', value = {
+                "초판본 데미안|데미안",
+                "돈의 속성 400쇄 리커버|돈의 속성",
+                "돈의 속성 400쇄 개정증보판|돈의 속성",
+                "듄 신장판 1|듄 1",
+                // 권 표시가 바로 뒤에 와도(권 패턴이 앞 공백까지 먹어 판 단어 뒤에 붙는다) 뗀다
+                "데미안 초판본 1권|데미안 1권"
+        })
+        void stripsBareEditionWords(String title, String sameAs) {
+            assertThat(normalizer.normalizeTitle(title)).isEqualTo(normalizer.normalizeTitle(sameAs));
+        }
+
+        @ParameterizedTest(name = "{0}")
+        @CsvSource(delimiter = '|', value = {
+                "트라우마 리커버리|트라우마리커버리",
+                "연쇄 살인|연쇄살인"
+        })
+        void keepsEditionWordsInsideOtherWords(String title, String expected) {
+            assertThat(normalizer.normalizeTitle(title)).isEqualTo(expected);
+        }
     }
 }
