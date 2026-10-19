@@ -3,6 +3,7 @@ package com.checkbook.elibrary.client;
 import com.checkbook.elibrary.client.ELibraryClientException.Kind;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
+import okhttp3.mockwebserver.SocketPolicy;
 import org.jsoup.HttpStatusException;
 import org.jsoup.UnsupportedMimeTypeException;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -97,6 +98,23 @@ class ELibraryClientFailureKindTest {
             assertThatThrownBy(() -> new KyoboELibClient().search(base(server), "자바"))
                     .isInstanceOfSatisfying(ELibraryClientException.class,
                             e -> assertThat(e.kind()).isEqualTo(Kind.ENDPOINT_NOT_FOUND));
+        }
+    }
+
+    // /elibrary-front는 실제로 쓰이는 경로라, 거기서 접속이 끊기면 사이트가 죽은 것이다(검색 주소 변경 아님, CodeRabbit #47)
+    @Test
+    void 교보_기본_경로가_404여도_대체_경로에서_접속이_끊기면_접속_실패() throws Exception {
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse().setResponseCode(404));
+            // 요청을 읽고 응답 없이 끊는다. HttpURLConnection은 이런 GET을 한 번 다시 보내므로 두 번 끊는다
+            // (DISCONNECT_AT_START는 Jsoup이 빈 200 문서로 받아 구조 변경이 돼 접속 실패를 흉내 내지 못한다)
+            server.enqueue(new MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST));
+            server.enqueue(new MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AFTER_REQUEST));
+            server.start();
+
+            assertThatThrownBy(() -> new KyoboELibClient().search(base(server), "자바"))
+                    .isInstanceOfSatisfying(ELibraryClientException.class,
+                            e -> assertThat(e.kind()).isEqualTo(Kind.CONNECTION_FAILED));
         }
     }
 

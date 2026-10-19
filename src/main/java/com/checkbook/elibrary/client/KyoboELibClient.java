@@ -71,9 +71,10 @@ public class KyoboELibClient implements ELibClient {
                     throw ELibraryClientException.ofIo("교보 전자도서관 접속 실패", e);
                 }
             } catch (IOException e) {
-                // 앞 경로가 404였다면 뒤 경로(/elibrary-front, https 대체)는 대체 시도라, 실패해도 첫 증거인 '검색 주소 없음'으로 본다
-                if (lastException != null) {
-                    log.debug("교보 전자도서관 대체 경로도 실패: {}", candidate, e);
+                // http 주소를 https로 바꿔 본 마지막 후보만 추측이다 — 앞 경로들이 404였다면 그 실패는 '검색 주소 없음'으로 본다.
+                // /elibrary-front는 실제로 쓰이는 경로라, 거기서 접속이 끊기면 사이트가 죽은 것이다(CodeRabbit #47)
+                if (lastException != null && candidate.startsWith("https://") && baseUrl.startsWith("http://")) {
+                    log.debug("교보 전자도서관 https 대체 경로도 실패: {}", candidate, e);
                     continue;
                 }
                 log.warn("교보 전자도서관 검색 실패: {}", candidate, e);
