@@ -17,6 +17,8 @@ import com.checkbook.search.dto.SearchResponse;
 import com.checkbook.search.dto.SearchSection;
 import com.checkbook.search.dto.SearchSectionReason;
 import com.checkbook.search.dto.SearchSectionStatus;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -57,6 +59,7 @@ public class SearchService {
     private final MillieBookService millieBookService;
     private final PublicLibraryAvailabilityService publicLibraryAvailabilityService;
     private final ExecutorService searchExecutor;
+    private final MeterRegistry meterRegistry;
 
     @Value("${search.total-deadline:2800}")
     private long totalDeadlineMs = 2800;
@@ -65,12 +68,14 @@ public class SearchService {
             BookIdentificationService identificationService,
             MillieBookService millieBookService,
             PublicLibraryAvailabilityService publicLibraryAvailabilityService,
-            @Qualifier("searchExecutor") ExecutorService searchExecutor
+            @Qualifier("searchExecutor") ExecutorService searchExecutor,
+            MeterRegistry meterRegistry
     ) {
         this.identificationService = identificationService;
         this.millieBookService = millieBookService;
         this.publicLibraryAvailabilityService = publicLibraryAvailabilityService;
         this.searchExecutor = searchExecutor;
+        this.meterRegistry = meterRegistry;
     }
 
     public SearchResponse search(String q, Double lat, Double lon, BookHint hint) {
@@ -122,6 +127,7 @@ public class SearchService {
         used.appendTo(SearchSection.USED_BOOK, statuses, failures);
         newBook.appendTo(SearchSection.NEW_BOOK, statuses, failures);
         millie.appendTo(SearchSection.SUBSCRIPTION, statuses, failures);
+        countSections(statuses);
 
         PublicLibraryAvailabilityPage publicPage = library.value();
         List<PublicLibraryInfo> publicResults = publicPage != null ? publicPage.libraries() : List.of();
@@ -190,6 +196,21 @@ public class SearchService {
 
         if (latPresent && (lat < -90 || lat > 90 || lon < -180 || lon > 180)) {
             throw new BusinessException(ErrorCode.INVALID_LOCATION);
+        }
+    }
+
+    /**
+     * 사용자가 실제로 본 섹션 결과를 센다(알림의 '증상' 지표). 태그 값은 모두 enum이라 조합 수가 유한하다
+     */
+    private void countSections(List<SearchResponse.SectionStatusDetail> statuses) {
+        for (SearchResponse.SectionStatusDetail detail : statuses) {
+            Counter.builder("search.section")
+                    .description("검색 응답의 섹션별 상태")
+                    .tag("section", detail.section().name())
+                    .tag("status", detail.status().name())
+                    .tag("reason", detail.reason() == null ? "NONE" : detail.reason().name())
+                    .register(meterRegistry)
+                    .increment();
         }
     }
 

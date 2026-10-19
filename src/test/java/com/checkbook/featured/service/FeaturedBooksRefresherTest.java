@@ -9,6 +9,7 @@ import com.checkbook.client.yes24.dto.Yes24CategoryListResponse.Item;
 import com.checkbook.featured.snapshot.domain.FeaturedBook;
 import com.checkbook.featured.snapshot.domain.FeaturedSectionType;
 import com.checkbook.featured.snapshot.domain.FeaturedSource;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -42,7 +43,7 @@ class FeaturedBooksRefresherTest {
     @Mock FeaturedBooksWriter writer;
 
     private FeaturedBooksRefresher refresher() {
-        return new FeaturedBooksRefresher(yes24Client, datanaruClient, writer,
+        return new FeaturedBooksRefresher(yes24Client, datanaruClient, writer, new SimpleMeterRegistry(),
                 15, 30, 168, 84, 168);
     }
 

@@ -11,6 +11,7 @@ import com.checkbook.search.dto.IdentificationResult;
 import com.checkbook.search.dto.IdentifiedBook;
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.SearchResponse;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -116,7 +117,7 @@ class PublicLibraryParallelBenchmarkTest {
                     identificationService,
                     millieBookService,
                     availabilityService,
-                    searchExecutor
+                    searchExecutor, new SimpleMeterRegistry()
             );
             service.search(TEST_ISBN, 37.5665, 126.9780, null);
         } finally {

@@ -10,6 +10,8 @@ import com.checkbook.common.util.InputNormalizer;
 import com.checkbook.featured.snapshot.domain.FeaturedBook;
 import com.checkbook.featured.snapshot.domain.FeaturedSectionType;
 import com.checkbook.featured.snapshot.domain.FeaturedSource;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -28,6 +30,7 @@ public class FeaturedBooksRefresher {
     private final Yes24Client yes24Client;
     private final DatanaruClient datanaruClient;
     private final FeaturedBooksWriter writer;
+    private final MeterRegistry meterRegistry;
     private final int pageSize;
     private final int yes24FetchSize;
     private final Duration bestsellerTtl;
@@ -38,6 +41,7 @@ public class FeaturedBooksRefresher {
             Yes24Client yes24Client,
             DatanaruClient datanaruClient,
             FeaturedBooksWriter writer,
+            MeterRegistry meterRegistry,
             @Value("${featured.page-size:15}") int pageSize,
             // 굿즈·상품 코드·성인 상품을 걸러도 page-size를 채우도록 더 받아 둔다(호출 수는 같다)
             @Value("${featured.yes24-fetch-size:30}") int yes24FetchSize,
@@ -48,6 +52,7 @@ public class FeaturedBooksRefresher {
         this.yes24Client = yes24Client;
         this.datanaruClient = datanaruClient;
         this.writer = writer;
+        this.meterRegistry = meterRegistry;
         this.pageSize = pageSize;
         this.yes24FetchSize = yes24FetchSize;
         this.bestsellerTtl = Duration.ofHours(bestsellerTtlHours);
@@ -68,7 +73,10 @@ public class FeaturedBooksRefresher {
                 case LOAN       -> refreshFromDatanaru(type, loanTtl);
             }
             log.info("featured 섹션 갱신 성공: type={}", type);
+            countRefresh(type, "success");
         } catch (Exception e) {
+            // 실패는 WARN 로그로만 남아 알림(ERROR 기준)에 안 잡힌다 — 이 카운터로 센다. 재시도 안내 WARN은 세지 않는다
+            countRefresh(type, "failure");
             String reason = e.getClass().getSimpleName() + ": "
                     + truncate(e.getMessage(), 480);
             log.warn("featured 섹션 갱신 실패: type={}, reason={}", type, reason, e);
@@ -78,6 +86,15 @@ public class FeaturedBooksRefresher {
                 log.error("featured markFailed 도중 추가 실패: type={}", type, inner);
             }
         }
+    }
+
+    private void countRefresh(FeaturedSectionType type, String result) {
+        Counter.builder("featured.refresh")
+                .description("featured 섹션 갱신 결과")
+                .tag("type", type.name())
+                .tag("result", result)
+                .register(meterRegistry)
+                .increment();
     }
 
     // 우리 쪽 선제한은 클라이언트가 최대 1초 기다려 준다(PR-3 결정 카드 3).
