@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -158,12 +159,19 @@ public class KyoboELibClient implements ELibClient {
     }
 
     // Jsoup에 리다이렉트를 맡기면 어디로 갔는지 묻지 못한다 — 한 번씩 받아 다음 주소를 물은 뒤 따라간다.
-    // Jsoup이 따라갈 때 하는 일을 같게 한다: 받은 쿠키(세션)를 다음 요청에 싣고, Location의 공백을 고치고,
+    // Jsoup이 따라갈 때 하는 일을 같게 한다: 받은 쿠키(세션)를 같은 호스트로 가는 다음 요청에 싣고, Location의 공백을 고치고,
     // 리다이렉트 응답의 형식은 보지 않는다. 마지막 응답은 get()과 같게 404 → HttpStatusException, HTML 아님 → 구조 변경
     private static Document getFollowingAllowedRedirects(String url, Predicate<String> redirectGuard) throws IOException {
         String current = url;
         Map<String, String> cookies = new HashMap<>();
+        String cookieHost = hostOf(url);
         for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
+            // 다른 호스트로 넘어가면 앞 호스트의 쿠키는 싣지 않는다
+            String host = hostOf(current);
+            if (!Objects.equals(host, cookieHost)) {
+                cookies.clear();
+                cookieHost = host;
+            }
             Connection.Response response = Jsoup.connect(current)
                     .headers(HEADERS)
                     .cookies(cookies)
@@ -189,6 +197,15 @@ public class KyoboELibClient implements ELibClient {
             current = next;
         }
         throw new IOException("리다이렉트가 너무 많음: " + url);
+    }
+
+    private static String hostOf(String url) {
+        try {
+            String host = URI.create(url).getHost();
+            return host == null ? null : host.toLowerCase(java.util.Locale.ROOT);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     // get()(ignoreContentType=false)과 같은 기준: text/*·xml이 아니면 HTML 아님

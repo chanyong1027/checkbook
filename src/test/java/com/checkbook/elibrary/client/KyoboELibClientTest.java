@@ -111,6 +111,25 @@ class KyoboELibClientTest {
     }
 
     @Test
+    void 다른_호스트로_넘어가면_앞_호스트의_쿠키는_싣지_않는다() throws Exception {
+        try (MockWebServer first = new MockWebServer(); MockWebServer second = new MockWebServer()) {
+            second.enqueue(new MockResponse()
+                    .setHeader("Content-Type", "text/html; charset=UTF-8")
+                    .setBody("<html><body><ul class=\"book_resultList\"></ul></body></html>"));
+            second.start();
+            first.enqueue(new MockResponse().setResponseCode(302)
+                    .setHeader("Set-Cookie", "JSESSIONID=abc; Path=/")
+                    // 같은 기계지만 이름이 다르면 다른 호스트다(localhost → 127.0.0.1)
+                    .setHeader("Location", "http://127.0.0.1:" + second.getPort() + "/search/searchList.ink"));
+            first.start();
+
+            client.search("http://localhost:" + first.getPort(), "자바", location -> true);
+
+            assertThat(second.takeRequest().getHeader("Cookie")).isNull();
+        }
+    }
+
+    @Test
     void 리다이렉트를_묻는_검색도_HTML이_아니면_구조_변경이다() throws Exception {
         // get()과 같은 분류여야 계약 확인의 판정이 사용자 검색과 같다
         try (MockWebServer server = new MockWebServer()) {

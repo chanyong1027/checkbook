@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.ConnectException;
 import java.net.NoRouteToHostException;
+import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.Locale;
@@ -89,9 +90,13 @@ public class RobotsTxtFetcher {
             return e.getMessage() != null && e.getMessage().toLowerCase(Locale.ROOT).contains("connect timed out");
         }
         // TLS를 맺지 못하면 HTTP 요청이 한 번도 오가지 않는다. http만 받는 포트를 https로 부르면 핸드셰이크 예외가 아니라
-        // 상위의 SSLException("Unsupported or unrecognized SSL message")이 난다(10-21 실사이트 확인: ebook.gne.go.kr:9029)
+        // 상위의 SSLException("Unsupported or unrecognized SSL message")이 난다(10-21 실사이트 확인: ebook.gne.go.kr:9029).
+        // 단, 연결을 맺은 뒤 끊긴 것도 SSLException(원인 SocketException)으로 온다 — 서버가 있으니 빼야 한다
+        if (e instanceof SSLException) {
+            return !(e.getCause() instanceof SocketException);
+        }
         return e instanceof UnknownHostException || e instanceof ConnectException
-                || e instanceof NoRouteToHostException || e instanceof SSLException;
+                || e instanceof NoRouteToHostException;
     }
 
     private static String describe(Throwable e) {
