@@ -4,6 +4,11 @@ import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -66,6 +71,30 @@ class RobotsTxtFetcherTest {
 
         assertThat(result.reachable()).isFalse();
         assertThat(result.serverAbsent()).isTrue();
+    }
+
+    @Test
+    void http만_받는_서버를_https로_부르면_서버가_없는_것이다() throws Exception {
+        // 앱이 http 주소에 붙여 보는 https 갈래가 이 경우다 — TLS를 못 맺어 앱 검색도 닿지 않으니 막을 대상이 없다.
+        // 실제 웹 서버처럼 TLS 인사말에 곧바로 평문 HTTP로 답한다(MockWebServer는 요청 줄을 기다리며 답하지 않아 다르다)
+        try (ServerSocket plainHttp = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            Thread server = new Thread(() -> {
+                try (Socket socket = plainHttp.accept()) {
+                    socket.getInputStream().read(new byte[512]);
+                    socket.getOutputStream().write("HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\n\r\n"
+                            .getBytes(StandardCharsets.US_ASCII));
+                } catch (IOException ignored) {
+                    // 시험 서버 — 클라이언트가 먼저 끊어도 상관없다
+                }
+            });
+            server.start();
+
+            RobotsTxtFetcher.Result result = fetcher.fetch("https://127.0.0.1:" + plainHttp.getLocalPort());
+
+            assertThat(result.reachable()).isFalse();
+            assertThat(result.serverAbsent()).as(result.detail()).isTrue();
+            server.join(2_000);
+        }
     }
 
     @Test

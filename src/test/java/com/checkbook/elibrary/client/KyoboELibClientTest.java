@@ -92,6 +92,39 @@ class KyoboELibClientTest {
     }
 
     @Test
+    void 리다이렉트를_묻는_검색도_받은_세션_쿠키를_다음_요청에_싣는다() throws Exception {
+        // Jsoup이 따라갈 때처럼 싣지 않으면, 세션을 심고 다시 보내는 사이트에서 끝없이 돌다 접속 실패가 된다
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse().setResponseCode(302)
+                    .setHeader("Set-Cookie", "JSESSIONID=abc; Path=/")
+                    .setHeader("Location", "/search/searchList.ink?again=1"));
+            server.enqueue(new MockResponse()
+                    .setHeader("Content-Type", "text/html; charset=UTF-8")
+                    .setBody("<html><body><ul class=\"book_resultList\"></ul></body></html>"));
+            server.start();
+
+            client.search(server.url("/").toString().replaceAll("/$", ""), "자바", location -> true);
+
+            server.takeRequest();
+            assertThat(server.takeRequest().getHeader("Cookie")).contains("JSESSIONID=abc");
+        }
+    }
+
+    @Test
+    void 리다이렉트를_묻는_검색도_HTML이_아니면_구조_변경이다() throws Exception {
+        // get()과 같은 분류여야 계약 확인의 판정이 사용자 검색과 같다
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse().setHeader("Content-Type", "application/json").setBody("{}"));
+            server.start();
+
+            assertThatThrownBy(() -> client.search(server.url("/").toString().replaceAll("/$", ""), "자바", location -> true))
+                    .isInstanceOf(ELibraryClientException.class)
+                    .satisfies(e -> assertThat(((ELibraryClientException) e).kind())
+                            .isEqualTo(ELibraryClientException.Kind.STRUCTURE_CHANGED));
+        }
+    }
+
+    @Test
     void searchInvalidDomThrowsException() throws Exception {
         try (MockWebServer server = new MockWebServer()) {
             server.enqueue(new MockResponse()

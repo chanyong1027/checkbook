@@ -9,7 +9,10 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.ConnectException;
 import java.net.NoRouteToHostException;
+import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
+import java.util.Locale;
+import javax.net.ssl.SSLException;
 import java.time.Duration;
 
 /**
@@ -36,7 +39,8 @@ public class RobotsTxtFetcher {
 
     /**
      * @param reachable    규칙을 받았거나 없음(4xx)을 확인했다
-     * @param serverAbsent 닿지 않은 이유가 "서버가 없다"(DNS 실패·접속 거부)다. 5xx·시간 초과는 서버가 있을 수 있어 false
+     * @param serverAbsent 연결을 맺지 못했다(DNS 실패·접속 거부·접속 시간 초과·TLS를 맺지 못함) — 앱 검색도 그 출처에
+     *                     닿지 못한다. 응답을 받다 끊긴 것(읽기 시간 초과)·5xx는 서버가 있어 false
      */
     public record Result(boolean reachable, RobotsTxt robots, boolean serverAbsent, String detail) {
 
@@ -80,7 +84,14 @@ public class RobotsTxtFetcher {
     }
 
     private static boolean serverAbsent(IOException e) {
-        return e instanceof UnknownHostException || e instanceof ConnectException || e instanceof NoRouteToHostException;
+        if (e instanceof SocketTimeoutException) {
+            // HttpURLConnection은 접속 단계를 "connect timed out", 읽기를 "Read timed out"으로 적는다
+            return e.getMessage() != null && e.getMessage().toLowerCase(Locale.ROOT).contains("connect timed out");
+        }
+        // TLS를 맺지 못하면 HTTP 요청이 한 번도 오가지 않는다. http만 받는 포트를 https로 부르면 핸드셰이크 예외가 아니라
+        // 상위의 SSLException("Unsupported or unrecognized SSL message")이 난다(10-21 실사이트 확인: ebook.gne.go.kr:9029)
+        return e instanceof UnknownHostException || e instanceof ConnectException
+                || e instanceof NoRouteToHostException || e instanceof SSLException;
     }
 
     private static String describe(Throwable e) {

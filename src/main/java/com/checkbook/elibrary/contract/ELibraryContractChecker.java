@@ -324,9 +324,15 @@ public class ELibraryContractChecker {
         };
     }
 
+    // http·https 주소만 후보로 쓴다('//host'처럼 scheme이 없으면 robots 출처를 만들 수 없다)
     private static String hostOf(String baseUrl) {
         try {
-            String host = URI.create(baseUrl).getHost();
+            URI uri = URI.create(baseUrl);
+            String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase(Locale.ROOT);
+            if (!scheme.equals("http") && !scheme.equals("https")) {
+                return null;
+            }
+            String host = uri.getHost();
             return host == null ? null : host.toLowerCase(Locale.ROOT);
         } catch (IllegalArgumentException e) {
             return null;

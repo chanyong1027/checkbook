@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Connection;
 import org.jsoup.HttpStatusException;
 import org.jsoup.Jsoup;
+import org.jsoup.UnsupportedMimeTypeException;
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
@@ -16,6 +17,7 @@ import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
@@ -156,22 +158,28 @@ public class KyoboELibClient implements ELibClient {
     }
 
     // Jsoup에 리다이렉트를 맡기면 어디로 갔는지 묻지 못한다 — 한 번씩 받아 다음 주소를 물은 뒤 따라간다.
-    // 3xx 밖의 처리(404 → HttpStatusException, HTML 아님 → UnsupportedMimeTypeException)는 get()과 같다
+    // Jsoup이 따라갈 때 하는 일을 같게 한다: 받은 쿠키(세션)를 다음 요청에 싣고, Location의 공백을 고치고,
+    // 리다이렉트 응답의 형식은 보지 않는다. 마지막 응답은 get()과 같게 404 → HttpStatusException, HTML 아님 → 구조 변경
     private static Document getFollowingAllowedRedirects(String url, Predicate<String> redirectGuard) throws IOException {
         String current = url;
+        Map<String, String> cookies = new HashMap<>();
         for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
             Connection.Response response = Jsoup.connect(current)
                     .headers(HEADERS)
+                    .cookies(cookies)
                     .timeout(15_000)
                     .followRedirects(false)
+                    .ignoreContentType(true)
                     .execute();
+            cookies.putAll(response.cookies());
             int status = response.statusCode();
             if (status < 300 || status >= 400 || !response.hasHeader("Location")) {
+                requireHtml(response, current);
                 return response.parse();
             }
             String next;
             try {
-                next = URI.create(current).resolve(response.header("Location")).toString();
+                next = URI.create(current).resolve(response.header("Location").strip().replace(" ", "%20")).toString();
             } catch (IllegalArgumentException e) {
                 throw new IOException("잘못된 리다이렉트 주소: " + response.header("Location"), e);
             }
@@ -181,6 +189,14 @@ public class KyoboELibClient implements ELibClient {
             current = next;
         }
         throw new IOException("리다이렉트가 너무 많음: " + url);
+    }
+
+    // get()(ignoreContentType=false)과 같은 기준: text/*·xml이 아니면 HTML 아님
+    private static void requireHtml(Connection.Response response, String url) throws UnsupportedMimeTypeException {
+        String type = response.contentType();
+        if (type != null && !type.startsWith("text/") && !type.matches("(?i)application/(\\w+\\+)?xml.*")) {
+            throw new UnsupportedMimeTypeException("HTML이 아닌 응답", type, url);
+        }
     }
 
     private List<ELibrarySearchResponse.ELibraryBook> parseResults(Document document, String baseUrl) {

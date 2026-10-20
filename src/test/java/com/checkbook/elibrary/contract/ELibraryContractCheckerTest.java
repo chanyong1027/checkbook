@@ -280,6 +280,15 @@ class ELibraryContractCheckerTest {
     }
 
     @Test
+    void scheme이_없는_주소는_후보에서_뺀다() {
+        // robots 출처를 만들 수 없다 — 예외가 새면 그 주 확인 전체가 멈춘다
+        pool(library(1, "//lib1.example.kr"), library(2), library(3), library(4));
+        when(client.search(anyString(), anyString(), any())).thenReturn(List.of());
+
+        assertThat(checker.run().checks()).extracting(c -> c.library().getId()).containsExactly(2L, 3L, 4L);
+    }
+
+    @Test
     void 하루_상한에_닿은_사이트는_건너뛴다() {
         budget = budget(1);
         checker = newChecker();
