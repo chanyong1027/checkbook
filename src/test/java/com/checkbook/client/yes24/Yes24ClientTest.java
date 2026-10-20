@@ -172,6 +172,58 @@ class Yes24ClientTest {
         assertFails(Kind.TIMEOUT, true);
     }
 
+    // ---- 다시 보내면 나을 수 있는 실패(일시 오류) — 재시도·서킷이 이 타입만 센다(T4 결정 카드 T3) ----
+
+    @Test
+    void timeoutIsTransient() {
+        server.enqueue(json(200, foundBody(ISBN, "테스트 책", 13500.0)).setHeadersDelay(1, TimeUnit.SECONDS));
+
+        assertThat(lookupFailure(newClient())).isInstanceOf(Yes24TransientException.class);
+    }
+
+    @Test
+    void slowBodyTimeoutIsTransient() {
+        server.enqueue(json(200, foundBody(ISBN, "테스트 책", 13500.0)).setBodyDelay(1, TimeUnit.SECONDS));
+
+        assertThat(lookupFailure(newClient())).isInstanceOf(Yes24TransientException.class);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {500, 502, 503, 504})
+    void serverErrorIsTransient(int status) {
+        server.enqueue(new MockResponse().setResponseCode(status));
+
+        Yes24Exception e = lookupFailure(newClient());
+
+        assertThat(e).isInstanceOf(Yes24TransientException.class);
+        assertThat(e.kind()).isEqualTo(Kind.FAILED);
+    }
+
+    @Test
+    void connectionFailureIsTransient() throws Exception {
+        Yes24Client client = newClient();
+        server.shutdown();   // 이 주소로는 연결이 거절된다
+
+        Yes24Exception e = lookupFailure(client);
+
+        assertThat(e).isInstanceOf(Yes24TransientException.class);
+        assertThat(e.sent()).isTrue();
+    }
+
+    // 다시 보내도 같은 답이 오는 실패는 일시 오류가 아니다(결정 카드 규칙 2)
+    @Test
+    void clientErrorAndLimitsAndInvalidResponsesAreNotTransient() {
+        server.enqueue(json(404, errorBody("GOODS_001")));
+        server.enqueue(json(400, errorBody("PARAM_001")));
+        server.enqueue(json(429, errorBody("RATE_001")));
+        server.enqueue(json(200, "{\"success\":false,\"message\":\"x\",\"data\":null,\"errorCode\":\"SYS_001\"}"));
+        Yes24Client client = newClient();
+
+        for (int i = 0; i < 4; i++) {
+            assertThat(lookupFailure(client)).isNotInstanceOf(Yes24TransientException.class);
+        }
+    }
+
     // ---- YES24가 준 429 ----
 
     @Test
@@ -462,6 +514,12 @@ class Yes24ClientTest {
         assertThat(e).as("Yes24Exception 기대").isNotNull();
         assertThat(e.kind()).isEqualTo(kind);
         assertThat(e.sent()).as("YES24로 요청을 보냈는가").isEqualTo(sent);
+    }
+
+    private static Yes24Exception lookupFailure(Yes24Client client) {
+        Yes24Exception e = catchThrowableOfType(Yes24Exception.class, () -> client.lookupByIsbn(ISBN));
+        assertThat(e).as("Yes24Exception 기대").isNotNull();
+        return e;
     }
 
     private double counter(String by, String kind) {

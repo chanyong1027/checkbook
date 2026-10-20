@@ -32,7 +32,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * YES24 OpenAPI: ISBN 조회(식별)와 카테고리 목록 조회(메인 추천 배치). 재시도하지 않는다.
+ * YES24 OpenAPI: ISBN 조회(식별)와 카테고리 목록 조회(메인 추천 배치). 클라이언트는 재시도하지 않는다 —
+ * 식별 경로의 재시도·서킷은 {@code BookIdentificationService}가 이 호출을 감싸서 건다(시도마다 아래 선제한·예산을 다시 거친다).
+ * 다시 보내면 나을 수 있는 실패(타임아웃·연결 실패·5xx)는 {@link Yes24TransientException}으로 던진다.
  * <ul>
  *   <li>ISBN 조회: 찾음 → 검증된 {@link Yes24Book}, '책 없음'(404 GOODS_002만) → 빈 결과</li>
  *   <li>목록 조회: 항목 목록, '결과 없음'(404 BEST_001·ATTN_001) → 빈 목록</li>
@@ -228,10 +230,11 @@ public class Yes24Client {
                         return new RawResponse<>(response.getStatusCode().value(), response.getHeaders(), body, parseFailed);
                     });
         } catch (RestClientException e) {
+            // 응답을 못 받은 실패(연결 거절·끊김·타임아웃)는 다시 보내면 나을 수 있다
             if (isTimeout(e)) {
-                throw new Yes24Exception(Kind.TIMEOUT, true, "YES24 타임아웃", e);
+                throw new Yes24TransientException(Kind.TIMEOUT, "YES24 타임아웃", e);
             }
-            throw new Yes24Exception(Kind.FAILED, true, "YES24 호출 실패", e);
+            throw new Yes24TransientException(Kind.FAILED, "YES24 호출 실패", e);
         }
 
         observeRemainingDay(raw.headers(), sentAt);
@@ -240,7 +243,7 @@ public class Yes24Client {
         // 200이 아닌 응답은 상태 코드·헤더만으로 판정하므로(예: HTML 429 + 일일 잔량 0) 덮어쓰지 않는다
         if (raw.status() == 200 && raw.parseFailed()
                 && Duration.ofNanos(System.nanoTime() - startedNanos).compareTo(deadline) >= 0) {
-            throw new Yes24Exception(Kind.TIMEOUT, true, "YES24 타임아웃(본문 수신 중)");
+            throw new Yes24TransientException(Kind.TIMEOUT, "YES24 타임아웃(본문 수신 중)");
         }
         return raw;
     }
@@ -272,8 +275,11 @@ public class Yes24Client {
             countRateLimited("remote", "second");
             return new Yes24Exception(Kind.RATE_LIMITED, true, "YES24 초당 한도 초과");
         }
-        return new Yes24Exception(Kind.FAILED, true,
-                "YES24 오류 응답: HTTP " + status + (errorCode != null ? " " + errorCode : ""));
+        String message = "YES24 오류 응답: HTTP " + status + (errorCode != null ? " " + errorCode : "");
+        // 5xx는 YES24 쪽 일시 장애일 수 있어 다시 보낼 만하다. 4xx는 요청 자체가 틀려 같은 답이 온다
+        return status >= 500
+                ? new Yes24TransientException(Kind.FAILED, message)
+                : new Yes24Exception(Kind.FAILED, true, message);
     }
 
     // 200이어도 정상 결과를 확보하지 못했으면 실패다 (점검 페이지, success=false, 다른 책 등)
