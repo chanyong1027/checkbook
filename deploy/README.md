@@ -210,6 +210,37 @@ sudo bash /opt/checkbook/app/deploy/apply-alloy.sh          # 반영
 
 토큰을 바꿀 때는 `--secrets` 뒤 `--restart`(reset-failed + 재시작 + 준비 확인만 한다. 옵션 없이 실행하면 설정이 같아 "변경 없음"으로 끝나고 재시작하지 않는다).
 
+## 알림: Grafana 규칙
+규칙은 `grafana/rules.py` 한 곳에 있고, 내 PC(WSL)에서 provisioning API로 Grafana Cloud에 반영한다(서버 작업 아님). 근거·숫자는 결정 카드 `notes/decisions/2026-10-19-PR-B-알림규칙-결정카드.md`.
+
+| 등급 | 연락처(Slack) | 규칙 |
+|---|---|---|
+| 즉시 | `slack-urgent`(#checkbook-urgent), 재알림 4시간 | 앱 지표 끊김, 서버 5xx 소진율, 예산 차단선, YES24 RATE_002, 디스크 10% 미만·4시간 안에 참 |
+| 낮 | `slack-info`(#checkbook-info), 재알림 24시간 | 섹션 실패·외부 호출 느림 소진율, 5xx 1건, ERROR 로그, 서킷, 예산 80%, featured 실패·만료·받은 적 없음, 전자도서관 업체 구조 변경, 디스크 하루 안에 참, 메모리 90%, 알림이 보는 지표 사라짐 |
+
+| 파일 | 하는 일 |
+|---|---|
+| `grafana/thresholds.py` | 비율 규칙의 최소 건수 계산(탐침 기준선 + 오탐 예산 → 이항분포). `python3 deploy/grafana/thresholds.py`로 근거 표 |
+| `grafana/rules.py` | 규칙 원본. 같은 식으로 Grafana 규칙 JSON과 promtool 규칙 파일을 만든다(`--list`로 목록) |
+| `grafana/apply-alerts.py` | 반영: 차이 보기 → 원본에서 빠졌거나 묶음을 옮긴 규칙 삭제 → 묶음 PUT → 다시 읽어 같은지 확인 |
+| `grafana/tests/` | `python3 -m unittest discover -s deploy/grafana/tests`(생성기·반영 스크립트, 가짜 Grafana), `bash deploy/grafana/tests/run-promtool.sh`(식을 합성 시리즈로, Docker). `deploy/grafana/**`를 바꾼 PR에서는 CI(`ci-alerts.yml`)가 둘 다 돌린다 |
+
+평소 반영:
+```bash
+python3 deploy/grafana/apply-alerts.py --diff   # 지금 Grafana와 원본의 차이(읽기만)
+python3 deploy/grafana/apply-alerts.py --yes    # 반영 + 확인. --yes가 없으면 차이만 보여 주고 멈춘다
+```
+- API로 넣은 규칙은 UI에서 고칠 수 없다. 고칠 때는 `rules.py`를 고치고 시험 두 가지를 돌린 뒤 다시 반영한다.
+- 질의가 깨지면(문법·데이터 소스) 규칙이 Error 상태가 되어 알림으로 온다. 앱이 기동 때 만드는 지표의 이름을 바꾸면 "알림이 보는 지표가 사라짐"이 15분 뒤 그 이름과 함께 온다. 첫 호출 때 생기는 지표(`http_client_requests_*`, `http_server_requests_*`)는 평소에도 없을 수 있어 이 감시에서 빠진다 — 이 이름을 바꿀 때는 규칙도 같이 고친다.
+- 처음 반영한 뒤 `--diff`를 한 번 더 돌려 "변경 없음"인지 본다. 비교에서 빼는 Grafana 쪽 표기 차이를 가짜 서버로만 시험해서, 실제 응답에서 늘 차이로 보이면(반영 뒤 확인 실패가 반복되면) `normalize()`를 맞춘다.
+- 앱 지표를 새로 쓰는 규칙은 앱이 그 지표를 내보내는 배포가 먼저다(안 그러면 지표 사라짐 알림).
+
+처음 한 번:
+1. Grafana → Alerting에서 폴더 `checkbook`을 만들고 주소의 uid를 적는다. Connections → Data sources에서 Prometheus(`grafanacloud-…-prom`)·Loki(`grafanacloud-…-logs`)의 uid를 적는다(주소 `/datasources/edit/<uid>`).
+2. Administration → Service accounts에서 `checkbook-alerts`를 만들고 역할은 `fixed:alerting.provisioning:writer` 하나만(No basic role), 토큰 만료 2027-10-20. 이 권한은 규칙뿐 아니라 연락처·알림 정책도 바꿀 수 있다(지표·로그는 못 읽는다).
+3. 저장소 `.env`(git에 안 올라감)에 `GRAFANA_URL`·`GRAFANA_ALERTS_TOKEN`·`GRAFANA_ALERTS_FOLDER_UID`·`GRAFANA_PROM_UID`·`GRAFANA_LOKI_UID`.
+4. `--diff` → `--yes` → `--fire-test`(두 채널로 시험 알림 2분 → 시험 규칙 삭제)로 Slack까지 확인.
+
 ## 요청 제한 dry run
 `checkbook.conf`의 `limit_req_dry_run`은 10-18에 `off`로 바꿨다(실제로 막는다). 근거: 사용자가 없을 때는 "실제 사용자가 걸리는지" 관찰할 수 없어 숫자로 판단했다. 사람이 책 한 권을 볼 때는 짧은 시간에 3~4회 요청이라 `/api/` 5r/s(burst 20)에 걸리지 않고, 10-18 access.log 바깥 요청(거의 전부 스캐너)에서도 `/api/`를 IP·초당 5회 넘게 보낸 경우가 0건이었다. 하루 총량과 공급자 예산은 앱 안 요청 제한(`application.yaml`의 `rate-limit`)이 지킨다.
 

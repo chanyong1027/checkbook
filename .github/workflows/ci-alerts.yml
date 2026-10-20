@@ -1,0 +1,43 @@
+name: CI Alerts
+
+# 알림 규칙(deploy/grafana)을 고치는 PR에서 문턱 계산·규칙 생성기·반영 스크립트 시험(가짜 Grafana)과
+# promtool 규칙 시험(합성 시리즈)을 돌린다. 비밀값은 쓰지 않고 실제 Grafana에는 닿지 않는다.
+# 반영은 하지 않는다(내 PC에서 apply-alerts.py로, deploy/README.md '알림: Grafana 규칙')
+on:
+  pull_request:
+    paths:
+      - 'deploy/grafana/**'
+      - '.github/workflows/ci-alerts.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/grafana/**'
+      - '.github/workflows/ci-alerts.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # PR은 새 커밋이 오면 이전 실행을 취소하고, main push는 커밋마다 결과를 남긴다
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 문턱 계산·생성기·반영 스크립트 시험
+        run: python3 -m unittest discover -s deploy/grafana/tests -v
+
+      - name: promtool 규칙 시험
+        run: bash deploy/grafana/tests/run-promtool.sh
