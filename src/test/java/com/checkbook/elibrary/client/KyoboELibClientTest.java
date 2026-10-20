@@ -58,6 +58,40 @@ class KyoboELibClientTest {
     }
 
     @Test
+    void 리다이렉트를_묻는_검색은_거절되면_따라가지_않는다() throws Exception {
+        // 주간 계약 확인용: 리다이렉트된 주소도 robots로 확인한 뒤에만 따라간다
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse().setResponseCode(302).setHeader("Location", "/sso/login"));
+            server.start();
+            String base = server.url("/").toString().replaceAll("/$", "");
+            java.util.List<String> asked = new java.util.ArrayList<>();
+
+            assertThatThrownBy(() -> client.search(base, "자바", location -> {
+                asked.add(location);
+                return false;
+            })).isInstanceOf(KyoboELibClient.RedirectNotAllowedException.class);
+            assertThat(asked).containsExactly(base + "/sso/login");
+            assertThat(server.getRequestCount()).isEqualTo(1);
+        }
+    }
+
+    @Test
+    void 리다이렉트를_묻는_검색은_허락되면_따라가서_읽는다() throws Exception {
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse().setResponseCode(302).setHeader("Location", "/moved/search/searchList.ink"));
+            server.enqueue(new MockResponse()
+                    .setHeader("Content-Type", "text/html; charset=UTF-8")
+                    .setBody("<html><body><ul class=\"book_resultList\"></ul></body></html>"));
+            server.start();
+            String base = server.url("/").toString().replaceAll("/$", "");
+
+            assertThat(client.search(base, "자바", location -> true)).isEmpty();
+            server.takeRequest();
+            assertThat(server.takeRequest().getPath()).isEqualTo("/moved/search/searchList.ink");
+        }
+    }
+
+    @Test
     void searchInvalidDomThrowsException() throws Exception {
         try (MockWebServer server = new MockWebServer()) {
             server.enqueue(new MockResponse()

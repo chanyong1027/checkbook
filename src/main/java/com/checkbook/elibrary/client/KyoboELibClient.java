@@ -3,6 +3,7 @@ package com.checkbook.elibrary.client;
 import com.checkbook.elibrary.domain.VendorType;
 import com.checkbook.elibrary.dto.ELibrarySearchResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.jsoup.Connection;
 import org.jsoup.HttpStatusException;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -11,11 +12,13 @@ import org.jsoup.select.Elements;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -42,6 +45,9 @@ public class KyoboELibClient implements ELibClient {
             "Accept", "text/html,application/xhtml+xml"
     );
 
+    // 리다이렉트를 직접 따라갈 때의 상한(Jsoup 기본과 같은 20)
+    private static final int MAX_REDIRECTS = 20;
+
     private static final Pattern DATE_PATTERN = Pattern.compile("(\\d{4}-\\d{2}-\\d{2})");
 
     // fnContentClick(this, 'cttsDvsnCode', 'brcd', 'ctgrId', 'sntnAuthCode', ...)
@@ -53,8 +59,24 @@ public class KyoboELibClient implements ELibClient {
         return VendorType.KYOBO;
     }
 
+    /** 리다이렉트를 따라가도 되는지 묻는 쪽이 거절했다(자동 수집이 robots가 막은 주소로 끌려가지 않게) */
+    public static class RedirectNotAllowedException extends RuntimeException {
+
+        public RedirectNotAllowedException(String location) {
+            super("리다이렉트를 따라가지 않음: " + location);
+        }
+    }
+
     @Override
     public List<ELibrarySearchResponse.ELibraryBook> search(String rawBaseUrl, String keyword) {
+        return search(rawBaseUrl, keyword, null);
+    }
+
+    /**
+     * @param redirectGuard null이면 리다이렉트를 Jsoup이 따라간다(사용자 검색). 주어지면 리다이렉트마다 다음 주소를 묻고,
+     *                      거절하면 {@link RedirectNotAllowedException}. 주간 계약 확인이 robots를 확인하려고 쓴다
+     */
+    public List<ELibrarySearchResponse.ELibraryBook> search(String rawBaseUrl, String keyword, Predicate<String> redirectGuard) {
         // 끝 '/'가 남은 주소는 '//search'를 부른다(10-20 전수 조사 12곳). 갈래 주소도 이 값으로 만든다
         String baseUrl = stripTrailingSlashes(rawBaseUrl);
         log.info("교보 전자도서관 검색: {}", baseUrl);
@@ -65,7 +87,7 @@ public class KyoboELibClient implements ELibClient {
         // 사이트 하나의 실패는 흔하고(1,964곳) 사람이 고칠 일이 아니라 WARN — ERROR는 알림 대상이라 쓰지 않는다
         for (String candidate : candidates) {
             try {
-                return doSearch(candidate, keyword);
+                return doSearch(candidate, keyword, redirectGuard);
             } catch (HttpStatusException e) {
                 if (e.getStatusCode() == 404) {
                     log.debug("교보 전자도서관 404, 다음 경로 시도: {}", candidate);
@@ -123,13 +145,42 @@ public class KyoboELibClient implements ELibClient {
                 + "&schTxt=" + URLEncoder.encode(keyword, StandardCharsets.UTF_8);
     }
 
-    private List<ELibrarySearchResponse.ELibraryBook> doSearch(String searchBase, String keyword) throws IOException {
-        Document document = Jsoup.connect(searchUrl(searchBase, keyword))
-                .headers(HEADERS)
-                .timeout(15_000)
-                .get();
+    private List<ELibrarySearchResponse.ELibraryBook> doSearch(String searchBase, String keyword,
+                                                                Predicate<String> redirectGuard) throws IOException {
+        String url = searchUrl(searchBase, keyword);
+        Document document = redirectGuard == null
+                ? Jsoup.connect(url).headers(HEADERS).timeout(15_000).get()
+                : getFollowingAllowedRedirects(url, redirectGuard);
 
         return parseResults(document, searchBase);
+    }
+
+    // Jsoup에 리다이렉트를 맡기면 어디로 갔는지 묻지 못한다 — 한 번씩 받아 다음 주소를 물은 뒤 따라간다.
+    // 3xx 밖의 처리(404 → HttpStatusException, HTML 아님 → UnsupportedMimeTypeException)는 get()과 같다
+    private static Document getFollowingAllowedRedirects(String url, Predicate<String> redirectGuard) throws IOException {
+        String current = url;
+        for (int hop = 0; hop <= MAX_REDIRECTS; hop++) {
+            Connection.Response response = Jsoup.connect(current)
+                    .headers(HEADERS)
+                    .timeout(15_000)
+                    .followRedirects(false)
+                    .execute();
+            int status = response.statusCode();
+            if (status < 300 || status >= 400 || !response.hasHeader("Location")) {
+                return response.parse();
+            }
+            String next;
+            try {
+                next = URI.create(current).resolve(response.header("Location")).toString();
+            } catch (IllegalArgumentException e) {
+                throw new IOException("잘못된 리다이렉트 주소: " + response.header("Location"), e);
+            }
+            if (!redirectGuard.test(next)) {
+                throw new RedirectNotAllowedException(next);
+            }
+            current = next;
+        }
+        throw new IOException("리다이렉트가 너무 많음: " + url);
     }
 
     private List<ELibrarySearchResponse.ELibraryBook> parseResults(Document document, String baseUrl) {

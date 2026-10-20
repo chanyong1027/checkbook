@@ -33,7 +33,8 @@ import java.util.function.Consumer;
  * <ul>
  *   <li>2곳 이상 실패하면 다른 3곳을 더 본다. 그래도 2곳 이상이면 업체 공통 장애(템플릿 변경 등) — 코드를 고칠 일</li>
  *   <li>다시 봤더니 괜찮거나 처음부터 1곳만 실패했으면 그 사이트들이 고장 후보 — 사람이 정리(INACTIVE·주소 수정)</li>
- *   <li>robots가 막은 곳·하루 상한·동시 자리가 없는 곳은 세지 않고 다른 곳을 뽑는다(자동 수집은 robots를 따른다)</li>
+ *   <li>robots가 막은 곳·하루 상한·동시 자리가 없는 곳은 세지 않고 다른 곳을 뽑는다(자동 수집은 robots를 따른다).
+ *       검색이 리다이렉트되면 다음 주소도 robots로 확인한 뒤에만 따라간다</li>
  * </ul>
  * 결과는 지표(elibrary.contract.*)로 내보내고 Grafana 규칙이 Slack으로 알린다. 사이트 이름은 WARN 로그에 남긴다.
  */
@@ -96,7 +97,8 @@ public class ELibraryContractChecker {
         this.concurrencyLimiter = concurrencyLimiter;
         this.meterRegistry = meterRegistry;
         this.shuffle = shuffle;
-        // 알림 규칙이 increase()로 본다 — 결과가 처음 나는 순간에 생기면 그 첫 사건을 못 센다
+        // 알림 규칙이 increase()로 본다 — 결과가 처음 나는 순간에 생기면 그 첫 사건을 못 센다.
+        // (0이 한 번은 내보내진 뒤에 올라야 센다: 기동 1분 안에 확인이 끝나면 놓칠 수 있지만 월 09:17 한 번이라 드물다)
         RESULTS.forEach(this::resultCounter);
         this.siteFailed = Counter.builder("elibrary.contract.site.failed")
                 .description("주간 계약 확인에서 고장 후보로 알린 전자도서관 사이트 수")
@@ -110,6 +112,9 @@ public class ELibraryContractChecker {
         Picker picker = new Picker(candidates.iterator());
 
         List<SiteCheck> first = picker.nextBatch();
+        if (Thread.currentThread().isInterrupted()) {
+            return interrupted(first);
+        }
         List<SiteCheck> checks = new ArrayList<>(first);
         List<SiteCheck> failed = new ArrayList<>(first.stream().filter(SiteCheck::failed).toList());
         Report report;
@@ -121,6 +126,9 @@ public class ELibraryContractChecker {
             // 우연히 고장 사이트를 뽑은 것인지, 업체가 바꿔 어디를 뽑아도 깨지는 것인지 가른다
             List<SiteCheck> second = picker.nextBatch();
             checks.addAll(second);
+            if (Thread.currentThread().isInterrupted()) {
+                return interrupted(checks);
+            }
             List<SiteCheck> secondFailed = second.stream().filter(SiteCheck::failed).toList();
             if (second.size() < SITES_PER_BATCH) {
                 report = undetermined(checks, picker);
@@ -133,6 +141,12 @@ public class ELibraryContractChecker {
         }
         record(report);
         return report;
+    }
+
+    // 앱 종료(shutdownNow) 중이면 자리 대기가 곧바로 끝나 '상한'으로 잘못 세어진다 — 판정 없이 끝내고 기록하지 않는다
+    private Report interrupted(List<SiteCheck> checks) {
+        log.info("전자도서관 계약 확인 중단(앱 종료): 본 곳 {}", describe(checks));
+        return new Report("interrupted", checks, List.of());
     }
 
     private Report undetermined(List<SiteCheck> checks, Picker picker) {
@@ -186,7 +200,8 @@ public class ELibraryContractChecker {
 
         List<SiteCheck> nextBatch() {
             List<SiteCheck> batch = new ArrayList<>();
-            while (batch.size() < SITES_PER_BATCH && attempts < MAX_SITE_ATTEMPTS && remaining.hasNext()) {
+            while (batch.size() < SITES_PER_BATCH && attempts < MAX_SITE_ATTEMPTS && remaining.hasNext()
+                    && !Thread.currentThread().isInterrupted()) {
                 ELibrary library = remaining.next();
                 String host = hostOf(library.getBaseUrl());
                 // 한 서버에 포트만 다른 사이트가 여럿이다 — 한 서버가 둘로 세지면 과반 판정이 기운다
@@ -206,7 +221,13 @@ public class ELibraryContractChecker {
 
         /** 건너뛸 사이트면 null */
         private SiteCheck check(ELibrary library) {
-            String robotsSkip = robotsVerdict(library);
+            String robotsSkip;
+            try {
+                robotsSkip = robotsVerdict(library);
+            } catch (IllegalArgumentException e) {
+                // 주소로 검색 URL을 만들지 못함(정리되지 않은 행) — 앱 검색도 실패할 사이트다
+                return new SiteCheck(library, Verdict.UNREACHABLE, "주소 오류: " + e.getMessage());
+            }
             if (robotsSkip != null) {
                 if (robotsSkip.isEmpty()) {
                     robotsBlocked++;
@@ -227,8 +248,13 @@ public class ELibraryContractChecker {
                 return null;
             }
             try {
-                client.search(library.getBaseUrl(), KEYWORD);
+                client.search(library.getBaseUrl(), KEYWORD, this::mayFollow);
                 return new SiteCheck(library, Verdict.OK, "");
+            } catch (KyoboELibClient.RedirectNotAllowedException e) {
+                robotsBlocked++;
+                log.info("전자도서관 계약 확인: id={} 검색이 robots가 막은 주소로 리다이렉트돼 건너뜀({})",
+                        library.getId(), e.getMessage());
+                return null;
             } catch (ELibraryClientException e) {
                 return new SiteCheck(library, verdictOf(e.kind()), e.kind().name().toLowerCase(Locale.ROOT));
             } catch (RuntimeException e) {
@@ -247,24 +273,47 @@ public class ELibraryContractChecker {
             List<String> bases = KyoboELibClient.searchBases(library.getBaseUrl());
             for (int i = 0; i < bases.size(); i++) {
                 URI url = URI.create(KyoboELibClient.searchUrl(bases.get(i), KEYWORD));
-                String origin = url.getScheme() + "://" + url.getRawAuthority();
-                RobotsTxtFetcher.Result robots = robotsByOrigin.computeIfAbsent(origin, robotsFetcher::fetch);
+                RobotsTxtFetcher.Result robots = robotsFor(url);
                 if (!robots.reachable()) {
                     if (i == 0) {
                         return "robots에 닿지 않음: " + robots.detail();
                     }
-                    // 뒤 갈래(http 주소에 붙여 보는 https)의 서버가 없으면 앱 요청도 닿지 않는다 — 막을 대상이 없다.
-                    // 서버는 있는데 5xx면 RFC대로 막힌 것으로 본다
-                    if (robots.serverError()) {
-                        return "";
+                    // 뒤 갈래(http 주소에 붙여 보는 https)의 서버가 없으면(DNS 실패·접속 거부) 앱 요청도 닿지 않는다 —
+                    // 막을 대상이 없다. 5xx·시간 초과는 서버가 있을 수 있어 RFC대로 막힌 것으로 본다
+                    if (robots.serverAbsent()) {
+                        continue;
                     }
-                    continue;
+                    return "";
                 }
-                if (!robots.robots().allows(url.getRawPath() + "?" + url.getRawQuery())) {
+                if (!robots.robots().allows(pathAndQuery(url))) {
                     return "";
                 }
             }
             return null;
+        }
+
+        /** 검색이 리다이렉트될 때 다음 주소. robots에 닿지 않거나 막혔으면 따라가지 않는다 */
+        private boolean mayFollow(String location) {
+            try {
+                URI url = URI.create(location);
+                if (url.getScheme() == null || url.getRawAuthority() == null) {
+                    return false;
+                }
+                RobotsTxtFetcher.Result robots = robotsFor(url);
+                return robots.reachable() && robots.robots().allows(pathAndQuery(url));
+            } catch (IllegalArgumentException e) {
+                return false;
+            }
+        }
+
+        private RobotsTxtFetcher.Result robotsFor(URI url) {
+            String origin = url.getScheme().toLowerCase(Locale.ROOT) + "://" + url.getRawAuthority().toLowerCase(Locale.ROOT);
+            return robotsByOrigin.computeIfAbsent(origin, robotsFetcher::fetch);
+        }
+
+        private static String pathAndQuery(URI url) {
+            String path = url.getRawPath() == null || url.getRawPath().isEmpty() ? "/" : url.getRawPath();
+            return url.getRawQuery() == null ? path : path + "?" + url.getRawQuery();
         }
     }
 

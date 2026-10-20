@@ -83,6 +83,37 @@ class RobotsTxtTest {
     }
 
     @Test
+    void 맨_앞_BOM은_지운다() {
+        // 남아 있으면 첫 'User-agent'가 다른 키가 되어 첫 묶음이 사라지고 전부 허용으로 오판한다
+        assertThat(allowed("\uFEFFUser-agent: *\nDisallow: /")).isFalse();
+    }
+
+    @Test
+    void user_agent는_앞의_제품_토큰만_본다() {
+        assertThat(allowed("User-agent: Mozilla/5.0\nDisallow: /\n\nUser-agent: *\nAllow: /")).isFalse();
+    }
+
+    @Test
+    void 와일드카드_여러_개와_끝_고정() {
+        assertThat(allowed("User-agent: *\nDisallow: /*search*.ink")).isFalse();
+        assertThat(allowed("User-agent: *\nDisallow: /*search*.ink$", "/search/searchList.ink")).isFalse();
+        assertThat(allowed("User-agent: *\nDisallow: /*list*$", "/search/searchList.ink")).isTrue(); // 대소문자를 가린다
+        assertThat(allowed("User-agent: *\nDisallow: /search*")).isFalse();
+        assertThat(allowed("User-agent: *\nDisallow: /search$")).isTrue();
+        assertThat(allowed("User-agent: *\nDisallow: /a*b*c", "/axxbyyc")).isFalse();
+        assertThat(allowed("User-agent: *\nDisallow: /a*b*c$", "/axxbyycz")).isTrue();
+    }
+
+    @Test
+    void 와일드카드가_많은_규칙도_곧바로_끝난다() {
+        // 정규식이면 역추적으로 오래 걸릴 꼴(남의 서버가 주는 값이라 막아 둔다)
+        String rule = "/" + "*a".repeat(30) + "*b";
+        long start = System.nanoTime();
+        assertThat(allowed("User-agent: *\nDisallow: " + rule, "/" + "a".repeat(5_000))).isTrue();
+        assertThat(java.time.Duration.ofNanos(System.nanoTime() - start)).isLessThan(java.time.Duration.ofSeconds(1));
+    }
+
+    @Test
     void 정규식_특수문자는_글자_그대로다() {
         assertThat(allowed("User-agent: *\nDisallow: /search/searchList.ink?schClst=all")).isFalse();
         assertThat(allowed("User-agent: *\nDisallow: /search/searchList(ink)")).isTrue();

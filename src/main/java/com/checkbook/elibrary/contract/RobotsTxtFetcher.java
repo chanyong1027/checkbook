@@ -6,6 +6,10 @@ import org.jsoup.Jsoup;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.net.ConnectException;
+import java.net.NoRouteToHostException;
+import java.net.UnknownHostException;
 import java.time.Duration;
 
 /**
@@ -31,17 +35,17 @@ public class RobotsTxtFetcher {
     }
 
     /**
-     * @param reachable   규칙을 받았거나 없음(4xx)을 확인했다
-     * @param serverError 서버는 응답했지만 5xx 등으로 robots를 주지 못했다(닿지 않음 중에서도 서버는 있는 경우)
+     * @param reachable    규칙을 받았거나 없음(4xx)을 확인했다
+     * @param serverAbsent 닿지 않은 이유가 "서버가 없다"(DNS 실패·접속 거부)다. 5xx·시간 초과는 서버가 있을 수 있어 false
      */
-    public record Result(boolean reachable, RobotsTxt robots, boolean serverError, String detail) {
+    public record Result(boolean reachable, RobotsTxt robots, boolean serverAbsent, String detail) {
 
         public static Result found(RobotsTxt robots) {
             return new Result(true, robots, false, "");
         }
 
-        public static Result unreachable(String detail, boolean serverError) {
-            return new Result(false, null, serverError, detail);
+        public static Result unreachable(String detail, boolean serverAbsent) {
+            return new Result(false, null, serverAbsent, detail);
         }
     }
 
@@ -63,9 +67,23 @@ public class RobotsTxtFetcher {
                 return Result.found(RobotsTxt.ALLOW_ALL);
             }
             // 5xx, 그리고 따라가지 못한 리다이렉트(3xx)
-            return Result.unreachable("http " + status, true);
-        } catch (IOException | IllegalArgumentException e) {
-            return Result.unreachable(e.getClass().getSimpleName() + ": " + e.getMessage(), false);
+            return Result.unreachable("http " + status, false);
+        } catch (IOException e) {
+            return Result.unreachable(describe(e), serverAbsent(e));
+        } catch (UncheckedIOException e) {
+            // Jsoup은 본문을 body()에서 늦게 읽고, 그때 난 입출력 오류(읽기 시간 초과·끊김)를 감싸서 던진다
+            return Result.unreachable(describe(e.getCause()), false);
+        } catch (RuntimeException e) {
+            // 주소 오류 등 — 한 사이트의 예외가 그 주 확인 전체를 멈추지 않게
+            return Result.unreachable(describe(e), false);
         }
+    }
+
+    private static boolean serverAbsent(IOException e) {
+        return e instanceof UnknownHostException || e instanceof ConnectException || e instanceof NoRouteToHostException;
+    }
+
+    private static String describe(Throwable e) {
+        return e.getClass().getSimpleName() + ": " + e.getMessage();
     }
 }

@@ -55,17 +55,33 @@ class RobotsTxtFetcherTest {
             RobotsTxtFetcher.Result result = fetcher.fetch(origin(server));
 
             assertThat(result.reachable()).isFalse();
-            assertThat(result.serverError()).isTrue();
+            assertThat(result.serverAbsent()).isFalse();
             assertThat(result.detail()).contains("503");
         }
     }
 
     @Test
-    void 접속할_수_없으면_닿지_않음이고_서버_오류는_아니다() {
+    void 접속이_거부되면_서버가_없는_것이다() {
         RobotsTxtFetcher.Result result = fetcher.fetch("http://127.0.0.1:1");
 
         assertThat(result.reachable()).isFalse();
-        assertThat(result.serverError()).isFalse();
+        assertThat(result.serverAbsent()).isTrue();
+    }
+
+    @Test
+    void 본문이_시간_안에_다_오지_않으면_예외_없이_닿지_않음이고_서버는_있다() throws Exception {
+        // Jsoup은 본문을 body()에서 늦게 읽어 오류를 UncheckedIOException으로 던진다 — 새면 그 주 확인 전체가 멈춘다
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse()
+                    .setBody("User-agent: *\n" + "# " + "x".repeat(64 * 1024))
+                    .throttleBody(1024, 1, java.util.concurrent.TimeUnit.SECONDS));
+            server.start();
+
+            RobotsTxtFetcher.Result result = new RobotsTxtFetcher(Duration.ofMillis(500)).fetch(origin(server));
+
+            assertThat(result.reachable()).isFalse();
+            assertThat(result.serverAbsent()).isFalse();
+        }
     }
 
     @Test
