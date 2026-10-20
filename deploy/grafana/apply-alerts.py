@@ -121,13 +121,18 @@ class Grafana:
                             allow_404=True)
 
 
+_DURATION_UNITS = {"w": 7 * 86400, "d": 86400, "h": 3600, "m": 60, "s": 1, "ms": 0.001}
+
+
 def _seconds(duration):
-    """'1h30m'·'90s'·'0s' → 초. Grafana가 돌려줄 때 표기가 바뀌어도 같은 값으로 비교하려고"""
+    """'1h30m'·'90s'·'1d' → 초. Grafana가 돌려줄 때 표기가 바뀌어도 같은 값으로 비교하려고
+    (실제로 repeat_interval 24h를 '1d'로 돌려준다). 단위는 Prometheus 기간 표기(w·d·h·m·s·ms)"""
     if isinstance(duration, (int, float)):
-        return int(duration)
+        return duration
     total = 0
-    for value, unit in re.findall(r"(\d+)([hms])", duration or "0s"):
-        total += int(value) * {"h": 3600, "m": 60, "s": 1}[unit]
+    # ms를 m보다 먼저 맞춘다('500ms'가 500분 + s로 읽히지 않게)
+    for value, unit in re.findall(r"(\d+)(ms|[wdhms])", duration or "0s"):
+        total += int(value) * _DURATION_UNITS[unit]
     return total
 
 

@@ -284,6 +284,14 @@ class NormalizeTest(unittest.TestCase):
         self.assertEqual(apply_alerts._seconds("1h"), 3600)
         self.assertEqual(apply_alerts._seconds("0s"), 0)
 
+    def test_Grafana가_일·주_단위로_돌려줘도_같은_값(self):
+        # 실제 Grafana는 repeat_interval 24h를 '1d'로 돌려준다(10-20 첫 반영에서 확인)
+        self.assertEqual(apply_alerts._seconds("1d"), apply_alerts._seconds("24h"))
+        self.assertEqual(apply_alerts._seconds("1w"), 7 * 86400)
+        self.assertEqual(apply_alerts._seconds("1d12h"), 36 * 3600)
+        self.assertEqual(apply_alerts._seconds("1m30s"), 90)
+        self.assertEqual(apply_alerts._seconds("500ms"), 0.5)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -45,6 +45,10 @@ PROVIDER_HOSTS = {
 # 외부 호출 히스토그램에서 1초에 가장 가까운 구간 경계(10ms~10s 자동 구간, 서버 /actuator/prometheus에서 확인)
 SLOW_BUCKET = "1.073741824"
 
+# 알림 요약에 넣는 질의 A의 값. 비율은 0.1834 대신 18.34%로, 건수는 increase()의 외삽으로 소수(2.98)가 나와 정수로
+PCT = "{{ humanizePercentage $values.A.Value }}"
+COUNT = '{{ printf "%.0f" $values.A.Value }}'
+
 APP_LOGS = ("sudo journalctl -o cat CONTAINER_NAME=checkbook-app-blue-1 CONTAINER_NAME=checkbook-app-green-1 "
             "--since '-1 hour'")
 LOKI_APP = '{job="checkbook/journal", container=~"checkbook-app-.+"}'
@@ -56,7 +60,7 @@ class Rule:
     tier: str
     title: str
     expr: str
-    summary: str        # Slack 첫 줄. {{ $labels.x }}, {{ $values.A }} 사용 가능
+    summary: str        # Slack 첫 줄. {{ $labels.x }}, 값은 PCT(비율 → 18.3%)·COUNT(건수 → 정수)
     runbook: list       # 확인할 것(순서대로)
     datasource: str = "prom"
     op: str = "gt"      # 조건 B: A {op} {value}
@@ -166,7 +170,7 @@ def build_rules():
                  + "\n or "
                  + ratio_rule_expr(server_bad, server_total, "", {"": mins["server_5xx_slow"]["server"]},
                                    ratio("server_5xx_slow"), "6h", "30m"),
-            summary="사용자 API 5xx 비율이 SLO 99%의 오류 예산을 빠르게 쓰고 있습니다({{ $values.A }})",
+            summary="사용자 API 5xx 비율이 SLO 99%의 오류 예산을 빠르게 쓰고 있습니다(실패 " + PCT + ")",
             runbook=[
                 "어느 경로인지: Explore `sum by (uri, status) (increase(http_server_requests_seconds_count"
                 f"{{{five_xx}}}[1h]))`",
@@ -216,7 +220,7 @@ def build_rules():
                  + "\n or "
                  + ratio_rule_expr(section_bad, section_total, "section", mins["section_failed_slow"],
                                    ratio("section_failed_slow"), "6h", "30m"),
-            summary="{{ $labels.section }} 섹션 실패 비율이 SLO 99%의 오류 예산을 빠르게 쓰고 있습니다({{ $values.A }})",
+            summary="{{ $labels.section }} 섹션 실패 비율이 SLO 99%의 오류 예산을 빠르게 쓰고 있습니다(실패 " + PCT + ")",
             runbook=[
                 "이유별: Explore `sum by (reason) (increase(search_section_total{section=\"{{ $labels.section }}\", "
                 "status=\"FAILED\"}[1h]))`",
@@ -230,7 +234,7 @@ def build_rules():
                  + "\n or "
                  + ratio_rule_expr(_client_counts("slow"), _client_counts("total"), "client_name",
                                    host_mins["client_slow_slow"], ratio("client_slow_slow"), "6h", "30m"),
-            summary="{{ $labels.client_name }} 호출 중 1초 넘는 비율이 높습니다({{ $values.A }})",
+            summary="{{ $labels.client_name }} 호출 중 1초 넘는 비율이 높습니다(" + PCT + ")",
             runbook=[
                 "분포: Explore `histogram_quantile(0.99, sum by (le) (rate(http_client_requests_seconds_bucket"
                 "{client_name=\"{{ $labels.client_name }}\"}[30m])))`",
@@ -255,7 +259,7 @@ def build_rules():
             uid="cb-error-log", tier=INFO, title="ERROR 로그",
             datasource="loki",
             expr='sum (count_over_time({job="checkbook/journal", level="ERROR"}[5m]))',
-            summary="ERROR 로그가 {{ $values.A }}줄 찍혔습니다(앱 또는 커널)",
+            summary="ERROR 로그가 " + COUNT + "줄 찍혔습니다(앱 또는 커널)",
             runbook=[
                 'Explore(로그): `{job="checkbook/journal", level="ERROR"}`',
                 "커널 줄(OOM 등)이면 `sudo journalctl -k -p err --since '-1 hour'`",
@@ -264,7 +268,7 @@ def build_rules():
             uid="cb-circuit-open", tier=INFO, title="서킷 열림",
             # 상태 게이지는 열림(30초)이 수집 주기(60초)보다 짧아 놓친다 — 열려서 실제로 막은 호출을 센다
             expr=increase("resilience4j_circuitbreaker_not_permitted_calls_total", APP, "10m", by="name") + " > 0",
-            summary="{{ $labels.name }} 서킷이 열려 호출을 막았습니다(10분 {{ $values.A }}회)",
+            summary="{{ $labels.name }} 서킷이 열려 호출을 막았습니다(10분 " + COUNT + "회)",
             runbook=[
                 "실패율: Explore `max by (name) (resilience4j_circuitbreaker_failure_rate)`",
                 "로그: " + APP_LOGS + " | grep -iE 'circuit|폴백'",
@@ -306,7 +310,7 @@ def build_rules():
                 _elibrary_counts('outcome=~"structure_changed|parse_failed|endpoint_not_found"'),
                 _elibrary_counts('outcome!~"daily_limit|rejected"'),
                 "vendor", {"kyobo": 14, "bookcube": 14}, 0.5, "1h"),
-            summary="{{ $labels.vendor }} 전자도서관 수집의 절반 넘게 구조 변경·파싱 실패입니다({{ $values.A }})",
+            summary="{{ $labels.vendor }} 전자도서관 수집의 절반 넘게 구조 변경·파싱 실패입니다(" + PCT + ")",
             runbook=[
                 "한 사이트 반복인지: Explore(로그) `" + LOKI_APP + ' |= "전자도서관 검색 실패" '
                 '|~ "outcome=(structure_changed|parse_failed|endpoint_not_found)"` 에서 id가 하나뿐인지',
