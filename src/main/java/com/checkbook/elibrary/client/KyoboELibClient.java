@@ -33,8 +33,11 @@ public class KyoboELibClient implements ELibClient {
             "검색하신 자료가 없습니다"
     );
 
+    /** 브라우저 UA를 그대로 쓴다(결정 2026-10-20). robots.txt 판정은 이 UA의 제품 토큰(mozilla)으로 한다 */
+    public static final String USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
+
     private static final Map<String, String> HEADERS = Map.of(
-            "User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+            "User-Agent", USER_AGENT,
             "Accept-Language", "ko,en-US;q=0.9",
             "Accept", "text/html,application/xhtml+xml"
     );
@@ -54,16 +57,15 @@ public class KyoboELibClient implements ELibClient {
     public List<ELibrarySearchResponse.ELibraryBook> search(String rawBaseUrl, String keyword) {
         // 끝 '/'가 남은 주소는 '//search'를 부른다(10-20 전수 조사 12곳). 갈래 주소도 이 값으로 만든다
         String baseUrl = stripTrailingSlashes(rawBaseUrl);
-        String encoded = URLEncoder.encode(keyword, StandardCharsets.UTF_8);
         log.info("교보 전자도서관 검색: {}", baseUrl);
 
-        List<String> candidates = buildCandidates(baseUrl);
+        List<String> candidates = searchBases(baseUrl);
         IOException lastException = null;
 
         // 사이트 하나의 실패는 흔하고(1,964곳) 사람이 고칠 일이 아니라 WARN — ERROR는 알림 대상이라 쓰지 않는다
         for (String candidate : candidates) {
             try {
-                return doSearch(candidate, encoded);
+                return doSearch(candidate, keyword);
             } catch (HttpStatusException e) {
                 if (e.getStatusCode() == 404) {
                     log.debug("교보 전자도서관 404, 다음 경로 시도: {}", candidate);
@@ -97,7 +99,12 @@ public class KyoboELibClient implements ELibClient {
         return url.substring(0, end);
     }
 
-    private List<String> buildCandidates(String baseUrl) {
+    /**
+     * 검색을 시도하는 갈래 주소(차례대로): 기본 → /elibrary-front → http면 https의 /elibrary-front.
+     * 앞이 404면 다음으로 간다. 주간 계약 확인이 robots.txt를 볼 때도 이 목록을 쓴다(부르는 주소와 확인한 주소가 같게)
+     */
+    public static List<String> searchBases(String rawBaseUrl) {
+        String baseUrl = stripTrailingSlashes(rawBaseUrl);
         List<String> candidates = new ArrayList<>();
         candidates.add(baseUrl);
         candidates.add(baseUrl + "/elibrary-front");
@@ -108,13 +115,16 @@ public class KyoboELibClient implements ELibClient {
         return candidates;
     }
 
-    private List<ELibrarySearchResponse.ELibraryBook> doSearch(String searchBase, String encodedKeyword) throws IOException {
-        String searchUrl = searchBase + "/search/searchList.ink"
+    /** 갈래 주소 하나의 검색 주소 */
+    public static String searchUrl(String searchBase, String keyword) {
+        return searchBase + "/search/searchList.ink"
                 + "?schClst=all"
                 + "&schDvsn=000"
-                + "&schTxt=" + encodedKeyword;
+                + "&schTxt=" + URLEncoder.encode(keyword, StandardCharsets.UTF_8);
+    }
 
-        Document document = Jsoup.connect(searchUrl)
+    private List<ELibrarySearchResponse.ELibraryBook> doSearch(String searchBase, String keyword) throws IOException {
+        Document document = Jsoup.connect(searchUrl(searchBase, keyword))
                 .headers(HEADERS)
                 .timeout(15_000)
                 .get();
