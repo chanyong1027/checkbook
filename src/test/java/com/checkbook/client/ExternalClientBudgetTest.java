@@ -38,7 +38,7 @@ class ExternalClientBudgetTest {
                 new RateLimitProperties(true, null, Map.of(
                         ExternalProvider.DATANARU, new RateLimitProperties.Provider(10, 0),
                         ExternalProvider.MILLIE, new RateLimitProperties.Provider(10, 0),
-                        ExternalProvider.KAKAO, new RateLimitProperties.Provider(10, 0)), 1000),
+                        ExternalProvider.KAKAO, new RateLimitProperties.Provider(10, 0)), 1000, 200, 2),
                 new SimpleMeterRegistry(), Clock.systemUTC());
     }
 

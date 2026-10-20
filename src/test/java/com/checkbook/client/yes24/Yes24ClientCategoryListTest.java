@@ -348,7 +348,7 @@ class Yes24ClientCategoryListTest {
     private static ExternalCallBudget yes24Budget(int dailyLimit, int blockAt) {
         return new ExternalCallBudget(
                 new RateLimitProperties(true, null,
-                        Map.of(ExternalProvider.YES24, new RateLimitProperties.Provider(dailyLimit, blockAt)), 1000),
+                        Map.of(ExternalProvider.YES24, new RateLimitProperties.Provider(dailyLimit, blockAt)), 1000, 200, 2),
                 new SimpleMeterRegistry(), Clock.systemUTC());
     }
 

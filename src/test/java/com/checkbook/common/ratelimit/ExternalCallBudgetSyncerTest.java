@@ -40,7 +40,7 @@ class ExternalCallBudgetSyncerTest {
 
     private ExternalCallBudget budget(boolean enabled) {
         return new ExternalCallBudget(new RateLimitProperties(enabled, null, Map.of(
-                ExternalProvider.DATANARU, new RateLimitProperties.Provider(100, 90)), 1000),
+                ExternalProvider.DATANARU, new RateLimitProperties.Provider(100, 90)), 1000, 200, 2),
                 new SimpleMeterRegistry(), clock);
     }
 
@@ -104,7 +104,7 @@ class ExternalCallBudgetSyncerTest {
     @Test
     void 전자도서관_사이트별_키도_동기화한다() {
         ExternalCallBudget budget = budget(true);
-        budget.acquireELibrary(7L);
+        budget.acquireELibrary(7L, false);
         when(store.load(TODAY)).thenReturn(Map.of("elibrary:7", 1));
 
         new ExternalCallBudgetSyncer(budget, store, meterRegistry).sync();
@@ -117,8 +117,8 @@ class ExternalCallBudgetSyncerTest {
         // DB가 죽어 있으면 키마다 연결 대기(기본 30초)를 반복하지 않는다(리뷰 F1)
         ExternalCallBudget budget = budget(true);
         budget.acquire(ExternalProvider.DATANARU);
-        budget.acquireELibrary(1L);
-        budget.acquireELibrary(2L);
+        budget.acquireELibrary(1L, false);
+        budget.acquireELibrary(2L, false);
         doThrow(new DataAccessResourceFailureException("DB 끊김")).when(store).add(anyString(), any(), anyInt());
         ExternalCallBudgetSyncer syncer = new ExternalCallBudgetSyncer(budget, store, meterRegistry);
 

@@ -43,7 +43,7 @@ class PublicLibraryAvailabilityServiceTest {
     private ExecutorService publicLibraryExecutor;
     private final ExternalCallBudget budget = new ExternalCallBudget(
             new RateLimitProperties(true, null,
-                    Map.of(ExternalProvider.DATANARU, new RateLimitProperties.Provider(100, 90)), 1000),
+                    Map.of(ExternalProvider.DATANARU, new RateLimitProperties.Provider(100, 90)), 1000, 200, 2),
             new SimpleMeterRegistry(), Clock.systemUTC());
     private PublicLibraryAvailabilityService service;
 

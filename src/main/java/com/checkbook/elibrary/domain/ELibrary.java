@@ -44,6 +44,10 @@ public class ELibrary extends BaseEntity {
     @Column(name = "login_required", nullable = false)
     private boolean loginRequired;
 
+    /** robots.txt가 앱이 부르는 경로를 막는 사이트. 사용자 1회 조회는 허용하되 하루 상한을 낮춘다(결정 2026-10-20) */
+    @Column(name = "robots_disallowed", nullable = false)
+    private boolean robotsDisallowed;
+
     @Builder
     public ELibrary(
             String name,
@@ -51,7 +55,8 @@ public class ELibrary extends BaseEntity {
             String baseUrl,
             String region,
             ELibraryStatus status,
-            boolean loginRequired
+            boolean loginRequired,
+            boolean robotsDisallowed
     ) {
         this.name = name;
         this.vendorType = vendorType;
@@ -59,5 +64,6 @@ public class ELibrary extends BaseEntity {
         this.region = region;
         this.status = status;
         this.loginRequired = loginRequired;
+        this.robotsDisallowed = robotsDisallowed;
     }
 }
