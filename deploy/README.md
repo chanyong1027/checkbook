@@ -236,10 +236,12 @@ python3 deploy/grafana/apply-alerts.py --yes    # 반영 + 확인. --yes가 없�
 - 앱 지표를 새로 쓰는 규칙은 앱이 그 지표를 내보내는 배포가 먼저다(안 그러면 지표 사라짐 알림).
 
 처음 한 번:
-1. Grafana → Alerting에서 폴더 `checkbook`을 만들고 주소의 uid를 적는다. Connections → Data sources에서 Prometheus(`grafanacloud-…-prom`)·Loki(`grafanacloud-…-logs`)의 uid를 적는다(주소 `/datasources/edit/<uid>`).
-2. Administration → Service accounts에서 `checkbook-alerts`를 만들고 역할은 `fixed:alerting.provisioning:writer` 하나만(No basic role), 토큰 만료 2027-10-20. 이 권한은 규칙뿐 아니라 연락처·알림 정책도 바꿀 수 있다(지표·로그는 못 읽는다).
-3. 저장소 `.env`(git에 안 올라감)에 `GRAFANA_URL`·`GRAFANA_ALERTS_TOKEN`·`GRAFANA_ALERTS_FOLDER_UID`·`GRAFANA_PROM_UID`·`GRAFANA_LOKI_UID`.
-4. `--diff` → `--yes` → `--fire-test`(두 채널로 시험 알림 2분 → 시험 규칙 삭제)로 Slack까지 확인.
+1. Grafana → Dashboards → New → New folder로 폴더 `checkbook`을 만들고 주소(`/dashboards/f/<uid>/checkbook`)의 uid를 적는다(알림 규칙도 대시보드와 같은 폴더를 쓴다). Connections → Data sources에서 Prometheus·Loki의 uid를 적는다(주소 `/connections/datasources/edit/<uid>`, Grafana Cloud 기본은 `grafanacloud-prom`·`grafanacloud-logs`).
+2. Administration → Users and access → Service accounts에서 `checkbook-alerts`를 만들고 Role은 No basic role, 고정 역할은 Alerting의 **Access to alert rules provisioning API**(`fixed:alerting.provisioning:writer`) 하나만. 같은 이름의 Provisioning(connection·jobs·repositories)은 Git Sync용이라 고르지 않는다. 토큰 만료 2027-10-20. 이 권한은 규칙뿐 아니라 연락처·알림 정책도 바꿀 수 있다(지표·로그는 못 읽는다).
+3. 저장소 `.env`(git에 안 올라감)에 `GRAFANA_URL`(브라우저로 여는 `https://<스택>.grafana.net`)·`GRAFANA_ALERTS_TOKEN`·`GRAFANA_ALERTS_FOLDER_UID`·`GRAFANA_PROM_UID`·`GRAFANA_LOKI_UID`.
+4. `--diff` → `--yes` → 다시 `--diff`로 "변경 없음" → `--fire-test`(두 채널로 시험 알림 → 시험 규칙 삭제, 몇 분 뒤 `[RESOLVED]`가 한 번 더 온다)로 Slack까지 확인.
+- 알림의 `Value: A=…, B=…`: A는 질의 값(규칙마다 비율·사용량·건수 등), B는 조건 결과(울렸으면 늘 1). 요약 첫 줄에도 A를 백분율·정수로 넣었다.
+- Explore에서 ERROR 로그 질의가 No data면 대개 그 시간에 앱 로그가 없어서다(트래픽이 없으면 앱이 거의 찍지 않는다). `sum by (level) (count_over_time({job="checkbook/journal"}[1h]))`를 24시간 범위로 보면 라벨·전송이 살아 있는지 알 수 있다.
 
 ## 요청 제한 dry run
 `checkbook.conf`의 `limit_req_dry_run`은 10-18에 `off`로 바꿨다(실제로 막는다). 근거: 사용자가 없을 때는 "실제 사용자가 걸리는지" 관찰할 수 없어 숫자로 판단했다. 사람이 책 한 권을 볼 때는 짧은 시간에 3~4회 요청이라 `/api/` 5r/s(burst 20)에 걸리지 않고, 10-18 access.log 바깥 요청(거의 전부 스캐너)에서도 `/api/`를 IP·초당 5회 넘게 보낸 경우가 0건이었다. 하루 총량과 공급자 예산은 앱 안 요청 제한(`application.yaml`의 `rate-limit`)이 지킨다.
