@@ -239,14 +239,12 @@ def build_rules():
             lazy_metrics=("http_client_requests_seconds_count", "http_client_requests_seconds_bucket")),
         Rule(
             uid="cb-server-5xx", tier=INFO, title="서버 5xx 발생",
-            # increase()는 처음 생기는 시리즈의 첫 값을 못 센다(앱에서 미리 못 만듦) — 그 전 30분 동안 한 번도 없던 시리즈의
-            # 값을 따로 본다. 수집 실패·공백이 거짓 '새 시리즈'로 보이지 않게 두 겹으로 막는다:
-            #  - 수집이 한 번 실패하면 시리즈에 끊김(stale) 표식이 붙어 'offset 5m' 한 점은 비어 보인다 → 범위(last_over_time)로 본다
-            #  - 30분 넘게 끊겼다 돌아오면 → 그 칸이 5분 전에도 수집되고 있었을 때만(대기 칸도 up=0 시리즈는 있어 새로 뜬 칸은 잡는다)
-            expr=(f"(sum (increase(http_server_requests_seconds_count{{{five_xx}}}[5m])) > 0)\n"
-                  f" or (sum (http_server_requests_seconds_count{{{five_xx}}}\n"
-                  f"     unless last_over_time(http_server_requests_seconds_count{{{five_xx}}}[30m] offset 5m)\n"
-                  f"     and on (slot) up{{{APP}}} offset 5m) > 0)"),
+            # increase()만 본다. 5xx 시리즈는 Micrometer가 상태 코드 태그로 첫 응답 때 만들어서(앱에서 미리 못 만듦)
+            # 프로세스당 (경로·상태)별 첫 5xx는 이 규칙이 못 센다 — 예상 못 한 500은 GlobalExceptionHandler가 ERROR로 찍어
+            # 'ERROR 로그' 규칙(같은 낮 등급)이 첫 건부터 잡는다. ERROR 없이 나가는 5xx는 503 예산 소진(차단선 알림이 즉시로
+            # 잡음)과 전자도서관 업체 해석 실패(코드 버그)뿐이다. 첫 시리즈를 식으로 추측하던 방식은 수집 공백·끊김 표식·
+            # 긴 수집 실패마다 옛 누적값을 새 사건으로 세는 구멍이 나와 뺐다(PR-B 결정 카드, 리뷰 3회)
+            expr=f"sum (increase(http_server_requests_seconds_count{{{five_xx}}}[5m])) > 0",
             summary="사용자 API에서 5xx가 났습니다",
             runbook=[
                 "경로: Explore `sum by (uri, status) (increase(http_server_requests_seconds_count{" + five_xx + "}[1h]))`",

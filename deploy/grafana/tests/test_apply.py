@@ -204,6 +204,14 @@ class ApplyTest(unittest.TestCase):
         self.assertEqual(apply_alerts._env_value("a#b"), "a#b")
         self.assertEqual(apply_alerts._env_value("'tok' # it's mine"), "tok", "주석 속 따옴표가 값에 붙으면 안 된다")
 
+    def test_Grafana에서_멈춘_규칙은_다시_켠다(self):
+        self.run_main("--yes")
+        self.fake.rules["cb-app-down"]["isPaused"] = True
+        code, out, _ = self.run_main("--yes")
+        self.assertEqual(code, 0)
+        self.assertIn("~ cb-app-down: isPaused", out)
+        self.assertFalse(self.fake.rules["cb-app-down"]["isPaused"])
+
     def test_바뀐_항목을_보여_준다(self):
         self.run_main("--yes")
         self.fake.rules["cb-app-down"]["noDataState"] = "OK"

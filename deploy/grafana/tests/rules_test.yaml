@@ -36,22 +36,23 @@ tests:
         exp_alerts: []
 
   # ---------- 서버 5xx 1건 ----------
-  - name: 처음 생기는 5xx 시리즈도 잡고, 5분 지나면 풀린다
+  - name: 5xx가 늘면 울리고 5분 지나면 풀린다. 시리즈의 첫 건은 이 규칙이 못 센다(ERROR 로그 규칙이 맡음)
     interval: 1m
     input_series:
-      - series: 'up{job="checkbook-app", slot="blue", instance="127.0.0.1:8081"}'
-        values: '1x20'
       - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="blue", uri="/api/search", status="200"}'
         values: '0+1x20'
-      # 10분에 처음 생김(값 1) — increase()만으로는 못 센다
+      # 10분에 처음 생김(값 1, increase()로는 증가가 아님), 12분에 둘째(1 → 2)
       - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="blue", uri="/api/search", status="500"}'
-        values: '_x9 1x10'
+        values: '_x9 1x2 2x8'
     alert_rule_test:
       - eval_time: 11m
         alertname: cb-server-5xx
+        exp_alerts: []
+      - eval_time: 13m
+        alertname: cb-server-5xx
         exp_alerts:
           - exp_labels: {tier: info}
-      - eval_time: 17m
+      - eval_time: 19m
         alertname: cb-server-5xx
         exp_alerts: []
 
@@ -448,19 +449,6 @@ tests:
         alertname: cb-server-5xx
         exp_alerts: []
 
-  - name: 막 뜬 칸(대기 칸이라 up=0이던)의 첫 5xx는 잡는다
-    interval: 1m
-    input_series:
-      - series: 'up{job="checkbook-app", slot="green", instance="127.0.0.1:8082"}'
-        values: '0x9 1x10'
-      - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="green", uri="/api/search", status="502"}'
-        values: '_x14 1x5'
-    alert_rule_test:
-      - eval_time: 15m
-        alertname: cb-server-5xx
-        exp_alerts:
-          - exp_labels: {tier: info}
-
   - name: 수집이 한 번만 실패해도(끊김 표식) 옛 5xx 시리즈를 새것으로 세지 않는다
     interval: 1m
     input_series:
@@ -474,5 +462,17 @@ tests:
         alertname: cb-server-5xx
         exp_alerts: []
       - eval_time: 16m
+        alertname: cb-server-5xx
+        exp_alerts: []
+
+  - name: 수집이 40분 실패(up=0)했다 돌아와 옛 5xx 누적값이 다시 보여도 울리지 않는다
+    interval: 1m
+    input_series:
+      - series: 'up{job="checkbook-app", slot="blue", instance="127.0.0.1:8081"}'
+        values: '1x9 0x40 1x10'
+      - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="blue", uri="/api/search", status="500"}'
+        values: '3x9 _x40 3x10'
+    alert_rule_test:
+      - eval_time: 52m
         alertname: cb-server-5xx
         exp_alerts: []

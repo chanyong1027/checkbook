@@ -142,6 +142,8 @@ def normalize(rule):
         "datasource": query.get("datasourceUid"),
         "evaluator": ((condition.get("model") or {}).get("conditions") or [{}])[0].get("evaluator"),
         "for": _seconds(rule.get("for")),
+        # 누가 Grafana에서 멈춰 둔 규칙을 '변경 없음'으로 넘기면 알림이 꺼진 줄 모른다
+        "isPaused": bool(rule.get("isPaused", False)),
         "noDataState": rule.get("noDataState"),
         "execErrState": rule.get("execErrState"),
         "annotations": rule.get("annotations") or {},
