@@ -1,6 +1,7 @@
 package com.checkbook.search.service;
 
 import com.checkbook.client.millie.MillieClient;
+import com.checkbook.client.millie.MillieClientException;
 import com.checkbook.client.millie.MillieProperties;
 import com.checkbook.client.millie.dto.MillieBookItem;
 import com.checkbook.common.matcher.BookMetadataNormalizer;
@@ -8,8 +9,10 @@ import com.checkbook.search.dto.IdentifiedBook;
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.MillieAvailability.Format;
 import com.checkbook.search.service.MillieBookMatcher.MatchedMillie;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.micrometer.core.instrument.MeterRegistry;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -18,14 +21,39 @@ import java.util.Optional;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class MillieBookService {
+
+    // 서킷 인스턴스 이름(설정 resilience4j.circuitbreaker.instances.millie, 지표·알림의 name 태그)
+    static final String CIRCUIT_BREAKER_NAME = "millie";
 
     private final MillieClient millieClient;
     private final MillieBookMatcher matcher;
     private final BookMetadataNormalizer normalizer;
     private final MeterRegistry meterRegistry;
     private final MillieProperties properties;
+    private final CircuitBreaker circuitBreaker;
+
+    public MillieBookService(MillieClient millieClient, MillieBookMatcher matcher, BookMetadataNormalizer normalizer,
+                             MeterRegistry meterRegistry, MillieProperties properties,
+                             CircuitBreakerRegistry circuitBreakerRegistry) {
+        this.millieClient = millieClient;
+        this.matcher = matcher;
+        this.normalizer = normalizer;
+        this.meterRegistry = meterRegistry;
+        this.properties = properties;
+        this.circuitBreaker = circuitBreakerRegistry.circuitBreaker(CIRCUIT_BREAKER_NAME);
+    }
+
+    // 밀리는 비공식 API라 막힐 수 있다(WAF 403) — 막힌 동안 계속 두드리지 않게 서킷으로 감싼다(T4 결정 카드 4).
+    // 열리면 섹션은 지금 실패와 같은 FAILED·UNAVAILABLE. 메시지는 응답 failures[].reason으로 나가 라이브러리 원문 대신 우리 문구로
+    private List<MillieBookItem> search(String keyword) {
+        try {
+            return circuitBreaker.executeSupplier(() -> millieClient.searchByTitle(keyword));
+        } catch (CallNotPermittedException e) {
+            log.info("밀리 검색 생략(서킷 열림): keyword={}", keyword);
+            throw new MillieClientException("밀리 일시 중단(서킷 열림)", e);
+        }
+    }
 
     /**
      * @param book         매칭 기준 책 정보(YES24 또는 힌트). 검색어도 이 제목으로 만든다
@@ -42,7 +70,7 @@ public class MillieBookService {
         // 풀타이틀(부제·판 정보 괄호 포함)로 검색하면 밀리에서 0건 나오는 경우가 잦아
         // 부제와 판 정보 괄호를 뗀 키워드로 검색. 정확도는 이후 matcher가 책임.
         String keyword = normalizer.searchKeyword(book.title());
-        List<MillieBookItem> candidates = millieClient.searchByTitle(keyword);
+        List<MillieBookItem> candidates = search(keyword);
         if (candidates.isEmpty()) {
             meterRegistry.counter("millie.match", "via", "no_candidates").increment();
             log.info("밀리 검색 결과 0건: keyword={}, title={}",

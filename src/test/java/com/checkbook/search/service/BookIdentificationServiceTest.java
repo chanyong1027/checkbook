@@ -3,12 +3,19 @@ package com.checkbook.search.service;
 import com.checkbook.client.yes24.Yes24Client;
 import com.checkbook.client.yes24.Yes24Exception;
 import com.checkbook.client.yes24.Yes24Exception.Kind;
+import com.checkbook.client.yes24.Yes24NotSentPredicate;
+import com.checkbook.client.yes24.Yes24TransientException;
 import com.checkbook.client.yes24.dto.Yes24Book;
 import com.checkbook.search.dto.BookHint;
 import com.checkbook.search.dto.IdentificationResult;
 import com.checkbook.search.dto.IdentificationResult.Source;
 import com.checkbook.search.dto.IdentificationResult.Yes24Status;
 import com.checkbook.search.dto.IdentifiedBook;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.github.resilience4j.retry.RetryConfig;
+import io.github.resilience4j.retry.RetryRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,11 +24,14 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -41,15 +51,33 @@ class BookIdentificationServiceTest {
     private static final IdentifiedBook HINT_BOOK_FOR_FALLBACK = new IdentifiedBook(
             "힌트 제목", "힌트 저자", ISBN, "힌트출판", "https://search1.kakaocdn.net/thumb/1.jpg");
 
+    // application.yaml resilience4j.*.instances.yes24와 같은 기준. 대기만 짧게(1ms) — 운영 값은 연결 시험(Yes24ClientWiringTest)이 본다
+    static final RetryConfig RETRY = RetryConfig.custom()
+            .maxAttempts(2)
+            .waitDuration(Duration.ofMillis(1))
+            .retryExceptions(Yes24TransientException.class)
+            .build();
+    static final CircuitBreakerConfig CIRCUIT = CircuitBreakerConfig.custom()
+            .slidingWindowSize(10)
+            .minimumNumberOfCalls(10)
+            .failureRateThreshold(50)
+            .waitDurationInOpenState(Duration.ofSeconds(30))
+            .permittedNumberOfCallsInHalfOpenState(3)
+            .recordExceptions(Yes24TransientException.class)
+            .ignoreException(new Yes24NotSentPredicate())
+            .build();
+
     private Yes24Client yes24Client;
     private SimpleMeterRegistry meterRegistry;
+    private CircuitBreakerRegistry circuitBreakerRegistry;
     private BookIdentificationService service;
 
     @BeforeEach
     void setUp() {
         yes24Client = mock(Yes24Client.class);
         meterRegistry = new SimpleMeterRegistry();
-        service = new BookIdentificationService(yes24Client, meterRegistry);
+        circuitBreakerRegistry = CircuitBreakerRegistry.of(CIRCUIT);
+        service = new BookIdentificationService(yes24Client, meterRegistry, circuitBreakerRegistry, RetryRegistry.of(RETRY));
     }
 
     // ---- YES24 결과 9가지(7종 + 한도의 우리 쪽/YES24 구분 + 예상 못 한 예외) × 힌트 {유효, 없음, 무효} ----
@@ -95,7 +123,7 @@ class BookIdentificationServiceTest {
 
         assertThat(result.yes24()).isEqualTo(expectedYes24);
         assertThat(result.yes24Sent()).isEqualTo(expectedSent);
-        verify(yes24Client, times(1)).lookupByIsbn(ISBN);   // 재시도 없음
+        verify(yes24Client, times(1)).lookupByIsbn(ISBN);   // 일시 오류(Yes24TransientException)가 아니면 재시도 없음
 
         if (expectedYes24 == Yes24Status.FOUND) {
             // 힌트 유무와 무관하게 YES24 값
@@ -228,6 +256,126 @@ class BookIdentificationServiceTest {
 
         assertThat(result.price()).isEqualTo(10000);
         assertThat(result.productUrl()).isNull();
+    }
+
+    // ---- 재시도 (T4 결정 카드 2·2-1, 규칙 1·2·5) ----
+
+    @Test
+    void transientFailureIsRetriedOnceAndSucceeds() {
+        when(yes24Client.lookupByIsbn(ISBN))
+                .thenThrow(transientTimeout())
+                .thenReturn(Optional.of(YES24_BOOK));
+
+        IdentificationResult result = service.identify(ISBN, null);
+
+        assertThat(result.yes24()).isEqualTo(Yes24Status.FOUND);
+        verify(yes24Client, times(2)).lookupByIsbn(ISBN);
+    }
+
+    @Test
+    void retryStopsAfterOneRetry() {
+        when(yes24Client.lookupByIsbn(ISBN)).thenThrow(new Yes24TransientException(Kind.FAILED, "HTTP 503"));
+
+        IdentificationResult result = service.identify(ISBN, null);
+
+        assertThat(result.yes24()).isEqualTo(Yes24Status.FAILED);
+        assertThat(result.yes24Sent()).isTrue();
+        verify(yes24Client, times(2)).lookupByIsbn(ISBN);
+    }
+
+    // 재시도가 선제한 허가·하루 예산을 못 얻어 보내지 못하면, 사용자에게는 첫 시도의 실패를 보인다(SKIPPED로 바꾸지 않는다)
+    @ParameterizedTest
+    @ValueSource(strings = {"RATE_LIMITED", "DAILY_LIMIT"})
+    void retryThatCouldNotBeSentReportsTheOriginalFailure(String kind) {
+        when(yes24Client.lookupByIsbn(ISBN))
+                .thenThrow(transientTimeout())
+                .thenThrow(new Yes24Exception(Kind.valueOf(kind), false, "보내지 않음"));
+
+        IdentificationResult result = service.identify(ISBN, null);
+
+        assertThat(result.yes24()).isEqualTo(Yes24Status.TIMEOUT);
+        assertThat(result.yes24Sent()).isTrue();
+        verify(yes24Client, times(2)).lookupByIsbn(ISBN);
+    }
+
+    // 사용자에게는 첫 실패를 보이되, 재시도를 왜 못 보냈는지는 suppressed로 남겨 로그에서 볼 수 있다
+    @Test
+    void originalFailureCarriesWhyTheRetryWasNotSent() {
+        Yes24TransientException first = transientTimeout();
+        Yes24Exception notSent = new Yes24Exception(Kind.RATE_LIMITED, false, "YES24 선제한 거절");
+        when(yes24Client.lookupByIsbn(ISBN)).thenThrow(first).thenThrow(notSent);
+
+        Throwable thrown = catchThrowable(() -> service.lookupWithResilience(ISBN));
+
+        assertThat(thrown).isSameAs(first);
+        assertThat(thrown.getSuppressed()).containsExactly(notSent);
+    }
+
+    // ---- 서킷 (T4 결정 카드 6·6-1, 규칙 3·4) ----
+
+    @Test
+    void circuitOpensAfterTransientFailuresAndStopsCalling() {
+        when(yes24Client.lookupByIsbn(ISBN)).thenThrow(transientTimeout());
+        for (int i = 0; i < 5; i++) {
+            service.identify(ISBN, null);   // 시도 2번씩 → 서킷 창 10건이 모두 실패
+        }
+        assertThat(yes24CircuitBreaker().getState()).isEqualTo(CircuitBreaker.State.OPEN);
+
+        IdentificationResult result = service.identify(ISBN, VALID_HINT);
+
+        verify(yes24Client, times(10)).lookupByIsbn(ISBN);   // 열린 뒤엔 부르지 않는다
+        assertThat(result.yes24()).isEqualTo(Yes24Status.FAILED);   // 새 책 섹션은 지금 실패와 같은 FAILED·UNAVAILABLE
+        assertThat(result.yes24Sent()).isFalse();
+        assertThat(result.source()).isEqualTo(Source.HINT);
+    }
+
+    // 우리가 보내지 않은 호출(선제한·일일 중단·예산)은 YES24 건강과 무관하다 — 성공으로도 실패로도 세지 않는다
+    @Test
+    void callsNotSentAreIgnoredByCircuit() {
+        when(yes24Client.lookupByIsbn(ISBN)).thenThrow(new Yes24Exception(Kind.DAILY_LIMIT, false, "예산"));
+        for (int i = 0; i < 12; i++) {
+            service.identify(ISBN, null);
+        }
+
+        assertThat(yes24CircuitBreaker().getMetrics().getNumberOfBufferedCalls()).isZero();
+        assertThat(yes24CircuitBreaker().getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+    }
+
+    // YES24가 답을 준 실패(429·4xx·응답 검증 실패)는 YES24가 살아 있다는 뜻이라 실패로 세지 않는다
+    @Test
+    void answeredFailuresDoNotOpenCircuit() {
+        when(yes24Client.lookupByIsbn(ISBN)).thenThrow(new Yes24Exception(Kind.RATE_LIMITED, true, "RATE_001"));
+        for (int i = 0; i < 12; i++) {
+            service.identify(ISBN, null);
+        }
+
+        assertThat(yes24CircuitBreaker().getMetrics().getNumberOfFailedCalls()).isZero();
+        assertThat(yes24CircuitBreaker().getState()).isEqualTo(CircuitBreaker.State.CLOSED);
+    }
+
+    // 첫 시도의 실패로 서킷이 열려 재시도가 거절되면, 서킷 열림이 아니라 실제로 난 실패(타임아웃)를 보인다
+    @Test
+    void circuitOpeningBetweenAttemptsReportsTheOriginalFailure() {
+        CircuitBreaker circuit = yes24CircuitBreaker();
+        for (int i = 0; i < 9; i++) {
+            circuit.onError(0, TimeUnit.MILLISECONDS, transientTimeout());
+        }
+        when(yes24Client.lookupByIsbn(ISBN)).thenThrow(transientTimeout());
+
+        IdentificationResult result = service.identify(ISBN, null);
+
+        assertThat(circuit.getState()).isEqualTo(CircuitBreaker.State.OPEN);
+        assertThat(result.yes24()).isEqualTo(Yes24Status.TIMEOUT);
+        assertThat(result.yes24Sent()).isTrue();
+        verify(yes24Client, times(1)).lookupByIsbn(ISBN);
+    }
+
+    private CircuitBreaker yes24CircuitBreaker() {
+        return circuitBreakerRegistry.circuitBreaker(BookIdentificationService.YES24_RESILIENCE_NAME);
+    }
+
+    private static Yes24TransientException transientTimeout() {
+        return new Yes24TransientException(Kind.TIMEOUT, "타임아웃");
     }
 
     private double hintInvalidCount() {

@@ -8,6 +8,7 @@ import com.checkbook.search.dto.IdentifiedBook;
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.service.MillieBookMatcher;
 import com.checkbook.search.service.MillieBookService;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -87,7 +88,7 @@ class MillieContractTest {
 
         MillieBookService service = new MillieBookService(client,
                 new MillieBookMatcher(new BookMatcher(normalizer), normalizer), normalizer, new SimpleMeterRegistry(),
-                properties);
+                properties, CircuitBreakerRegistry.ofDefaults());
         MillieAvailability availability = stage("② 매칭", () -> service.findAvailability(BOOK, null));
         assertThat(availability.available())
                 .as("② 매칭 실패 또는 구독 불가 — 밀리 저자·제목 표기 변경, 매처 회귀, 또는 책의 구독 종료. 후보=%s",

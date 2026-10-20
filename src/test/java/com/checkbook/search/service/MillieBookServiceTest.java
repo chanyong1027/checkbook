@@ -6,9 +6,14 @@ import com.checkbook.client.millie.MillieClientException;
 import com.checkbook.client.millie.MillieProperties;
 import com.checkbook.client.millie.dto.MillieBookItem;
 import com.checkbook.common.matcher.BookMetadataNormalizer;
+import com.checkbook.common.ratelimit.DailyBudgetExceededException;
+import com.checkbook.common.ratelimit.ExternalProvider;
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.MillieAvailability.Format;
 import com.checkbook.search.service.MillieBookMatcher.MatchedMillie;
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +23,7 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
@@ -48,13 +54,25 @@ class MillieBookServiceTest {
     private SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     private MillieBookService service;
+    private CircuitBreakerRegistry circuitBreakerRegistry;
+
+    // application.yaml resilience4j.circuitbreaker.instances.millie와 같은 기준
+    static final CircuitBreakerConfig MILLIE_CIRCUIT = CircuitBreakerConfig.custom()
+            .slidingWindowSize(10)
+            .minimumNumberOfCalls(10)
+            .failureRateThreshold(50)
+            .waitDurationInOpenState(Duration.ofSeconds(30))
+            .recordExceptions(MillieClientException.class)
+            .ignoreExceptions(DailyBudgetExceededException.class)
+            .build();
 
     @BeforeEach
     void setUp() {
         // 상세 링크 주소는 설정에서 온다 — 운영 값과 다른 주소로 코드에 박힌 값이 아님을 확인한다
         MillieProperties properties = new MillieProperties(
                 "https://live-api.example", 2000, "/v3/search/total", "https://millie.example/v9/book/");
-        service = new MillieBookService(millieClient, matcher, normalizer, meterRegistry, properties);
+        circuitBreakerRegistry = CircuitBreakerRegistry.of(MILLIE_CIRCUIT);
+        service = new MillieBookService(millieClient, matcher, normalizer, meterRegistry, properties, circuitBreakerRegistry);
     }
 
     private IdentifiedBook aladin(String title, String author) {
@@ -299,5 +317,38 @@ class MillieBookServiceTest {
 
         assertThat(result.available()).isTrue();
         verify(millieClient).searchByTitle("사피엔스");
+    }
+
+    // ---- 서킷 (T4 결정 카드 4·6) ----
+
+    // 밀리가 막히면(WAF 403 등) 계속 두드리지 않는다. 열리면 섹션은 지금 실패와 같은 FAILED·UNAVAILABLE(메시지만 서킷임을 밝힘)
+    @Test
+    void circuitOpensAfterMillieFailuresAndStopsCalling() {
+        when(millieClient.searchByTitle(anyString())).thenThrow(new MillieClientException("밀리 HTTP 403"));
+        IdentifiedBook book = aladin("인간실격", "다자이 오사무");
+        for (int i = 0; i < 10; i++) {
+            assertThatThrownBy(() -> service.findAvailability(book, null)).isInstanceOf(MillieClientException.class);
+        }
+
+        assertThatThrownBy(() -> service.findAvailability(book, null))
+                .isInstanceOf(MillieClientException.class)
+                .hasMessageContaining("서킷");
+        verify(millieClient, times(10)).searchByTitle(anyString());
+        assertThat(circuitBreakerRegistry.circuitBreaker("millie").getState()).isEqualTo(CircuitBreaker.State.OPEN);
+    }
+
+    // 예산 소진은 호출하지 않은 것이라 밀리 장애로 세지 않는다(규칙 3)
+    @Test
+    void budgetExhaustionIsNotCountedByCircuit() {
+        when(millieClient.searchByTitle(anyString()))
+                .thenThrow(new DailyBudgetExceededException(ExternalProvider.MILLIE, Duration.ofHours(1)));
+        IdentifiedBook book = aladin("인간실격", "다자이 오사무");
+        for (int i = 0; i < 12; i++) {
+            assertThatThrownBy(() -> service.findAvailability(book, null)).isInstanceOf(DailyBudgetExceededException.class);
+        }
+
+        CircuitBreaker circuit = circuitBreakerRegistry.circuitBreaker("millie");
+        assertThat(circuit.getMetrics().getNumberOfBufferedCalls()).isZero();
+        assertThat(circuit.getState()).isEqualTo(CircuitBreaker.State.CLOSED);
     }
 }
