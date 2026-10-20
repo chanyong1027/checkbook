@@ -7,6 +7,7 @@ import com.checkbook.search.dto.IdentificationResult;
 import com.checkbook.search.dto.IdentificationResult.Yes24Status;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
+import io.github.resilience4j.core.IntervalFunction;
 import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 import io.github.resilience4j.retry.RetryConfig;
@@ -26,6 +27,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntFunction;
 
@@ -46,6 +48,13 @@ class Yes24IdentificationFaultTest {
     private static final RetryConfig NO_RETRY = RetryConfig.custom().maxAttempts(1).build();
     private static final CircuitBreakerConfig NO_CIRCUIT = CircuitBreakerConfig.custom()
             .slidingWindowSize(1000).minimumNumberOfCalls(1000).build();
+
+    // 운영 재시도 대기(application.yaml retry.instances.yes24 — 연결 시험이 같은 범위를 확인한다)
+    static final RetryConfig PRODUCTION_RETRY = RetryConfig.custom()
+            .maxAttempts(2)
+            .intervalFunction(IntervalFunction.ofRandomized(Duration.ofMillis(150), 0.33))
+            .retryExceptions(com.checkbook.client.yes24.Yes24TransientException.class)
+            .build();
 
     private MockWebServer server;
 
@@ -74,8 +83,9 @@ class Yes24IdentificationFaultTest {
         // 로컬 가짜 서버도 드물게 느려 ±1건 흔들린다 — 그 흔들림도 재시도가 구한다
         assertThat(before.failed()).isGreaterThanOrEqualTo(2);
         assertThat(after.failed()).isZero();
-        // 재시도만큼 YES24 호출(하루 예산)이 는다. 보통 103: 재시도로 요청 번호가 밀려 101번째(세 번째 튐)까지 가기 때문
-        assertThat(after.requests()).isBetween(102, 104);
+        // 재시도만큼 YES24 호출(하루 예산)이 는다. 보통 103: 재시도로 요청 번호가 밀려 101번째(세 번째 튐)까지 가기 때문.
+        // 가짜 서버가 정상 요청에서 느려 재시도가 더 붙을 수 있어 상한은 넉넉히
+        assertThat(after.requests()).isBetween(102, 107);
     }
 
     // YES24가 통째로 멈춘다 — 서킷이 열린 뒤에는 기다리지 않고, 부르지도 않는다
@@ -92,7 +102,36 @@ class Yes24IdentificationFaultTest {
         // 5건 × 2번 시도 = 창 10건이 모두 실패 → 열림. 남은 7건은 YES24를 부르지도, 기다리지도 않는다
         assertThat(after.requests()).isEqualTo(10);
         assertThat(after.failed()).isEqualTo(12);
-        assertThat(after.elapsedMs().subList(5, 12)).allSatisfy(ms -> assertThat(ms).isLessThan(50L));
+        // 증명할 것은 "타임아웃(300ms)을 기다리지 않았다" — GC·JIT 한 번의 멈춤에 흔들리지 않게 그 절반 미만으로 본다
+        assertThat(after.elapsedMs().subList(5, 12)).allSatisfy(ms -> assertThat(ms).isLessThan(150L));
+    }
+
+    // 운영 선제한(100ms당 1건, 대기 0)에서 빨리 오는 실패(503) 뒤 재시도가 같은 주기 허가에 막히지 않아야 한다(1차 리뷰 1).
+    // 대기가 주기보다 짧으면(5~95ms) 재시도가 '보내지 못함'으로 끝나 첫 실패가 그대로 사용자에게 간다
+    @Test
+    void retryAfterFastFailureIsNotBlockedBySelfRateLimit() {
+        AtomicBoolean failNext = new AtomicBoolean();
+        server.setDispatcher(new Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) {
+                return failNext.getAndSet(false) ? new MockResponse().setResponseCode(503) : found();
+            }
+        });
+
+        int recovered = 0;
+        for (int i = 0; i < 20; i++) {
+            failNext.set(true);
+            RateLimiter productionLimiter = RateLimiter.of("yes24-fast-" + i, RateLimiterConfig.custom()
+                    .limitForPeriod(1).limitRefreshPeriod(Duration.ofMillis(100)).timeoutDuration(Duration.ZERO).build());
+            BookIdentificationService service = new BookIdentificationService(newClient(productionLimiter),
+                    new SimpleMeterRegistry(), CircuitBreakerRegistry.of(NO_CIRCUIT), RetryRegistry.of(PRODUCTION_RETRY));
+            if (service.identify(ISBN, null).yes24() == Yes24Status.FOUND) {
+                recovered++;
+            }
+        }
+
+        System.out.printf("[T4 전후] 빠른 실패(503) 뒤 재시도, 운영 선제한 | 구한 검색 %d/20%n", recovered);
+        assertThat(recovered).isEqualTo(20);
     }
 
     private Outcome run(IntFunction<MockResponse> fault, int searches, RetryConfig retry, CircuitBreakerConfig circuit) {
@@ -120,11 +159,14 @@ class Yes24IdentificationFaultTest {
     }
 
     private Yes24Client newClient() {
+        // 선제한은 이 시험의 관심사가 아니다 — 넉넉히
+        return newClient(RateLimiter.of("yes24-fault", RateLimiterConfig.custom()
+                .limitForPeriod(1000).limitRefreshPeriod(Duration.ofSeconds(1)).timeoutDuration(Duration.ZERO).build()));
+    }
+
+    private Yes24Client newClient(RateLimiter rateLimiter) {
         Yes24Properties properties = new Yes24Properties(server.url("/").toString().replaceAll("/$", ""), "test-key",
                 Duration.ofMillis(400), READ_TIMEOUT, Duration.ofSeconds(3));
-        // 선제한은 이 시험의 관심사가 아니다 — 넉넉히
-        RateLimiter rateLimiter = RateLimiter.of("yes24-fault", RateLimiterConfig.custom()
-                .limitForPeriod(1000).limitRefreshPeriod(Duration.ofSeconds(1)).timeoutDuration(Duration.ZERO).build());
         return new Yes24Client(RestClient.builder(), properties, rateLimiter, new SimpleMeterRegistry(),
                 Clock.systemUTC(), ExternalCallBudget.unlimited());
     }

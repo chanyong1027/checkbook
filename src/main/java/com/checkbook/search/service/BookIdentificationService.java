@@ -29,7 +29,7 @@ import java.util.function.Supplier;
  * <p>
  * YES24 호출은 Retry(서킷(클라이언트))로 감싼다(T4 결정 카드 2·6, 설정 resilience4j.*.instances.yes24):
  * 일시 오류({@link Yes24TransientException})만 1회 재시도하고, 일시 오류가 쌓이면 서킷이 열려 부르지 않는다.
- * 식별은 fan-out 전 순차라 재시도 시간이 응답 시간에 그대로 더해진다(최악 약 0.7 + 0.1 + 0.7초).
+ * 식별은 fan-out 전 순차라 재시도 시간이 응답 시간에 그대로 더해진다(최악 약 0.7 + 0.2 + 0.7초).
  */
 @Slf4j
 @Service
@@ -78,7 +78,8 @@ public class BookIdentificationService {
                 case FAILED -> Yes24Status.FAILED;
             };
             sent = e.sent();
-            log.info("YES24 식별 실패: isbn={}, kind={}, sent={}, message={}", isbn13, e.kind(), sent, e.getMessage());
+            log.info("YES24 식별 실패: isbn={}, kind={}, sent={}, message={}{}", isbn13, e.kind(), sent, e.getMessage(),
+                    e.getSuppressed().length > 0 ? " (재시도 못 보냄: " + e.getSuppressed()[0].getMessage() + ")" : "");
         } catch (RuntimeException e) {
             // 예상 못 한 예외도 검색 전체를 실패시키지 않는다. 요청이 나갔는지 알 수 없어 '보냄'으로 본다(FAILED)
             status = Yes24Status.FAILED;
@@ -104,6 +105,7 @@ public class BookIdentificationService {
             // 재시도를 보내지 못했다(그 사이 서킷이 열림, 허가·예산 없음) — 사용자에게는 실제로 난 첫 실패를 보인다
             Yes24TransientException first = firstFailure.get();
             if (first != null && notSent(e)) {
+                first.addSuppressed(e);   // 재시도를 왜 못 보냈는지는 로그의 suppressed로 남긴다
                 throw first;
             }
             throw e;

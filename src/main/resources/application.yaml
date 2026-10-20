@@ -54,7 +54,7 @@ yes24:
   api-key: ${YES24_KEY:}
   base-url: https://apis.yes24.com
   # 식별은 fan-out 전에 순차 실행돼 최악 응답 시간에 그대로 더해진다. 시도마다 700ms, 일시 오류면 1회 재시도
-  # (resilience4j.retry.instances.yes24 — 최악 약 0.7 + 0.1 + 0.7초, T4 결정 카드 2·2-1).
+  # (resilience4j.retry.instances.yes24 — 최악 약 0.7 + 0.2 + 0.7초, T4 결정 카드 2·2-1).
   # read-timeout = 요청 전송~본문 끝까지의 전체 마감(JdkClientHttpRequestFactory), connect-timeout = 그 안의 연결 단계(TCP+TLS) 상한.
   # 400ms: 오사카 탐침 1,000회에서 TLS가 0.24~0.37초 걸린 8건을 모두 덮는 가장 작은 값(200ms면 실패). T4 결정 카드 1
   connect-timeout: 400ms
@@ -195,15 +195,17 @@ resilience4j:
         limit-refresh-period: 100ms
         limit-for-period: 1
         timeout-duration: 0
-  # YES24 식별 경로만(BookIdentificationService가 코드로 감쌈). 일시 오류(타임아웃·연결 실패·5xx)만 1회, 5~95ms 무작위 대기 후.
+  # YES24 식별 경로만(BookIdentificationService가 코드로 감쌈). 일시 오류(타임아웃·연결 실패·5xx)만 1회, 100~200ms 무작위 대기 후.
+  # 대기는 선제한 주기(100ms)보다 길어야 한다 — 짧으면 빨리 온 503·연결 거절 뒤 재시도가 같은 주기 허가에 막혀 못 나간다
+  # (처음 5~95ms로 잡았을 때 시험에서 20번 중 3번만 재시도됨, 1차 리뷰).
   # 429·4xx·응답 검증 실패·보내지 않은 호출은 다시 보내지 않는다. 재시도도 선제한 허가·하루 예산을 쓴다(T4 결정 카드 2, 규칙 1·2)
   retry:
     instances:
       yes24:
         max-attempts: 2
-        wait-duration: 50ms
+        wait-duration: 150ms
         enable-randomized-wait: true
-        randomized-wait-factor: 0.9
+        randomized-wait-factor: 0.33
         retry-exceptions:
           - com.checkbook.client.yes24.Yes24TransientException
   circuitbreaker:

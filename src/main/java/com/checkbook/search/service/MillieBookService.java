@@ -50,6 +50,7 @@ public class MillieBookService {
         try {
             return circuitBreaker.executeSupplier(() -> millieClient.searchByTitle(keyword));
         } catch (CallNotPermittedException e) {
+            log.info("밀리 검색 생략(서킷 열림): keyword={}", keyword);
             throw new MillieClientException("밀리 일시 중단(서킷 열림)", e);
         }
     }

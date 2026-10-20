@@ -66,10 +66,10 @@ class Yes24ClientWiringTest {
         assertThat(config.getExceptionPredicate().test(new Yes24TransientException(Kind.TIMEOUT, "t"))).isTrue();
         assertThat(config.getExceptionPredicate().test(new Yes24Exception(Kind.FAILED, true, "4xx"))).isFalse();
         assertThat(config.getExceptionPredicate().test(new Yes24Exception(Kind.RATE_LIMITED, false, "선제한"))).isFalse();
-        // 50ms ± 90% → 5~95ms (결정: 0~100ms 무작위)
+        // 150ms ± 33% → 100~200ms. 선제한 주기(100ms)보다 길어야 빠른 실패 뒤 재시도가 같은 주기 허가에 막히지 않는다
         for (int i = 0; i < 200; i++) {
             long waitMs = config.getIntervalBiFunction().apply(1, Either.left(new Yes24TransientException(Kind.TIMEOUT, "t")));
-            assertThat(waitMs).isBetween(5L, 95L);
+            assertThat(waitMs).isBetween(100L, 200L);
         }
     }
 

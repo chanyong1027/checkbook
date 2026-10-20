@@ -271,7 +271,7 @@ def build_rules():
             summary="{{ $labels.name }} 서킷이 열려 호출을 막았습니다(10분 " + COUNT + "회)",
             runbook=[
                 "실패율: Explore `max by (name) (resilience4j_circuitbreaker_failure_rate)`",
-                "로그: " + APP_LOGS + " | grep -iE 'circuit|폴백'",
+                "로그: " + APP_LOGS + " | grep -iE 'circuit|폴백|서킷'",
                 "공급자 장애면 대응은 기다림(서킷이 30초마다 다시 시도)",
             ]),
         Rule(

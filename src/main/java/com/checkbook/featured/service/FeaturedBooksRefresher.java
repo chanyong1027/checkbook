@@ -103,7 +103,7 @@ public class FeaturedBooksRefresher {
     }
 
     // 우리 쪽 선제한은 클라이언트가 최대 1초 기다려 준다(PR-3 결정 카드 3).
-    // 재시작 직후 JVM의 첫 TLS 연결은 연결 제한(200ms)을 넘을 수 있는데, 첫 시도로 JVM이 데워져 두 번째는 빠르다.
+    // 재시작 직후 JVM의 첫 TLS 연결은 연결 제한(400ms)을 넘을 수 있는데, 첫 시도로 JVM이 데워져 두 번째는 빠르다.
     // 그래서 시간 초과만 1번 바로 다시 부른다. 한도·제한·429·형식 오류·5xx는 다시 해도 같아 재시도하지 않는다(카드 7)
     private void refreshFromYes24(FeaturedSectionType type, Yes24CategoryList list, Duration ttl) {
         List<Item> raw;
