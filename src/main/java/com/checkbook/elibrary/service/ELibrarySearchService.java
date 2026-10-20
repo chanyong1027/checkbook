@@ -122,8 +122,10 @@ public class ELibrarySearchService {
         for (Long id : validIds) {
             ELibrary library = foundMap.get(id);
             long startedAt = System.currentTimeMillis();
+            // 마감은 단조 시계로 잰다(벽시계는 NTP 보정으로 앞뒤로 움직인다). orTimeout보다 먼저 재서 작업 쪽 마감이 늦지 않다
+            long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(perLibraryTimeoutMs);
             futureMap.put(id, new ScrapeTask(
-                    submitSafely(() -> searchWithinLimits(library, selected, startedAt))
+                    submitSafely(() -> searchWithinLimits(library, selected, deadlineNanos))
                             .orTimeout(perLibraryTimeoutMs, TimeUnit.MILLISECONDS),
                     startedAt
             ));
@@ -179,13 +181,13 @@ public class ELibrarySearchService {
      * 하루 예산이 줄면 자정까지 막힐 수 있다. 소진이면 toResult가 DAILY_LIMIT으로 바꾼다.
      * 자리는 그 사이트 마감(제출 시각 + perLibraryTimeoutMs) 안에서만 기다리고, 못 얻으면 시간 초과로 본다
      */
-    private ScrapeOutcome searchWithinLimits(ELibrary library, BookMatcher.Selected selected, long startedAt) {
-        if (!concurrencyLimiter.tryAcquire(library.getId(), remainingMs(startedAt))) {
+    private ScrapeOutcome searchWithinLimits(ELibrary library, BookMatcher.Selected selected, long deadlineNanos) {
+        if (!concurrencyLimiter.tryAcquire(library.getId(), remainingMs(deadlineNanos))) {
             throw timedOut(library, "동시 요청 자리를 마감 안에 못 얻음");
         }
         try {
             // 풀 큐나 자리 대기에서 마감을 넘겼다 — 응답은 이미 시간 초과로 나가 사이트에 보내 봐야 버려진다
-            if (remainingMs(startedAt) <= 0) {
+            if (remainingMs(deadlineNanos) <= 0) {
                 throw timedOut(library, "마감이 지나 수집하지 않음");
             }
             budget.acquireELibrary(library.getId(), library.isRobotsDisallowed());
@@ -195,8 +197,8 @@ public class ELibrarySearchService {
         }
     }
 
-    private long remainingMs(long startedAt) {
-        return perLibraryTimeoutMs - (System.currentTimeMillis() - startedAt);
+    private static long remainingMs(long deadlineNanos) {
+        return TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime());
     }
 
     // CompletionException으로 감싸 던지면 supplyAsync가 그대로 쓴다 — toResult가 원인 TimeoutException을 보고 TIMEOUT으로 바꾼다
@@ -324,7 +326,8 @@ public class ELibrarySearchService {
     /**
      * 수집 한 번의 결과와 시간. 태그는 업체 × 결과뿐이다 — 사이트(1,964곳)를 태그에 넣으면 시리즈가 폭증한다.
      * 업체 템플릿이 바뀌면 한 업체의 structure_changed·parse_failed·endpoint_not_found가 여러 사이트에서 한꺼번에 늘어난다.
-     * timeout은 제출 시점부터 잰다(orTimeout) — 우리 풀이 붐벼 큐에서 기다린 시간도 들어가 사이트 탓만은 아니다
+     * timeout은 제출 시점부터 잰다(orTimeout) — 우리 풀이 붐벼 큐에서 기다린 시간, 사이트당 동시 요청 자리를 기다린 시간
+     * (ELibraryConcurrencyLimiter)도 들어가 사이트 탓만은 아니다. 어느 쪽인지는 INFO 로그로 본다
      */
     private void recordScrape(ELibrary library, String outcome, long elapsedMs) {
         scrapeTimer(library.getVendorType(), outcome).record(elapsedMs, TimeUnit.MILLISECONDS);

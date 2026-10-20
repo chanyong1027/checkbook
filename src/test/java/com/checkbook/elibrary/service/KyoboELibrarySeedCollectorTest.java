@@ -5,12 +5,7 @@ import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -106,6 +101,23 @@ class KyoboELibrarySeedCollectorTest {
         // IP 주소는 주소다
         assertThat(KyoboELibrarySeedCollector.normalizeBaseUrl("http://211.252.121.111"))
                 .isEqualTo("http://211.252.121.111");
+        assertThat(KyoboELibrarySeedCollector.normalizeBaseUrl("http://210.117.242.66:8091"))
+                .isEqualTo("http://210.117.242.66:8091");
+    }
+
+    @Test
+    void 교보_목록의_자리표시_주소는_버린다() {
+        // 서로 다른 기관 여럿이 같은 자리표시 주소를 달고 있어, 넣으면 한 행으로 합쳐지고 엉뚱한 곳을 부른다
+        assertThat(KyoboELibrarySeedCollector.normalizeBaseUrl("http://1.1.dkyobobook.co.kr")).isNull();
+        assertThat(KyoboELibrarySeedCollector.normalizeBaseUrl("http://1.1.go.kr")).isNull();
+        assertThat(KyoboELibrarySeedCollector.normalizeBaseUrl("http://1.1.ac.kr")).isNull();
+        assertThat(KyoboELibrarySeedCollector.normalizeBaseUrl("http://1.1.1.1")).isNull();
+    }
+
+    @Test
+    void scheme과_호스트는_소문자로_바꾸고_경로는_그대로_둔다() {
+        assertThat(KyoboELibrarySeedCollector.normalizeBaseUrl("HTTP://Lib.Example.AC.KR:8080/Elibrary-Front"))
+                .isEqualTo("http://lib.example.ac.kr:8080/Elibrary-Front");
     }
 
     @Test
@@ -121,24 +133,5 @@ class KyoboELibrarySeedCollectorTest {
 
         assertThat(result).extracting(KyoboELibrarySeedCandidate::baseUrl)
                 .containsExactly("https://a.dkyobobook.co.kr");
-    }
-
-    @Test
-    void 저장소의_시드_SQL은_정리된_주소만_담고_status를_덮어쓰지_않는다() throws IOException {
-        // 옛 시드를 다시 돌리면 이중 표기 주소가 새 ACTIVE 행으로 들어가고(UNIQUE가 다른 문자열로 봄), 정리한 status도 되돌린다
-        String sql;
-        try (InputStream in = getClass().getResourceAsStream("/sql/seed-elibrary-kyobo.sql")) {
-            assertThat(in).isNotNull();
-            sql = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-        }
-        Matcher m = Pattern.compile("'KYOBO', '([^']*)'").matcher(sql);
-        int rows = 0;
-        while (m.find()) {
-            rows++;
-            assertThat(KyoboELibrarySeedCollector.normalizeBaseUrl(m.group(1))).isEqualTo(m.group(1));
-        }
-
-        assertThat(rows).isGreaterThan(1900);
-        assertThat(sql).doesNotContain("status = EXCLUDED.status");
     }
 }

@@ -135,14 +135,22 @@ class ELibrarySearchServiceTest {
     }
 
     @Test
-    void 같은_사이트에_동시_요청_자리가_없으면_마감까지_기다리다_시간_초과이고_예산을_쓰지_않는다() {
+    void 같은_사이트에_동시_요청_자리가_없으면_마감까지_기다리다_시간_초과이고_예산을_쓰지_않는다() throws Exception {
         // 사이트당 동시 요청 상한(결정 2026-10-20). 자리를 못 얻은 요청은 사이트에 가지 않았으니 하루 예산도 그대로여야 한다
         ELibrary library = activeLibrary(1L);
         when(eLibraryRepository.findAllById(List.of(1L))).thenReturn(List.of(library));
-        ReflectionTestUtils.setField(service, "perLibraryTimeoutMs", 100L);
         assertThat(concurrencyLimiter.tryAcquire(1L, 0)).isTrue(); // 다른 요청이 자리(1)를 쥐고 있다
+        // 기다린 작업이 끝까지 물러났는지 확인하려고 풀을 따로 둔다 — 응답(orTimeout)이 작업보다 먼저 끝날 수 있어서,
+        // 확인 없이 자리를 풀면 물러나던 작업이 그 자리로 예산을 쓸 수 있다
+        ExecutorService waitingPool = Executors.newFixedThreadPool(1);
+        BookMetadataNormalizer normalizer = new BookMetadataNormalizer();
+        ELibrarySearchService waitingService = new ELibrarySearchService(eLibraryRepository, clientResolver,
+                waitingPool, new BookMatcher(normalizer), normalizer, budget, concurrencyLimiter, meterRegistry);
+        ReflectionTestUtils.setField(waitingService, "perLibraryTimeoutMs", 100L);
 
-        ELibrarySearchResponse waited = service.search("자바의 정석", "남궁성", "1");
+        ELibrarySearchResponse waited = waitingService.search("자바의 정석", "남궁성", "1");
+        waitingPool.shutdown();
+        assertThat(waitingPool.awaitTermination(2, TimeUnit.SECONDS)).isTrue();
 
         assertThat(waited.results()).extracting(ELibrarySearchResponse.ELibraryResult::status)
                 .containsExactly(ELibrarySearchStatus.TIMEOUT);
