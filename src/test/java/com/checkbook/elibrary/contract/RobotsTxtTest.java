@@ -83,6 +83,16 @@ class RobotsTxtTest {
     }
 
     @Test
+    void 비ASCII_글자는_퍼센트_인코딩해서_비교한다() {
+        // RFC 9309 2.2.2 — 규칙을 한글 원문으로 적어도 앱이 부르는 인코딩된 주소를 막는다(CodeRabbit #54)
+        assertThat(allowed("User-agent: *\nDisallow: /*schTxt=어린")).isFalse();
+        // 거꾸로 대상 경로가 원문이어도(리다이렉트 Location) 인코딩된 규칙과 맞는다
+        assertThat(allowed("User-agent: *\nDisallow: /도서/%ec%96%b4", "/도서/어린왕자")).isFalse();
+        // 길이도 정규화한 문자열로 잰다: 인코딩하면 Allow(/검색 → 19자)가 Disallow(/%EA, 4자)보다 길다
+        assertThat(allowed("User-agent: *\nDisallow: /%EA\nAllow: /검색", "/검색/목록")).isTrue();
+    }
+
+    @Test
     void 맨_앞_BOM은_지운다() {
         // 남아 있으면 첫 'User-agent'가 다른 키가 되어 첫 묶음이 사라지고 전부 허용으로 오판한다
         assertThat(allowed("\uFEFFUser-agent: *\nDisallow: /")).isFalse();

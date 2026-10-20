@@ -1,5 +1,6 @@
 package com.checkbook.elibrary.contract;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -13,7 +14,7 @@ import java.util.regex.Pattern;
  * <ul>
  *   <li>우리 UA의 제품 토큰(mozilla)과 같은 묶음, 없으면 '*' 묶음. 같은 이름 묶음은 합친다</li>
  *   <li>경로에 맞는 규칙 중 가장 긴 것이 이기고, 길이가 같으면 Allow. 빈 Disallow는 규칙이 아니다</li>
- *   <li>'*'는 아무 글자, 끝의 '$'는 끝 고정. 퍼센트 인코딩은 대소문자를 맞춰 비교한다</li>
+ *   <li>'*'는 아무 글자, 끝의 '$'는 끝 고정. 비ASCII 글자는 UTF-8로 퍼센트 인코딩하고(2.2.2), 인코딩은 대소문자를 맞춰 비교한다</li>
  *   <li>user-agent 값은 앞의 제품 토큰([A-Za-z_-]+)만 본다("Mozilla/5.0"도 mozilla 묶음). 맨 앞 BOM은 지운다</li>
  * </ul>
  * 와일드카드는 정규식으로 바꾸지 않고 직접 맞춘다 — 남의 서버가 준 '*'가 많은 규칙이 정규식 역추적으로 스레드를 묶지 않게.
@@ -26,6 +27,7 @@ public final class RobotsTxt {
     // 앱 클라이언트의 UA "Mozilla/5.0 …"의 제품 토큰
     static final String PRODUCT_TOKEN = "mozilla";
     private static final Pattern PERCENT_ENCODED = Pattern.compile("%[0-9a-fA-F]{2}");
+    private static final char[] HEX = "0123456789ABCDEF".toCharArray();
     private static final Pattern PRODUCT_TOKEN_PREFIX = Pattern.compile("^[A-Za-z_-]+");
 
     private final List<Group> groups;
@@ -134,7 +136,8 @@ public final class RobotsTxt {
     private static Rule toRule(boolean allow, String path) {
         boolean anchored = path.endsWith("$");
         String body = normalize(anchored ? path.substring(0, path.length() - 1) : path);
-        return new Rule(allow, path.length(), List.of(body.split("\\*", -1)), anchored);
+        // 길이도 정규화한 문자열로 잰다 — 같은 경로를 원문·인코딩 어느 쪽으로 적어도 '가장 긴 규칙' 판정이 같게
+        return new Rule(allow, body.length() + (anchored ? 1 : 0), List.of(body.split("\\*", -1)), anchored);
     }
 
     // RFC 9309 2.2.1: 제품 토큰은 [a-zA-Z_-]+. 'Mozilla/5.0 (…)'처럼 버전을 붙여 적어도 mozilla 묶음이다
@@ -146,9 +149,19 @@ public final class RobotsTxt {
         return m.find() ? m.group().toLowerCase(Locale.ROOT) : value.toLowerCase(Locale.ROOT);
     }
 
-    // %2f와 %2F를 같게 본다(이미 인코딩된 글자만 다룬다)
+    // RFC 9309 2.2.2: 비교 전에 ASCII 밖의 글자를 UTF-8로 퍼센트 인코딩한다(robots에 'Disallow: /*schTxt=어린'처럼 원문으로
+    // 적거나 리다이렉트 Location에 한글이 원문으로 와도, 앱이 부르는 %EC%96%B4… 꼴과 맞게). %2f와 %2F는 같게 본다
     private static String normalize(String path) {
-        Matcher m = PERCENT_ENCODED.matcher(path);
+        StringBuilder encoded = new StringBuilder(path.length());
+        for (byte b : path.getBytes(StandardCharsets.UTF_8)) {
+            int v = b & 0xFF;
+            if (v > 0x7F) {
+                encoded.append('%').append(HEX[v >> 4]).append(HEX[v & 0xF]);
+            } else {
+                encoded.append((char) v);
+            }
+        }
+        Matcher m = PERCENT_ENCODED.matcher(encoded);
         return m.replaceAll(r -> r.group().toUpperCase(Locale.ROOT));
     }
 }
