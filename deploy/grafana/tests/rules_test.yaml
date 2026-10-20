@@ -460,3 +460,19 @@ tests:
         alertname: cb-server-5xx
         exp_alerts:
           - exp_labels: {tier: info}
+
+  - name: 수집이 한 번만 실패해도(끊김 표식) 옛 5xx 시리즈를 새것으로 세지 않는다
+    interval: 1m
+    input_series:
+      # 10분에 수집 한 번 실패: up=0이 기록되고 다른 시리즈엔 끊김(stale) 표식
+      - series: 'up{job="checkbook-app", slot="blue", instance="127.0.0.1:8081"}'
+        values: '1x9 0 1x20'
+      - series: 'http_server_requests_seconds_count{job="checkbook-app", slot="blue", uri="/api/search", status="500"}'
+        values: '3x9 stale 3x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: cb-server-5xx
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: cb-server-5xx
+        exp_alerts: []

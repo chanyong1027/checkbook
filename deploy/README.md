@@ -222,7 +222,7 @@ sudo bash /opt/checkbook/app/deploy/apply-alloy.sh          # 반영
 |---|---|
 | `grafana/thresholds.py` | 비율 규칙의 최소 건수 계산(탐침 기준선 + 오탐 예산 → 이항분포). `python3 deploy/grafana/thresholds.py`로 근거 표 |
 | `grafana/rules.py` | 규칙 원본. 같은 식으로 Grafana 규칙 JSON과 promtool 규칙 파일을 만든다(`--list`로 목록) |
-| `grafana/apply-alerts.py` | 반영: 차이 보기 → 묶음 PUT → 원본에 없는 규칙 삭제 → 다시 읽어 같은지 확인 |
+| `grafana/apply-alerts.py` | 반영: 차이 보기 → 원본에서 빠졌거나 묶음을 옮긴 규칙 삭제 → 묶음 PUT → 다시 읽어 같은지 확인 |
 | `grafana/tests/` | `python3 -m unittest discover -s deploy/grafana/tests`(생성기·반영 스크립트, 가짜 Grafana), `bash deploy/grafana/tests/run-promtool.sh`(식을 합성 시리즈로, Docker) |
 
 평소 반영:

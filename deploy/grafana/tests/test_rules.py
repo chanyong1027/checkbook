@@ -63,8 +63,9 @@ class RuleSourceTest(unittest.TestCase):
         self.assertIn('uri=~"/api/.+", uri!="/api/health"', r.expr)
         self.assertNotIn("actuator", r.expr)
 
-    def test_조건을_넘은_값이_0이_되는_규칙이_없다(self):
-        # 조건 B가 'A > 0'이라 A의 값이 0이면 조건을 넘었는데도 안 울린다(디스크 여유 0%가 그랬다)
+    def test_디스크_규칙의_값은_꽉_찼을_때_0이_되지_않는다(self):
+        # 조건 B가 'A > 0'이라 A의 값이 0이면 조건을 넘었는데도 안 울린다(여유 비율을 돌려주면 여유 0%에서 그랬다).
+        # 다른 규칙은 값이 비율·건수·사용량이라 울릴 때 늘 양수다(2차 리뷰에서 하나씩 확인)
         disk = [r for r in RULES if "node_filesystem" in r.expr]
         self.assertTrue(disk)
         for r in disk:

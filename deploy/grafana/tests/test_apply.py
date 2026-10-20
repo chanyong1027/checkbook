@@ -179,6 +179,7 @@ class ApplyTest(unittest.TestCase):
         code, _, err = self.run_main("--yes")
         self.assertEqual(code, 1)
         self.assertIn("이미 반영된 묶음: ['checkbook-urgent']", err)
+        self.assertIn("먼저 지운 규칙: 없음", err)
 
     def test_https가_아니면_토큰을_보내지_않는다(self):
         self.fake_token_env(TOKEN, url="http://grafana.example.com")
@@ -201,6 +202,7 @@ class ApplyTest(unittest.TestCase):
         self.assertEqual(apply_alerts._env_value("'a # b'"), "a # b")
         self.assertEqual(apply_alerts._env_value('"x"'), "x")
         self.assertEqual(apply_alerts._env_value("a#b"), "a#b")
+        self.assertEqual(apply_alerts._env_value("'tok' # it's mine"), "tok", "주석 속 따옴표가 값에 붙으면 안 된다")
 
     def test_바뀐_항목을_보여_준다(self):
         self.run_main("--yes")

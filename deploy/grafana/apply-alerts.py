@@ -57,7 +57,7 @@ def read_env(path):
 
 def _env_value(raw):
     """따옴표로 감싼 값은 따옴표 안만, 아니면 ' #' 뒤 주석을 뗀다"""
-    quoted = re.match(r"""^(['"])(.*)\1""", raw)
+    quoted = re.match(r"""^(['"])(.*?)\1(?:\s+#.*)?$""", raw)
     if quoted:
         return quoted.group(2)
     return re.split(r"\s+#", raw, maxsplit=1)[0].strip()
@@ -198,17 +198,20 @@ def apply(grafana, folder, groups, write, out):
         return
     # 원본에서 빠졌거나 다른 묶음으로 옮긴(등급을 바꾼) 규칙을 먼저 지운다. 같은 uid가 다른 묶음에 남아 있으면
     # 옮겨 갈 묶음의 PUT이 거절될 수 있다(묶음 PUT이 빠진 규칙을 지우는지도 문서에 없다)
+    deleted = []
     for name, (_, diff) in pending.items():
         for uid in diff[1]:
             grafana.delete_rule(uid)
+            deleted.append(uid)
     applied = []
     try:
         for name, (desired, _) in pending.items():
             grafana.put_group(folder, name, desired)
             applied.append(name)
     except ApplyError as e:
-        raise ApplyError(f"{e}\n  이미 반영된 묶음: {applied or '없음'}. 원본은 그대로이니 원인을 고친 뒤 다시 실행하면 "
-                         "맞춰진다") from e
+        # 옮기려고 지운 규칙은 새 묶음에 들어가기 전까지 어디에도 없다(그동안 그 알림은 꺼져 있다)
+        raise ApplyError(f"{e}\n  이미 반영된 묶음: {applied or '없음'}, 먼저 지운 규칙: {deleted or '없음'}. "
+                         "원본은 그대로이니 원인을 고친 뒤 다시 실행하면 맞춰진다") from e
     verify(grafana, folder, groups)
     count = sum(len(g["rules"]) for g in groups.values())
     print(f"반영 완료: 규칙 {count}개, 다시 읽어 원본과 같음을 확인", file=out)

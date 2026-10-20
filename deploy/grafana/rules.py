@@ -239,12 +239,13 @@ def build_rules():
             lazy_metrics=("http_client_requests_seconds_count", "http_client_requests_seconds_bucket")),
         Rule(
             uid="cb-server-5xx", tier=INFO, title="서버 5xx 발생",
-            # increase()는 처음 생기는 시리즈의 첫 값을 못 센다(앱에서 미리 못 만듦) — 5분 전엔 없던 시리즈의 값을 따로 본다.
-            # 단 그 칸이 5분 전에도 수집되고 있었을 때만: 수집이 끊겼다 돌아오면 옛 5xx 시리즈가 '새로' 보여 거짓으로 울린다.
-            # 대기 칸도 up=0 시리즈는 있으므로 새로 뜬 칸의 첫 5xx는 잡는다
+            # increase()는 처음 생기는 시리즈의 첫 값을 못 센다(앱에서 미리 못 만듦) — 그 전 30분 동안 한 번도 없던 시리즈의
+            # 값을 따로 본다. 수집 실패·공백이 거짓 '새 시리즈'로 보이지 않게 두 겹으로 막는다:
+            #  - 수집이 한 번 실패하면 시리즈에 끊김(stale) 표식이 붙어 'offset 5m' 한 점은 비어 보인다 → 범위(last_over_time)로 본다
+            #  - 30분 넘게 끊겼다 돌아오면 → 그 칸이 5분 전에도 수집되고 있었을 때만(대기 칸도 up=0 시리즈는 있어 새로 뜬 칸은 잡는다)
             expr=(f"(sum (increase(http_server_requests_seconds_count{{{five_xx}}}[5m])) > 0)\n"
                   f" or (sum (http_server_requests_seconds_count{{{five_xx}}}\n"
-                  f"     unless http_server_requests_seconds_count{{{five_xx}}} offset 5m\n"
+                  f"     unless last_over_time(http_server_requests_seconds_count{{{five_xx}}}[30m] offset 5m)\n"
                   f"     and on (slot) up{{{APP}}} offset 5m) > 0)"),
             summary="사용자 API에서 5xx가 났습니다",
             runbook=[
