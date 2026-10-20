@@ -375,6 +375,21 @@ class Yes24ClientTest {
         assertThat(meterRegistry.get("yes24.remaining.day").gauge().value()).isZero();
     }
 
+    // 429는 본문이 도중에 끊겨도 헤더로 한도를 판정한다 — 끊김을 일시 오류로 바꾸면 일일 중단이 안 걸려 한도를 계속 두드린다
+    @Test
+    void droppedBody429WithZeroRemainingDayStillStartsDailyStop() {
+        server.enqueue(json(429, errorBody("RATE_002"))
+                .setHeader("x-ratelimit-remaining-day", "0")
+                .setSocketPolicy(SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY));
+        Yes24Client client = newClient();
+
+        Yes24Exception first = lookupFailure(client);
+
+        assertThat(first).isNotInstanceOf(Yes24TransientException.class);
+        assertThat(first.kind()).isEqualTo(Kind.DAILY_LIMIT);
+        assertFails(client, Kind.DAILY_LIMIT, false);
+    }
+
     @Test
     void nonJson429WithoutDailySignalIsPerSecond() {
         server.enqueue(new MockResponse().setResponseCode(429)

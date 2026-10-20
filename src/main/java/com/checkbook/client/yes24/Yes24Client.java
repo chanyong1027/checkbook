@@ -252,7 +252,8 @@ public class Yes24Client {
         }
         // 마감 전에 본문을 읽다 연결이 끊겼다 — 파싱 실패가 아니라 전송 실패라 다시 보낼 만하고, 서킷도 실패로 세야 한다.
         // 파싱 실패로 두면 YES24 앞단이 응답 도중 끊는 장애에서 재시도도 안 하고 서킷이 '답했다(성공)'로 센다.
-        // 429는 상태 코드·헤더로 한도를 판정하므로(일일 중단) 그대로 둔다
+        // 429는 상태 코드·헤더로 한도를 판정하므로(일일 중단) 그대로 둔다.
+        // 한계: Content-Length 없이 Connection: close로 보내다 끊기면 정상 끝(EOF)과 구분되지 않아 JSON 파싱 실패로 남는다
         if (raw.transportFailure() != null && raw.status() != 429) {
             throw new Yes24TransientException(Kind.FAILED, "YES24 응답 수신 중 연결 끊김", raw.transportFailure());
         }
