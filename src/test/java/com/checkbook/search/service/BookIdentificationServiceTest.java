@@ -31,6 +31,7 @@ import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -295,6 +296,19 @@ class BookIdentificationServiceTest {
         assertThat(result.yes24()).isEqualTo(Yes24Status.TIMEOUT);
         assertThat(result.yes24Sent()).isTrue();
         verify(yes24Client, times(2)).lookupByIsbn(ISBN);
+    }
+
+    // 사용자에게는 첫 실패를 보이되, 재시도를 왜 못 보냈는지는 suppressed로 남겨 로그에서 볼 수 있다
+    @Test
+    void originalFailureCarriesWhyTheRetryWasNotSent() {
+        Yes24TransientException first = transientTimeout();
+        Yes24Exception notSent = new Yes24Exception(Kind.RATE_LIMITED, false, "YES24 선제한 거절");
+        when(yes24Client.lookupByIsbn(ISBN)).thenThrow(first).thenThrow(notSent);
+
+        Throwable thrown = catchThrowable(() -> service.lookupWithResilience(ISBN));
+
+        assertThat(thrown).isSameAs(first);
+        assertThat(thrown.getSuppressed()).containsExactly(notSent);
     }
 
     // ---- 서킷 (T4 결정 카드 6·6-1, 규칙 3·4) ----

@@ -123,7 +123,8 @@ class Yes24IdentificationFaultTest {
             failNext.set(true);
             RateLimiter productionLimiter = RateLimiter.of("yes24-fast-" + i, RateLimiterConfig.custom()
                     .limitForPeriod(1).limitRefreshPeriod(Duration.ofMillis(100)).timeoutDuration(Duration.ZERO).build());
-            BookIdentificationService service = new BookIdentificationService(newClient(productionLimiter),
+            // 읽기 상한은 넉넉히(1s) — 이 시험이 볼 것은 선제한이지 가짜 서버의 느린 응답이 아니다(2차 리뷰)
+            BookIdentificationService service = new BookIdentificationService(newClient(productionLimiter, Duration.ofSeconds(1)),
                     new SimpleMeterRegistry(), CircuitBreakerRegistry.of(NO_CIRCUIT), RetryRegistry.of(PRODUCTION_RETRY));
             if (service.identify(ISBN, null).yes24() == Yes24Status.FOUND) {
                 recovered++;
@@ -131,7 +132,7 @@ class Yes24IdentificationFaultTest {
         }
 
         System.out.printf("[T4 전후] 빠른 실패(503) 뒤 재시도, 운영 선제한 | 구한 검색 %d/20%n", recovered);
-        assertThat(recovered).isEqualTo(20);
+        assertThat(recovered).as("빠른 503 뒤 재시도가 선제한에 막히지 않고 모두 구해져야 한다").isEqualTo(20);
     }
 
     private Outcome run(IntFunction<MockResponse> fault, int searches, RetryConfig retry, CircuitBreakerConfig circuit) {
@@ -161,12 +162,13 @@ class Yes24IdentificationFaultTest {
     private Yes24Client newClient() {
         // 선제한은 이 시험의 관심사가 아니다 — 넉넉히
         return newClient(RateLimiter.of("yes24-fault", RateLimiterConfig.custom()
-                .limitForPeriod(1000).limitRefreshPeriod(Duration.ofSeconds(1)).timeoutDuration(Duration.ZERO).build()));
+                .limitForPeriod(1000).limitRefreshPeriod(Duration.ofSeconds(1)).timeoutDuration(Duration.ZERO).build()),
+                READ_TIMEOUT);
     }
 
-    private Yes24Client newClient(RateLimiter rateLimiter) {
+    private Yes24Client newClient(RateLimiter rateLimiter, Duration readTimeout) {
         Yes24Properties properties = new Yes24Properties(server.url("/").toString().replaceAll("/$", ""), "test-key",
-                Duration.ofMillis(400), READ_TIMEOUT, Duration.ofSeconds(3));
+                Duration.ofMillis(400), readTimeout, Duration.ofSeconds(3));
         return new Yes24Client(RestClient.builder(), properties, rateLimiter, new SimpleMeterRegistry(),
                 Clock.systemUTC(), ExternalCallBudget.unlimited());
     }

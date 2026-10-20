@@ -89,7 +89,8 @@ public class BookIdentificationService {
     }
 
     // 순서는 Retry(서킷(클라이언트 안 선제한·예산·호출)) — 결정 카드 규칙 4. 재시도도 시도마다 허가·예산을 다시 거친다(규칙 1)
-    private Optional<Yes24Book> lookupWithResilience(String isbn13) {
+    // 시험에서 '첫 실패 + 못 보낸 이유(suppressed)'를 직접 확인하려고 package-private
+    Optional<Yes24Book> lookupWithResilience(String isbn13) {
         AtomicReference<Yes24TransientException> firstFailure = new AtomicReference<>();
         Supplier<Optional<Yes24Book>> attempt = () -> {
             try {

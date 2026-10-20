@@ -210,7 +210,7 @@ resilience4j:
           - com.checkbook.client.yes24.Yes24TransientException
   circuitbreaker:
     instances:
-      # YES24가 멈추면 검색마다 1.5초씩 기다리지 않게(T4 결정 카드 6). 실패로 세는 건 일시 오류뿐 — 429·4xx·검증 실패는 YES24가
+      # YES24가 멈추면 검색마다 약 1.6초(0.7 + 0.2 + 0.7)씩 기다리지 않게(T4 결정 카드 6). 실패로 세는 건 일시 오류뿐 — 429·4xx·검증 실패는 YES24가
       # 답한 것이라 성공으로 센다. 우리가 보내지 않은 호출(선제한·일일 중단·예산)은 무시(규칙 3). 열리면 새 책 섹션 FAILED(6-1)
       yes24:
         sliding-window-size: 10
