@@ -17,6 +17,7 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.SocketTimeoutException;
@@ -222,12 +223,16 @@ public class Yes24Client {
                     .exchange((request, response) -> {
                         T body = null;
                         boolean parseFailed = false;
+                        IOException transportFailure = null;
                         try {
                             body = response.bodyTo(bodyType);
                         } catch (RestClientException e) {
                             parseFailed = true;
+                            // 연결 끊김·리셋이면 원인 사슬에 IOException이 있다. JSON 모양이 틀린 경우(Jackson 3 예외)에는 없다
+                            transportFailure = ioCause(e);
                         }
-                        return new RawResponse<>(response.getStatusCode().value(), response.getHeaders(), body, parseFailed);
+                        return new RawResponse<>(response.getStatusCode().value(), response.getHeaders(), body, parseFailed,
+                                transportFailure);
                     });
         } catch (RestClientException e) {
             // 응답을 못 받은 실패(연결 거절·끊김·타임아웃)는 다시 보내면 나을 수 있다
@@ -244,6 +249,12 @@ public class Yes24Client {
         if (raw.status() == 200 && raw.parseFailed()
                 && Duration.ofNanos(System.nanoTime() - startedNanos).compareTo(deadline) >= 0) {
             throw new Yes24TransientException(Kind.TIMEOUT, "YES24 타임아웃(본문 수신 중)");
+        }
+        // 마감 전에 본문을 읽다 연결이 끊겼다 — 파싱 실패가 아니라 전송 실패라 다시 보낼 만하고, 서킷도 실패로 세야 한다.
+        // 파싱 실패로 두면 YES24 앞단이 응답 도중 끊는 장애에서 재시도도 안 하고 서킷이 '답했다(성공)'로 센다.
+        // 429는 상태 코드·헤더로 한도를 판정하므로(일일 중단) 그대로 둔다
+        if (raw.transportFailure() != null && raw.status() != 429) {
+            throw new Yes24TransientException(Kind.FAILED, "YES24 응답 수신 중 연결 끊김", raw.transportFailure());
         }
         return raw;
     }
@@ -383,6 +394,16 @@ public class Yes24Client {
         return false;
     }
 
-    private record RawResponse<T>(int status, HttpHeaders headers, T body, boolean parseFailed) {
+    private static IOException ioCause(Throwable e) {
+        for (Throwable t = e; t != null; t = t.getCause() == t ? null : t.getCause()) {
+            if (t instanceof IOException io) {
+                return io;
+            }
+        }
+        return null;
+    }
+
+    private record RawResponse<T>(int status, HttpHeaders headers, T body, boolean parseFailed,
+                                  IOException transportFailure) {
     }
 }

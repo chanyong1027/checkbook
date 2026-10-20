@@ -12,6 +12,7 @@ import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
+import okhttp3.mockwebserver.SocketPolicy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -208,6 +209,30 @@ class Yes24ClientTest {
 
         assertThat(e).isInstanceOf(Yes24TransientException.class);
         assertThat(e.sent()).isTrue();
+    }
+
+    // 200을 받고 본문을 읽다 연결이 끊기면(마감 전) 파싱 실패가 아니라 전송 실패다 — 다시 보내면 나을 수 있다(외부 리뷰 P2)
+    @Test
+    void connectionDroppedWhileReadingBodyIsTransient() {
+        server.enqueue(json(200, foundBody(ISBN, "테스트 책", 13500.0))
+                .setSocketPolicy(SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY));
+
+        Yes24Exception e = lookupFailure(newClient());
+
+        assertThat(e).isInstanceOf(Yes24TransientException.class);
+        assertThat(e.kind()).isEqualTo(Kind.FAILED);
+        assertThat(e.getCause()).as("끊긴 원인을 남긴다").isNotNull();
+    }
+
+    // 본문이 끝까지 왔는데 JSON 모양이 틀리면 다시 보내도 같다 — 일시 오류가 아니다
+    @Test
+    void malformedJsonBodyIsNotTransient() {
+        server.enqueue(json(200, "{\"success\":true,\"data\":{\"items\":["));
+
+        Yes24Exception e = lookupFailure(newClient());
+
+        assertThat(e).isNotInstanceOf(Yes24TransientException.class);
+        assertThat(e.kind()).isEqualTo(Kind.FAILED);
     }
 
     // 다시 보내도 같은 답이 오는 실패는 일시 오류가 아니다(결정 카드 규칙 2)

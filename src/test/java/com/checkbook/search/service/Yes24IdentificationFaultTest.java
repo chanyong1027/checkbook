@@ -17,6 +17,7 @@ import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
+import okhttp3.mockwebserver.SocketPolicy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -133,6 +134,31 @@ class Yes24IdentificationFaultTest {
 
         System.out.printf("[T4 전후] 빠른 실패(503) 뒤 재시도, 운영 선제한 | 구한 검색 %d/20%n", recovered);
         assertThat(recovered).as("빠른 503 뒤 재시도가 선제한에 막히지 않고 모두 구해져야 한다").isEqualTo(20);
+    }
+
+    // 본문 수신 중 연결이 끊긴 응답도 일시 오류로 재시도되고 서킷에 실패로 세어져야 한다(외부 리뷰 P2).
+    // 이전에는 파싱 실패로 뭉쳐져 호출 1회·FAILED·서킷 성공 1건이었다 — YES24 앞단이 응답 도중 끊는 장애에서 서킷이 안 열린다
+    @Test
+    void connectionDroppedMidBodyIsRetriedAndCountedByCircuit() {
+        AtomicInteger requests = new AtomicInteger();
+        server.setDispatcher(new Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) {
+                return requests.incrementAndGet() == 1
+                        ? found().setSocketPolicy(SocketPolicy.DISCONNECT_DURING_RESPONSE_BODY)
+                        : found();
+            }
+        });
+        CircuitBreakerRegistry circuits = CircuitBreakerRegistry.of(BookIdentificationServiceTest.CIRCUIT);
+        BookIdentificationService service = new BookIdentificationService(newClient(), new SimpleMeterRegistry(),
+                circuits, RetryRegistry.of(BookIdentificationServiceTest.RETRY));
+
+        IdentificationResult result = service.identify(ISBN, null);
+
+        assertThat(result.yes24()).isEqualTo(Yes24Status.FOUND);
+        assertThat(requests.get()).isEqualTo(2);
+        assertThat(circuits.circuitBreaker(BookIdentificationService.YES24_RESILIENCE_NAME).getMetrics().getNumberOfFailedCalls())
+                .isEqualTo(1);
     }
 
     private Outcome run(IntFunction<MockResponse> fault, int searches, RetryConfig retry, CircuitBreakerConfig circuit) {
