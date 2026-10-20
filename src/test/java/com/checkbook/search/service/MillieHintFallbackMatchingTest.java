@@ -7,6 +7,7 @@ import com.checkbook.common.matcher.BookMatcher;
 import com.checkbook.common.matcher.BookMetadataNormalizer;
 import com.checkbook.search.dto.IdentifiedBook;
 import com.checkbook.search.dto.MillieAvailability;
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
@@ -26,7 +27,8 @@ class MillieHintFallbackMatchingTest {
     private final MillieBookMatcher matcher = new MillieBookMatcher(new BookMatcher(normalizer), normalizer);
     private final MillieClient millieClient = mock(MillieClient.class);
     private final MillieBookService service = new MillieBookService(millieClient, matcher, normalizer, new SimpleMeterRegistry(),
-            new MillieProperties("https://live-api.example", 2000, "/v3/search/total", "https://millie.example/book/"));
+            new MillieProperties("https://live-api.example", 2000, "/v3/search/total", "https://millie.example/book/"),
+            CircuitBreakerRegistry.ofDefaults());
 
     private final MillieBookItem onMillie = new MillieBookItem(
             "SEQ9", "모두가 부자 되는 투자 공부", "", "홍길동", "경제경영", "테스트출판", true, true);
