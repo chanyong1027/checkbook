@@ -98,6 +98,7 @@ class KyoboELibrarySeedCollectorTest {
         assertThat(KyoboELibrarySeedCollector.normalizeBaseUrl("http://heo@n-online.jp")).isNull(); // 메일 주소
         assertThat(KyoboELibrarySeedCollector.normalizeBaseUrl("javascript:void(0)")).isNull();
         assertThat(KyoboELibrarySeedCollector.normalizeBaseUrl("")).isNull();
+        assertThat(KyoboELibrarySeedCollector.normalizeBaseUrl("http://lib.example.ac.kr:")).isNull(); // 빈 포트
         // IP 주소는 주소다
         assertThat(KyoboELibrarySeedCollector.normalizeBaseUrl("http://211.252.121.111"))
                 .isEqualTo("http://211.252.121.111");

@@ -1,6 +1,7 @@
 -- Generated from https://ebook.kyobobook.co.kr/dig/cff/e-library
 -- DO NOT re-run on an existing DB: this file predates the 2026-10-20 cleanup (doubled-scheme URLs would come back as new
--- ACTIVE rows and status would be reset to ACTIVE). Regenerate with KyoboELibrarySeedCollector instead.
+-- ACTIVE rows and status would be reset to ACTIVE). Regenerate with KyoboELibrarySeedCollector instead, and fix
+-- 'http://lib.global.ac.kr/elibary-front' by hand (typo in the source list, the collector keeps it).
 -- Total raw anchors collected from tab_cont sections: 1997
 -- No URL validity filtering. region is left NULL intentionally.
 

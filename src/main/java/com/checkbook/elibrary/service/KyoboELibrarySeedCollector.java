@@ -116,6 +116,10 @@ public class KyoboELibrarySeedCollector {
         }
         // 사용자 정보가 없으니 값은 "scheme://호스트[:포트][경로]" 꼴이다
         String rest = value.substring(scheme.length() + "://".length() + host.length());
+        // 'http://x.com:'처럼 포트 칸이 비면 URI는 포트 없음(-1)으로 받아 주지만 ':'가 남는다
+        if (uri.getPort() == -1 && rest.startsWith(":")) {
+            return null;
+        }
         return scheme + "://" + host.toLowerCase(Locale.ROOT) + rest;
     }
 
