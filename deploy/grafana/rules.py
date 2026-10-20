@@ -316,6 +316,41 @@ def build_rules():
                 '|~ "outcome=(structure_changed|parse_failed|endpoint_not_found)"` 에서 id가 하나뿐인지',
                 "여러 사이트면 업체 템플릿 변경 — 해당 클라이언트(Kyobo·BookcubeELibClient) 선택자 수정 필요",
             ]),
+        # 전자도서관 주간 계약 확인(결정 2026-10-21): 월 09:17에 한 번 돌고 결과 카운터가 1 오른다.
+        # 위 규칙은 사용자 검색이 있어야 판단하지만, 이것은 검색이 없어도 매주 무작위 3곳을 직접 본다
+        Rule(
+            uid="cb-elibrary-contract-failed", tier=INFO, title="전자도서관 계약 확인 실패",
+            expr=increase("elibrary_contract_check_total", f'{APP}, result=~"vendor_failure|undetermined"', "1h",
+                          by="result") + " > 0",
+            summary="교보 전자도서관 주간 확인 결과 {{ $labels.result }} — vendor_failure는 다시 뽑은 사이트까지 과반이 실패"
+                    "(템플릿 변경 또는 공통 장애), undetermined는 검사할 사이트를 못 찾음",
+            runbook=[
+                "사이트별 판정: Explore(로그) `" + LOKI_APP + ' |= "전자도서관 계약 확인"`',
+                "틀 변경 의심(TEMPLATE_SUSPECT)이 많으면 브라우저로 그 사이트 검색 화면을 열어 KyoboELibClient 선택자와 비교",
+                "닿지 않음(UNREACHABLE)이 많으면 우리 서버 네트워크·DNS부터: 서버에서 `curl -sI <사이트 주소>`",
+                "undetermined면 로그의 robots 막힘·상한 수를 본다(robots_disallowed 값을 채웠는지)",
+            ]),
+        Rule(
+            uid="cb-elibrary-site-broken", tier=INFO, title="전자도서관 사이트 고장 후보",
+            expr=increase("elibrary_contract_site_failed_total", APP, "1h") + " > 0",
+            summary="주간 확인에서 전자도서관 사이트 " + COUNT + "곳이 실패했습니다(업체 공통 장애는 아님) — 정리할지 확인",
+            runbook=[
+                "사이트 id·이름·이유: Explore(로그) `" + LOKI_APP + ' |= "전자도서관 사이트 고장 후보"`',
+                "브라우저로 열어 본다: 닫혔으면 `UPDATE elibrary SET status = 'INACTIVE' WHERE id = <id>;`, "
+                "주소만 바뀌었으면 base_url 수정, 점검·일시 오류면 그대로",
+            ]),
+        Rule(
+            uid="cb-elibrary-contract-stale", tier=INFO, title="전자도서관 계약 확인 멈춤",
+            # 지표가 7~8일 전에도 있었을 때만 본다 — 배포 직후 첫 월요일 전에는 증가가 0이라 바로 울리기 때문.
+            # 재시작해도 카운터는 기동 때 0으로 다시 생겨 increase()는 실제로 돈 횟수만 센다
+            expr=(f"sum (increase(elibrary_contract_check_total{{{APP}}}[8d]))\n"
+                  f"and on () count (max_over_time(elibrary_contract_check_total{{{APP}}}[1d] offset 7d)) > 0"),
+            op="lt", value=1,
+            summary="전자도서관 주간 계약 확인이 8일 넘게 돌지 않았습니다",
+            runbook=[
+                "로그: " + APP_LOGS.replace("-1 hour", "-8 day") + " | grep '전자도서관 계약 확인'",
+                "월 09:17에 앱이 떠 있었는지(배포·다운), elibrary.contract-check.enabled가 켜져 있는지",
+            ]),
         Rule(
             uid="cb-disk-filling", tier=INFO, title="디스크가 하루 안에 찰 것으로 보임",
             expr=_disk_used_above(40, fill_within_hours=24),
