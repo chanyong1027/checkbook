@@ -51,7 +51,9 @@ public class KyoboELibClient implements ELibClient {
     }
 
     @Override
-    public List<ELibrarySearchResponse.ELibraryBook> search(String baseUrl, String keyword) {
+    public List<ELibrarySearchResponse.ELibraryBook> search(String rawBaseUrl, String keyword) {
+        // 끝 '/'가 남은 주소는 '//search'를 부른다(10-20 전수 조사 12곳). 갈래 주소도 이 값으로 만든다
+        String baseUrl = stripTrailingSlashes(rawBaseUrl);
         String encoded = URLEncoder.encode(keyword, StandardCharsets.UTF_8);
         log.info("교보 전자도서관 검색: {}", baseUrl);
 
@@ -85,6 +87,14 @@ public class KyoboELibClient implements ELibClient {
         // 업체가 검색 주소를 바꾸면 모든 사이트가 여기로 온다 — 사이트 하나의 HTTP 오류와 나눈다
         log.warn("교보 전자도서관 모든 경로 실패: {}", baseUrl);
         throw new ELibraryClientException(ELibraryClientException.Kind.ENDPOINT_NOT_FOUND, "교보 전자도서관 접속 실패", lastException);
+    }
+
+    private static String stripTrailingSlashes(String url) {
+        int end = url.length();
+        while (end > 0 && url.charAt(end - 1) == '/') {
+            end--;
+        }
+        return url.substring(0, end);
     }
 
     private List<String> buildCandidates(String baseUrl) {

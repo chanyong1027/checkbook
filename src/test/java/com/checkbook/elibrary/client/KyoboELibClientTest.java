@@ -43,6 +43,21 @@ class KyoboELibClientTest {
     }
 
     @Test
+    void 주소_끝에_슬래시가_있어도_검색_경로가_겹치지_않는다() throws Exception {
+        // 끝 '/'가 남은 주소 12곳이 '//search'를 불렀다(10-20 전수 조사)
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse()
+                    .setHeader("Content-Type", "text/html; charset=UTF-8")
+                    .setBody("<html><body><ul class=\"book_resultList\"></ul></body></html>"));
+            server.start();
+
+            client.search(server.url("/").toString(), "자바");
+
+            assertThat(server.takeRequest().getPath()).startsWith("/search/searchList.ink?");
+        }
+    }
+
+    @Test
     void searchInvalidDomThrowsException() throws Exception {
         try (MockWebServer server = new MockWebServer()) {
             server.enqueue(new MockResponse()
