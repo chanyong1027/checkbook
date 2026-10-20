@@ -38,6 +38,13 @@ class RuleSourceTest(unittest.TestCase):
                         or (label == "mountpoint" and "node_filesystem" in r.expr and "sum" not in r.expr))
                 self.assertTrue(kept, f"{r.uid}: $labels.{label}")
 
+    def test_요약의_값은_읽기_쉬운_모양이다(self):
+        # 날것({{ $values.A }})이면 비율이 0.1834, 건수가 2.98처럼 나온다
+        for r in RULES:
+            self.assertNotIn("{{ $values.A }}", r.summary, r.uid)
+        for uid in ("cb-server-5xx-burn", "cb-section-failed-burn", "cb-client-slow-burn", "cb-elibrary-vendor-changed"):
+            self.assertIn(rules.PCT, next(r for r in RULES if r.uid == uid).summary, uid)
+
     def test_사라짐_감시는_규칙이_보는_앱_지표를_다_덮는다(self):
         missing = next(r for r in RULES if r.uid == "cb-app-metrics-missing")
         watched = set(re.findall(r"absent\((\w+)\{", missing.expr))
