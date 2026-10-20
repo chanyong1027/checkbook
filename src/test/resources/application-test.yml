@@ -43,6 +43,8 @@ elibrary:
   queue-capacity: 10
   per-library-timeout: 15000
   total-timeout: 20000
+  contract-check:
+    enabled: false
 
 cors:
   allowed-origins: http://localhost:3000

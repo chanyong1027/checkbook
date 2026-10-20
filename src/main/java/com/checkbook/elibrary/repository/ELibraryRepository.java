@@ -34,4 +34,8 @@ public interface ELibraryRepository extends JpaRepository<ELibrary, Long> {
             @Param("vendorType") VendorType vendorType,
             @Param("keyword") String keyword
     );
+
+    /** 주간 계약 확인 후보: 사용자가 쓸 수 있고(ACTIVE·로그인 불필요) robots가 막지 않은 사이트 */
+    List<ELibrary> findAllByStatusAndVendorTypeAndLoginRequiredFalseAndRobotsDisallowedFalse(
+            ELibraryStatus status, VendorType vendorType);
 }

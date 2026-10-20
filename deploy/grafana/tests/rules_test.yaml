@@ -299,6 +299,10 @@ tests:
         values: '1x30'
       - series: 'elibrary_scrape_seconds_count{job="checkbook-app", slot="blue", vendor="kyobo", outcome="found"}'
         values: '0x30'
+      - series: 'elibrary_contract_check_total{job="checkbook-app", slot="blue", result="pass"}'
+        values: '0x30'
+      - series: 'elibrary_contract_site_failed_total{job="checkbook-app", slot="blue"}'
+        values: '0x30'
       - series: 'external_budget_limit{job="checkbook-app", slot="blue", provider="yes24", kind="block"}'
         values: '19000x30'
       - series: 'external_budget_used{job="checkbook-app", slot="blue", provider="yes24"}'
@@ -476,3 +480,60 @@ tests:
       - eval_time: 52m
         alertname: cb-server-5xx
         exp_alerts: []
+
+  # ---------- 전자도서관 주간 계약 확인 ----------
+  - name: 업체 공통 장애·판정 불가는 울리고, 통과·사이트 고장은 이 규칙이 아니다
+    interval: 1m
+    input_series:
+      # 기동 때 결과마다 0으로 만들어 둔다 — 10분에 확인이 한 번 돌아 1이 된다
+      - series: 'elibrary_contract_check_total{job="checkbook-app", slot="blue", result="vendor_failure"}'
+        values: '0x9 1x80'
+      - series: 'elibrary_contract_check_total{job="checkbook-app", slot="blue", result="pass"}'
+        values: '0x9 1x80'
+      - series: 'elibrary_contract_check_total{job="checkbook-app", slot="blue", result="site_failure"}'
+        values: '0x9 1x80'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: cb-elibrary-contract-failed
+        exp_alerts:
+          - exp_labels: {tier: info, result: vendor_failure}
+      - eval_time: 75m
+        alertname: cb-elibrary-contract-failed
+        exp_alerts: []
+
+  - name: 사이트 고장 후보가 있으면 울린다
+    interval: 1m
+    input_series:
+      - series: 'elibrary_contract_site_failed_total{job="checkbook-app", slot="blue"}'
+        values: '0x9 2x80'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: cb-elibrary-site-broken
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: cb-elibrary-site-broken
+        exp_alerts:
+          - exp_labels: {tier: info}
+
+  - name: 확인이 8일 넘게 안 돌면 울리되, 지표가 생긴 지 7일이 안 됐으면 판단하지 않는다
+    interval: 1h
+    input_series:
+      # 0시에 배포(0으로 생김), 31시에 첫 확인, 그 뒤로는 돌지 않음(블루에서 그린으로 바뀐 칸도 0으로 생김)
+      - series: 'elibrary_contract_check_total{job="checkbook-app", slot="blue", result="pass"}'
+        values: '0x30 1x120'
+      - series: 'elibrary_contract_check_total{job="checkbook-app", slot="green", result="pass"}'
+        values: '_x150 0x100'
+    alert_rule_test:
+      # 배포 직후: 아직 한 번도 안 돌았지만 지표가 7일이 안 돼 판단하지 않는다
+      - eval_time: 20h
+        alertname: cb-elibrary-contract-stale
+        exp_alerts: []
+      # 7일 지남, 8일 창 안에 31시 확인이 있다
+      - eval_time: 200h
+        alertname: cb-elibrary-contract-stale
+        exp_alerts: []
+      # 31시 확인이 8일 창 밖으로 나갔다
+      - eval_time: 240h
+        alertname: cb-elibrary-contract-stale
+        exp_alerts:
+          - exp_labels: {tier: info}
