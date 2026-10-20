@@ -89,6 +89,11 @@ elibrary:
   queue-capacity: 25
   per-library-timeout: 15000
   total-timeout: 20000
+  # 교보 템플릿 변경 감지(결정 2026-10-21). 매주 무작위 3곳(robots 허용) 검색, 2곳 이상 실패면 3곳 더.
+  # 결과는 elibrary.contract.* 지표 → Grafana 규칙(deploy/grafana/rules.py)이 Slack 낮 채널로 알린다
+  contract-check:
+    enabled: true
+    cron: "0 17 9 * * MON"   # 월 09:17 KST(밀리 계약 확인과 같은 시각)
 
 async:
   # abort — fault A/B 실측으로 확정 (2026-07-04): callerRuns는 FAILED 15.8%·max 41.5s·처리량 43%

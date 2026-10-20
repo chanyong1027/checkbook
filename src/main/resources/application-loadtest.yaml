@@ -23,6 +23,11 @@ yes24:
 rate-limit:
   enabled: false
 
+# 주간 계약 확인은 실제 전자도서관 사이트로 나간다 — 부하 측정 중에 돌지 않게 끈다
+elibrary:
+  contract-check:
+    enabled: false
+
 logging:
   level:
     com.checkbook.client: INFO
