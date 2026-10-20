@@ -18,6 +18,11 @@ public class RateLimitConfig {
     }
 
     @Bean
+    public ELibraryConcurrencyLimiter eLibraryConcurrencyLimiter(RateLimitProperties properties) {
+        return new ELibraryConcurrencyLimiter(properties);
+    }
+
+    @Bean
     public ClientDailyLimitInterceptor clientDailyLimitInterceptor(RateLimitProperties properties, MeterRegistry meterRegistry) {
         return new ClientDailyLimitInterceptor(properties, meterRegistry, Clock.systemUTC());
     }

@@ -23,7 +23,7 @@ class ExternalCallBudgetTest {
                 Map.of(
                         ExternalProvider.YES24, new RateLimitProperties.Provider(10, 8),
                         ExternalProvider.DATANARU, new RateLimitProperties.Provider(10, 9)),
-                3);
+                3, 1, 2);
         return new ExternalCallBudget(properties, meterRegistry, clock);
     }
 
@@ -107,7 +107,8 @@ class ExternalCallBudgetTest {
         ExternalCallBudget budget = budget(false);
         for (int i = 0; i < 20; i++) {
             budget.acquire(ExternalProvider.YES24);
-            budget.acquireELibrary(1L);
+            budget.acquireELibrary(1L, false);
+            budget.acquireELibrary(2L, true);
         }
 
         assertThat(budget.isExhausted(ExternalProvider.YES24)).isFalse();
@@ -117,14 +118,27 @@ class ExternalCallBudgetTest {
     void 전자도서관은_도서관마다_따로_센다() {
         ExternalCallBudget budget = budget(true);
         for (int i = 0; i < 3; i++) {
-            budget.acquireELibrary(1L);
+            budget.acquireELibrary(1L, false);
         }
 
-        assertThatThrownBy(() -> budget.acquireELibrary(1L))
+        assertThatThrownBy(() -> budget.acquireELibrary(1L, false))
                 .isInstanceOf(DailyBudgetExceededException.class)
                 .satisfies(e -> assertThat(((DailyBudgetExceededException) e).provider())
                         .isEqualTo(ExternalProvider.ELIBRARY));
-        budget.acquireELibrary(2L);
+        budget.acquireELibrary(2L, false);
+    }
+
+    @Test
+    void robots가_막은_사이트는_더_낮은_하루_상한을_쓴다() {
+        // 사용자 1회 조회만 예외로 연 사이트라 부하를 더 줄인다(결정 2026-10-20). 이 테스트에서 일반 3, 차단 1
+        ExternalCallBudget budget = budget(true);
+        budget.acquireELibrary(1L, true);
+
+        assertThatThrownBy(() -> budget.acquireELibrary(1L, true))
+                .isInstanceOf(DailyBudgetExceededException.class);
+        for (int i = 0; i < 3; i++) {
+            budget.acquireELibrary(2L, false);
+        }
     }
 
     @Test

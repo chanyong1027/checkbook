@@ -4,6 +4,7 @@ import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
 import com.checkbook.common.matcher.BookMatcher;
 import com.checkbook.common.matcher.BookMetadataNormalizer;
+import com.checkbook.common.ratelimit.ELibraryConcurrencyLimiter;
 import com.checkbook.common.ratelimit.ExternalCallBudget;
 import com.checkbook.common.ratelimit.RateLimitProperties;
 import com.checkbook.elibrary.client.ELibClient;
@@ -55,7 +56,9 @@ class ELibrarySearchServiceTest {
 
     private ExecutorService eLibraryExecutor;
     private final ExternalCallBudget budget = new ExternalCallBudget(
-            new RateLimitProperties(true, null, Map.of(), 1), new SimpleMeterRegistry(), Clock.systemUTC());
+            new RateLimitProperties(true, null, Map.of(), 1, 1, 1), new SimpleMeterRegistry(), Clock.systemUTC());
+    private final ELibraryConcurrencyLimiter concurrencyLimiter =
+            new ELibraryConcurrencyLimiter(new RateLimitProperties(true, null, Map.of(), 1, 1, 1));
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private ELibrarySearchService service;
 
@@ -64,7 +67,7 @@ class ELibrarySearchServiceTest {
         eLibraryExecutor = Executors.newFixedThreadPool(5);
         BookMetadataNormalizer normalizer = new BookMetadataNormalizer();
         service = new ELibrarySearchService(eLibraryRepository, clientResolver, eLibraryExecutor,
-                new BookMatcher(normalizer), normalizer, budget, meterRegistry);
+                new BookMatcher(normalizer), normalizer, budget, concurrencyLimiter, meterRegistry);
     }
 
     @AfterEach
@@ -79,7 +82,7 @@ class ELibrarySearchServiceTest {
         when(eLibraryRepository.findAllById(List.of(1L, 2L))).thenReturn(List.of(first, second));
         when(clientResolver.resolve(VendorType.KYOBO)).thenReturn(mockClient);
         when(mockClient.search(anyString(), anyString())).thenReturn(List.of());
-        budget.acquireELibrary(1L); // 상한 1을 미리 씀
+        budget.acquireELibrary(1L, false); // 상한 1을 미리 씀
 
         ELibrarySearchResponse response = service.search("자바의 정석", "남궁성", "1,2");
 
@@ -98,7 +101,7 @@ class ELibrarySearchServiceTest {
                 new SynchronousQueue<>(), new ThreadPoolExecutor.AbortPolicy());
         rejecting.shutdown(); // 이후 제출은 전부 거절된다
         ELibrarySearchService saturated = new ELibrarySearchService(eLibraryRepository, clientResolver, rejecting,
-                new BookMatcher(normalizer), normalizer, budget, meterRegistry);
+                new BookMatcher(normalizer), normalizer, budget, concurrencyLimiter, meterRegistry);
 
         ELibrarySearchResponse first = saturated.search("자바의 정석", "남궁성", "1");
         assertThat(first.results()).extracting(ELibrarySearchResponse.ELibraryResult::status)
@@ -110,6 +113,62 @@ class ELibrarySearchServiceTest {
         ELibrarySearchResponse second = service.search("자바의 정석", "남궁성", "1");
         assertThat(second.results()).extracting(ELibrarySearchResponse.ELibraryResult::status)
                 .containsExactly(ELibrarySearchStatus.SUCCESS);
+    }
+
+    @Test
+    void robots가_막은_사이트는_더_낮은_하루_상한을_쓴다() {
+        ExternalCallBudget robotsBudget = new ExternalCallBudget(
+                new RateLimitProperties(true, null, Map.of(), 5, 1, 1), new SimpleMeterRegistry(), Clock.systemUTC());
+        BookMetadataNormalizer normalizer = new BookMetadataNormalizer();
+        ELibrarySearchService robotsService = new ELibrarySearchService(eLibraryRepository, clientResolver,
+                eLibraryExecutor, new BookMatcher(normalizer), normalizer, robotsBudget, concurrencyLimiter, meterRegistry);
+        ELibrary blocked = activeLibrary(1L);
+        ReflectionTestUtils.setField(blocked, "robotsDisallowed", true);
+        when(eLibraryRepository.findAllById(List.of(1L))).thenReturn(List.of(blocked));
+        when(clientResolver.resolve(VendorType.KYOBO)).thenReturn(mockClient);
+        when(mockClient.search(anyString(), anyString())).thenReturn(List.of());
+
+        assertThat(robotsService.search("자바의 정석", "남궁성", "1").results().get(0).status())
+                .isEqualTo(ELibrarySearchStatus.SUCCESS);
+        assertThat(robotsService.search("자바의 정석", "남궁성", "1").results().get(0).status())
+                .isEqualTo(ELibrarySearchStatus.DAILY_LIMIT);
+    }
+
+    @Test
+    void 같은_사이트에_동시_요청_자리가_없으면_마감까지_기다리다_시간_초과이고_예산을_쓰지_않는다() {
+        // 사이트당 동시 요청 상한(결정 2026-10-20). 자리를 못 얻은 요청은 사이트에 가지 않았으니 하루 예산도 그대로여야 한다
+        ELibrary library = activeLibrary(1L);
+        when(eLibraryRepository.findAllById(List.of(1L))).thenReturn(List.of(library));
+        ReflectionTestUtils.setField(service, "perLibraryTimeoutMs", 100L);
+        assertThat(concurrencyLimiter.tryAcquire(1L, 0)).isTrue(); // 다른 요청이 자리(1)를 쥐고 있다
+
+        ELibrarySearchResponse waited = service.search("자바의 정석", "남궁성", "1");
+
+        assertThat(waited.results()).extracting(ELibrarySearchResponse.ELibraryResult::status)
+                .containsExactly(ELibrarySearchStatus.TIMEOUT);
+        assertThat(meterRegistry.get("elibrary.scrape").tags("vendor", "kyobo", "outcome", "timeout").timer().count())
+                .isEqualTo(1);
+
+        // 자리가 나면 같은 사이트를 수집할 수 있다(예산 상한 1이 남아 있어야 SUCCESS)
+        concurrencyLimiter.release(1L);
+        when(clientResolver.resolve(VendorType.KYOBO)).thenReturn(mockClient);
+        when(mockClient.search(anyString(), anyString())).thenReturn(List.of());
+        assertThat(service.search("자바의 정석", "남궁성", "1").results())
+                .extracting(ELibrarySearchResponse.ELibraryResult::status)
+                .containsExactly(ELibrarySearchStatus.SUCCESS);
+    }
+
+    @Test
+    void 수집이_실패해도_동시_요청_자리를_돌려준다() {
+        ELibrary first = activeLibrary(1L);
+        when(eLibraryRepository.findAllById(List.of(1L))).thenReturn(List.of(first));
+        when(clientResolver.resolve(VendorType.KYOBO)).thenReturn(mockClient);
+        when(mockClient.search(anyString(), anyString())).thenThrow(new RuntimeException("parse error"));
+
+        service.search("자바의 정석", "남궁성", "1");
+
+        // 자리(1)를 돌려주지 않았으면 0ms 안에 못 얻는다
+        assertThat(concurrencyLimiter.tryAcquire(1L, 0)).isTrue();
     }
 
     @Test

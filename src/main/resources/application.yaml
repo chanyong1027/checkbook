@@ -134,6 +134,12 @@ rate-limit:
       daily-limit: 30000   # 책 검색 일간 쿼터(카카오디벨로퍼스 쿼터 문서, 10-18 확인)
       block-at: 27000
   elibrary-per-library-limit: 1000   # 전자도서관 사이트 하나당 하루 수집 상한(공개 한도 없음, 작은 사이트 보호)
+  # robots.txt가 막은 사이트(elibrary.robots_disallowed). 사용자 1회 조회만 예외로 열어 두어 상한을 낮춘다(결정 2026-10-20).
+  # 0이면 그 사이트들을 사실상 닫는다
+  elibrary-robots-disallowed-limit: 200
+  # 사이트 하나에 동시에 보내는 요청 수. 자리가 없으면 그 사이트 마감(elibrary.per-library-timeout) 안에서 기다리고,
+  # 못 얻으면 시간 초과. 브라우저는 호스트당 6연결이라 그보다 가볍다. enabled: false면 하루 상한과 함께 꺼진다
+  elibrary-per-library-concurrency: 2
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}

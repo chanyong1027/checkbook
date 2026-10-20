@@ -34,7 +34,7 @@ class ClientDailyLimitInterceptorTest {
 
     private MockMvc mockMvc(boolean enabled) {
         RateLimitProperties properties = new RateLimitProperties(
-                enabled, new RateLimitProperties.Client(2, 1000), Map.of(), 1000);
+                enabled, new RateLimitProperties.Client(2, 1000), Map.of(), 1000, 200, 2);
         ClientDailyLimitInterceptor interceptor = new ClientDailyLimitInterceptor(properties, meterRegistry, clock);
         return MockMvcBuilders.standaloneSetup(new TestController())
                 .addInterceptors(interceptor)
@@ -99,7 +99,7 @@ class ClientDailyLimitInterceptorTest {
     @Test
     void 추적_IP_상한은_설정값_그대로이고_도달은_한_번만_센다() throws Exception {
         RateLimitProperties properties = new RateLimitProperties(
-                true, new RateLimitProperties.Client(1, 2), Map.of(), 1000);
+                true, new RateLimitProperties.Client(1, 2), Map.of(), 1000, 200, 2);
         ClientDailyLimitInterceptor interceptor = new ClientDailyLimitInterceptor(properties, meterRegistry, clock);
         MockMvc small = MockMvcBuilders.standaloneSetup(new TestController())
                 .addInterceptors(interceptor)

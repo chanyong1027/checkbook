@@ -14,17 +14,26 @@ import java.util.Map;
  * @param client                  IP별 하루 요청 한도
  * @param providers               공급자별 하루 한도와 차단선. 없는 공급자는 세기만 한다
  * @param elibraryPerLibraryLimit 전자도서관 사이트 하나당 하루 수집 상한
+ * @param elibraryRobotsDisallowedLimit robots.txt가 막은 사이트의 하루 수집 상한(사용자 1회 조회만 예외로 연 곳이라 더 낮게)
+ * @param elibraryPerLibraryConcurrency 전자도서관 사이트 하나에 동시에 보내는 요청 수 상한. 자리가 없으면 그 사이트 마감 안에서 기다린다
  */
 @ConfigurationProperties(prefix = "rate-limit")
 public record RateLimitProperties(
         @DefaultValue("true") boolean enabled,
         @DefaultValue Client client,
         Map<ExternalProvider, Provider> providers,
-        @DefaultValue("1000") int elibraryPerLibraryLimit
+        @DefaultValue("1000") int elibraryPerLibraryLimit,
+        @DefaultValue("200") int elibraryRobotsDisallowedLimit,
+        @DefaultValue("2") int elibraryPerLibraryConcurrency
 ) {
 
     public RateLimitProperties {
         providers = providers == null ? Map.of() : Map.copyOf(providers);
+        // 0이면 자리를 영영 못 얻어 전자도서관 수집이 전부 시간 초과가 된다
+        if (elibraryPerLibraryConcurrency < 1) {
+            throw new IllegalArgumentException(
+                    "rate-limit elibrary-per-library-concurrency는 1 이상이어야 한다: " + elibraryPerLibraryConcurrency);
+        }
     }
 
     /**

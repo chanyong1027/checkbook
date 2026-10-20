@@ -29,6 +29,7 @@ public class ExternalCallBudget {
     private final boolean enabled;
     private final Map<ExternalProvider, RateLimitProperties.Provider> providers;
     private final int elibraryPerLibraryLimit;
+    private final int elibraryRobotsDisallowedLimit;
     private final DailyCounter counter;
     private final MeterRegistry meterRegistry;
     // DB에 아직 더하지 않은 증가분(날짜별). 자정을 넘겨 동기화돼도 전날 몫은 전날 행에 간다.
@@ -39,6 +40,7 @@ public class ExternalCallBudget {
         this.enabled = properties.enabled();
         this.providers = properties.providers();
         this.elibraryPerLibraryLimit = properties.elibraryPerLibraryLimit();
+        this.elibraryRobotsDisallowedLimit = properties.elibraryRobotsDisallowedLimit();
         // 키는 공급자 5개 + 경고 표시 + 전자도서관 사이트 수(수천 미만)라 상한은 넉넉히 둔다
         this.counter = new DailyCounter(clock, 100_000);
         this.meterRegistry = meterRegistry;
@@ -73,7 +75,7 @@ public class ExternalCallBudget {
     /** 테스트·도구용: 막지 않는 예산 */
     public static ExternalCallBudget unlimited() {
         return new ExternalCallBudget(
-                new RateLimitProperties(false, null, Map.of(), Integer.MAX_VALUE),
+                new RateLimitProperties(false, null, Map.of(), Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE),
                 new SimpleMeterRegistry(),
                 Clock.systemUTC());
     }
@@ -120,14 +122,19 @@ public class ExternalCallBudget {
         }
     }
 
-    /** 전자도서관 사이트 하나에 대한 수집 직전에 부른다. */
-    public void acquireELibrary(long libraryId) {
+    /**
+     * 전자도서관 사이트 하나에 대한 수집 직전에 부른다.
+     *
+     * @param robotsDisallowed robots.txt가 막은 사이트면 더 낮은 하루 상한을 쓴다(결정 2026-10-20)
+     */
+    public void acquireELibrary(long libraryId, boolean robotsDisallowed) {
         String key = ELIBRARY_KEY_PREFIX + libraryId;
         if (!enabled) {
             count(key);
             return;
         }
-        LocalDate countedOn = counter.tryAcquireOn(key, elibraryPerLibraryLimit);
+        int limit = robotsDisallowed ? elibraryRobotsDisallowedLimit : elibraryPerLibraryLimit;
+        LocalDate countedOn = counter.tryAcquireOn(key, limit);
         if (countedOn == null) {
             reject(ExternalProvider.ELIBRARY, key);
         }

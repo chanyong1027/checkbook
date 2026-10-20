@@ -25,6 +25,8 @@ class RateLimitPropertiesTest {
         assertThat(properties.client().dailyLimit()).isEqualTo(500);
         assertThat(properties.client().maxTrackedClients()).isEqualTo(200_000);
         assertThat(properties.elibraryPerLibraryLimit()).isEqualTo(1000);
+        assertThat(properties.elibraryRobotsDisallowedLimit()).isEqualTo(200);
+        assertThat(properties.elibraryPerLibraryConcurrency()).isEqualTo(2);
         assertThat(properties.providers()).isEmpty();
     }
 
@@ -44,6 +46,13 @@ class RateLimitPropertiesTest {
                 .isInstanceOf(IllegalArgumentException.class);
         // 실제 기동 경로(바인딩)에서도 예외로 멈춘다
         assertThatThrownBy(() -> bind(Map.of("rate-limit.providers.kakao.daily-limit", "0")))
+                .isInstanceOf(BindException.class);
+    }
+
+    @Test
+    void 사이트당_동시_요청이_1보다_작으면_기동을_멈춘다() {
+        // 0이면 전자도서관 수집이 전부 시간 초과가 된다
+        assertThatThrownBy(() -> bind(Map.of("rate-limit.elibrary-per-library-concurrency", "0")))
                 .isInstanceOf(BindException.class);
     }
 }

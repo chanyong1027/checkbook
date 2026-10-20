@@ -87,7 +87,7 @@ class ExternalCallBudgetStoreIT {
         DailyCounterTest.MutableClock clock = new DailyCounterTest.MutableClock(
                 DAY.atTime(12, 0).atZone(DailyCounter.KST).toInstant());
         RateLimitProperties properties = new RateLimitProperties(true, null, java.util.Map.of(
-                ExternalProvider.DATANARU, new RateLimitProperties.Provider(100, 90)), 1000);
+                ExternalProvider.DATANARU, new RateLimitProperties.Provider(100, 90)), 1000, 200, 2);
         ExternalCallBudget blue = new ExternalCallBudget(properties, new io.micrometer.core.instrument.simple.SimpleMeterRegistry(), clock);
         ExternalCallBudget green = new ExternalCallBudget(properties, new io.micrometer.core.instrument.simple.SimpleMeterRegistry(), clock);
         ExternalCallBudgetSyncer blueSyncer = new ExternalCallBudgetSyncer(blue, store, meterRegistry);
