@@ -11,18 +11,26 @@ spring:
       ddl-auto: create-drop
     show-sql: false
 
-# 외부 API 키는 비면 기동이 멈춘다(@NotBlank). 테스트는 실제 호출을 하지 않으니 더미 값을 둔다
+# 외부 API 키는 비면 기동이 멈춘다(@NotBlank). 테스트는 실제 호출을 하지 않으니 더미 값을 둔다.
+# 공급자 주소는 아무도 받지 않는 곳(127.0.0.1:9 — 즉시 연결 거절)으로 — 실수로 불러도 인터넷으로 안 나가게.
+# 지금까지는 "H2 표에 메인 추천 시드 행이 없어 앱 시작 워밍업이 바로 끝난다"는 우연에 기대 안전했다.
+# Flyway를 켠 PostgreSQL 시험에서 시드 행이 생기자 워밍업이 실제 정보나루를 불렀다(10-21). 이 프로필을 얹는 시험 전부에 적용된다
 kakao:
   book:
     rest-api-key: test-key
+    base-url: http://127.0.0.1:9
 
 yes24:
   api-key: test-key
+  base-url: http://127.0.0.1:9
 
 datanaru:
   auth-key: test-key
-  base-url: https://data4library.kr/api
+  base-url: http://127.0.0.1:9/api
   timeout: 2000
+
+millie:
+  base-url: http://127.0.0.1:9
 
 search:
   total-deadline: 2800

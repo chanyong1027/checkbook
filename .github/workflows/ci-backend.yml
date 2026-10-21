@@ -56,6 +56,13 @@ jobs:
           chmod +x gradlew
           ./gradlew test --no-daemon
 
+      # 실제 PostgreSQL(Testcontainers) 시험. 러너 VM에는 Docker가 있어 따로 준비할 것이 없다.
+      # test와 단계를 나눠 실패 위치와 걸린 시간을 따로 본다(시험이 0개면 실패 — build.gradle postgresTest).
+      # 두 묶음은 서로 독립이라 앞 단계가 실패해도 돌린다 — 한 번의 CI에서 양쪽 실패를 다 본다(취소됐을 때만 건너뜀)
+      - name: PostgreSQL 시험 (Testcontainers)
+        if: ${{ !cancelled() }}
+        run: ./gradlew postgresTest --no-daemon
+
       - name: 동시성 재현 테스트 (수동 실행 시에만)
         if: github.event_name == 'workflow_dispatch'
         run: ./gradlew diagnosisTest --no-daemon
