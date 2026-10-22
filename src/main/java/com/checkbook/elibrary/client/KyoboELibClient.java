@@ -71,8 +71,8 @@ public class KyoboELibClient implements ELibClient {
     }
 
     @Override
-    public List<ELibrarySearchResponse.ELibraryBook> search(String rawBaseUrl, String keyword) {
-        return search(rawBaseUrl, keyword, null);
+    public List<ELibrarySearchResponse.ELibraryBook> search(String rawBaseUrl, String keyword, long deadlineNanos) {
+        return search(rawBaseUrl, keyword, null, deadlineNanos);
     }
 
     /**
@@ -80,6 +80,11 @@ public class KyoboELibClient implements ELibClient {
      *                      거절하면 {@link RedirectNotAllowedException}. 주간 계약 확인이 robots를 확인하려고 쓴다
      */
     public List<ELibrarySearchResponse.ELibraryBook> search(String rawBaseUrl, String keyword, Predicate<String> redirectGuard) {
+        return search(rawBaseUrl, keyword, redirectGuard, System.nanoTime() + DEFAULT_SITE_TIMEOUT.toNanos());
+    }
+
+    private List<ELibrarySearchResponse.ELibraryBook> search(String rawBaseUrl, String keyword,
+                                                             Predicate<String> redirectGuard, long deadlineNanos) {
         // 끝 '/'가 남은 주소는 '//search'를 부른다(10-20 전수 조사 12곳). 갈래 주소도 이 값으로 만든다
         String baseUrl = stripTrailingSlashes(rawBaseUrl);
         log.info("교보 전자도서관 검색: {}", baseUrl);
@@ -90,7 +95,7 @@ public class KyoboELibClient implements ELibClient {
         // 사이트 하나의 실패는 흔하고(1,964곳) 사람이 고칠 일이 아니라 WARN — ERROR는 알림 대상이라 쓰지 않는다
         for (String candidate : candidates) {
             try {
-                return doSearch(candidate, keyword, redirectGuard);
+                return doSearch(candidate, keyword, redirectGuard, deadlineNanos);
             } catch (HttpStatusException e) {
                 if (e.getStatusCode() == 404) {
                     log.debug("교보 전자도서관 404, 다음 경로 시도: {}", candidate);
@@ -148,12 +153,15 @@ public class KyoboELibClient implements ELibClient {
                 + "&schTxt=" + URLEncoder.encode(keyword, StandardCharsets.UTF_8);
     }
 
+    // 시간 제한은 요청마다 그때 남은 사이트 마감 — 갈래마다 새로 15초를 받던 것(갈래 수 × 15초)을 막는다.
+    // Jsoup이 리다이렉트를 따라갈 때(사용자 검색)는 홉마다 같은 시간 제한이 걸려, 홉이 많으면 마감을 조금 넘을 수 있다
     private List<ELibrarySearchResponse.ELibraryBook> doSearch(String searchBase, String keyword,
-                                                                Predicate<String> redirectGuard) throws IOException {
+                                                                Predicate<String> redirectGuard, long deadlineNanos)
+            throws IOException {
         String url = searchUrl(searchBase, keyword);
         Document document = redirectGuard == null
-                ? Jsoup.connect(url).headers(HEADERS).timeout(15_000).get()
-                : getFollowingAllowedRedirects(url, redirectGuard);
+                ? Jsoup.connect(url).headers(HEADERS).timeout(ELibClient.remainingMillis(deadlineNanos)).get()
+                : getFollowingAllowedRedirects(url, redirectGuard, deadlineNanos);
 
         return parseResults(document, searchBase);
     }
@@ -161,7 +169,8 @@ public class KyoboELibClient implements ELibClient {
     // Jsoup에 리다이렉트를 맡기면 어디로 갔는지 묻지 못한다 — 한 번씩 받아 다음 주소를 물은 뒤 따라간다.
     // Jsoup이 따라갈 때 하는 일을 같게 한다: 받은 쿠키(세션)를 같은 호스트로 가는 다음 요청에 싣고, Location의 공백을 고치고,
     // 리다이렉트 응답의 형식은 보지 않는다. 마지막 응답은 get()과 같게 404 → HttpStatusException, HTML 아님 → 구조 변경
-    private static Document getFollowingAllowedRedirects(String url, Predicate<String> redirectGuard) throws IOException {
+    private static Document getFollowingAllowedRedirects(String url, Predicate<String> redirectGuard, long deadlineNanos)
+            throws IOException {
         String current = url;
         Map<String, String> cookies = new HashMap<>();
         String cookieHost = hostOf(url);
@@ -175,7 +184,7 @@ public class KyoboELibClient implements ELibClient {
             Connection.Response response = Jsoup.connect(current)
                     .headers(HEADERS)
                     .cookies(cookies)
-                    .timeout(15_000)
+                    .timeout(ELibClient.remainingMillis(deadlineNanos))
                     .followRedirects(false)
                     .ignoreContentType(true)
                     .execute();

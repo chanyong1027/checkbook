@@ -46,7 +46,7 @@ public class BookcubeELibClient implements ELibClient {
     }
 
     @Override
-    public List<ELibrarySearchResponse.ELibraryBook> search(String baseUrl, String keyword) {
+    public List<ELibrarySearchResponse.ELibraryBook> search(String baseUrl, String keyword, long deadlineNanos) {
         String searchUrl = baseUrl + "/product/list/?searchType=search&keyword="
                 + URLEncoder.encode(keyword, StandardCharsets.UTF_8);
 
@@ -55,7 +55,7 @@ public class BookcubeELibClient implements ELibClient {
         try {
             Document document = Jsoup.connect(searchUrl)
                     .headers(HEADERS)
-                    .timeout(15_000)
+                    .timeout(ELibClient.remainingMillis(deadlineNanos))
                     .get();
 
             return parseResults(document, baseUrl);

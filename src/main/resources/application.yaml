@@ -93,7 +93,12 @@ public-library:
 elibrary:
   thread-pool-size: 5
   queue-capacity: 25
-  per-library-timeout: 15000
+  # 사이트 하나의 마감(작업이 실제로 시작한 때부터). 전수 조사 정상 응답 최대 3,498ms × 약 1.4(정보나루와 같은 규칙) —
+  # p99 2,399ms, 4초 넘은 곳 0/334. 갈래·리다이렉트마다 남은 시간만 쓴다(T4 결정 카드 11·11-1)
+  per-library-timeout: 5000
+  # 같은 사이트 동시 요청 자리를 기다리는 상한 → 자리를 얻으면 수집에 4초 이상이 남는다(T4 결정 카드 12)
+  slot-wait-timeout: 1000
+  # 큐 대기까지 포함한 전체 상한. 20곳 × 스레드 5개 = 4번 × 5초와 맞물린다
   total-timeout: 20000
   # 교보 템플릿 변경 감지(결정 2026-10-21). 매주 무작위 3곳(robots 허용) 검색, 2곳 이상 실패면 3곳 더.
   # 결과는 elibrary.contract.* 지표 → Grafana 규칙(deploy/grafana/rules.py)이 Slack 낮 채널로 알린다
@@ -148,7 +153,7 @@ rate-limit:
   # robots.txt가 막은 사이트(elibrary.robots_disallowed). 사용자 1회 조회만 예외로 열어 두어 상한을 낮춘다(결정 2026-10-20).
   # 0이면 그 사이트들을 사실상 닫는다
   elibrary-robots-disallowed-limit: 200
-  # 사이트 하나에 동시에 보내는 요청 수. 자리가 없으면 그 사이트 마감(elibrary.per-library-timeout) 안에서 기다리고,
+  # 사이트 하나에 동시에 보내는 요청 수. 자리가 없으면 elibrary.slot-wait-timeout(1초)까지 기다리고,
   # 못 얻으면 시간 초과. 브라우저는 호스트당 6연결이라 그보다 가볍다. enabled: false면 하루 상한과 함께 꺼진다
   elibrary-per-library-concurrency: 2
 
