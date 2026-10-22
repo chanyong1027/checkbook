@@ -109,7 +109,8 @@ public class KyoboELibClient implements ELibClient {
                 // /elibrary-front는 실제로 쓰이는 경로라, 거기서 접속이 끊기면 사이트가 죽은 것이다(CodeRabbit #47)
                 // 그 실패가 시간 초과여도 같다 — 진짜 경로 둘이 이미 404를 줬고, 443이 막힌(패킷을 버리는) http 사이트는 https
                 // 추측이 늘 시간 초과로 끝난다. 시간 초과로 바꾸면 업체가 검색 주소를 바꿨을 때 그런 사이트가 '주소 없음'으로 안 세어져
-                // 업체 변경 알림이 덜 울린다(T4 PR ③ 1차 리뷰 2를 검토하고 되돌림)
+                // 업체 변경 알림이 덜 울린다(T4 PR ③ 1차 리뷰 2를 검토하고 되돌림). 한계: 앞 두 경로가 느린 404로 사이트 마감을
+                // 다 쓰면 https 추측을 보내기도 전에 remainingMillis가 TIMEOUT을 던져(IOException이 아니라 여기 안 옴) 시간 초과가 된다
                 if (lastException != null && candidate.startsWith("https://") && baseUrl.startsWith("http://")) {
                     log.debug("교보 전자도서관 https 대체 경로도 실패: {}", candidate, e);
                     continue;
