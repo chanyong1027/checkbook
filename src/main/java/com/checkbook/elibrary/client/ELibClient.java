@@ -23,10 +23,18 @@ public interface ELibClient {
         return search(baseUrl, keyword, System.nanoTime() + DEFAULT_SITE_TIMEOUT.toNanos());
     }
 
-    /** 남은 시간(ms) — Jsoup 요청 시간 제한으로 쓴다. 다 썼으면 TIMEOUT(0을 넘기면 Jsoup은 '무제한'으로 읽는다) */
+    /** 남은 시간(ms) — Jsoup 요청 시간 제한으로 쓴다. 다 썼으면 TIMEOUT */
     static int remainingMillis(long deadlineNanos) {
-        long remaining = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime());
-        if (remaining <= 0) {
+        return remainingMillis(deadlineNanos, System.nanoTime());
+    }
+
+    /**
+     * Jsoup은 0을 '무제한'으로 읽고, 응답 대기를 시간 제한의 절반(정수 나눗셈)으로 둔다 — 1ms를 넘기면 응답 대기가 0, 곧 무제한이 된다.
+     * 그래서 2ms 미만이면 보내지 않고 TIMEOUT
+     */
+    static int remainingMillis(long deadlineNanos, long nowNanos) {
+        long remaining = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(deadlineNanos - nowNanos);
+        if (remaining < 2) {
             throw new ELibraryClientException(ELibraryClientException.Kind.TIMEOUT, "전자도서관 사이트 마감 초과");
         }
         return (int) Math.min(Integer.MAX_VALUE, remaining);
