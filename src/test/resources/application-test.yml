@@ -41,7 +41,7 @@ public-library:
 elibrary:
   thread-pool-size: 5
   queue-capacity: 10
-  per-library-timeout: 15000
+  per-library-timeout: 5000
   total-timeout: 20000
   contract-check:
     enabled: false

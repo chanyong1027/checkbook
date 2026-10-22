@@ -71,8 +71,8 @@ public class KyoboELibClient implements ELibClient {
     }
 
     @Override
-    public List<ELibrarySearchResponse.ELibraryBook> search(String rawBaseUrl, String keyword) {
-        return search(rawBaseUrl, keyword, null);
+    public List<ELibrarySearchResponse.ELibraryBook> search(String rawBaseUrl, String keyword, long deadlineNanos) {
+        return search(rawBaseUrl, keyword, null, deadlineNanos);
     }
 
     /**
@@ -80,6 +80,11 @@ public class KyoboELibClient implements ELibClient {
      *                      거절하면 {@link RedirectNotAllowedException}. 주간 계약 확인이 robots를 확인하려고 쓴다
      */
     public List<ELibrarySearchResponse.ELibraryBook> search(String rawBaseUrl, String keyword, Predicate<String> redirectGuard) {
+        return search(rawBaseUrl, keyword, redirectGuard, System.nanoTime() + DEFAULT_SITE_TIMEOUT.toNanos());
+    }
+
+    private List<ELibrarySearchResponse.ELibraryBook> search(String rawBaseUrl, String keyword,
+                                                             Predicate<String> redirectGuard, long deadlineNanos) {
         // 끝 '/'가 남은 주소는 '//search'를 부른다(10-20 전수 조사 12곳). 갈래 주소도 이 값으로 만든다
         String baseUrl = stripTrailingSlashes(rawBaseUrl);
         log.info("교보 전자도서관 검색: {}", baseUrl);
@@ -90,7 +95,7 @@ public class KyoboELibClient implements ELibClient {
         // 사이트 하나의 실패는 흔하고(1,964곳) 사람이 고칠 일이 아니라 WARN — ERROR는 알림 대상이라 쓰지 않는다
         for (String candidate : candidates) {
             try {
-                return doSearch(candidate, keyword, redirectGuard);
+                return doSearch(candidate, keyword, redirectGuard, deadlineNanos);
             } catch (HttpStatusException e) {
                 if (e.getStatusCode() == 404) {
                     log.debug("교보 전자도서관 404, 다음 경로 시도: {}", candidate);
@@ -102,6 +107,10 @@ public class KyoboELibClient implements ELibClient {
             } catch (IOException e) {
                 // http 주소를 https로 바꿔 본 마지막 후보만 추측이다 — 앞 경로들이 404였다면 그 실패는 '검색 주소 없음'으로 본다.
                 // /elibrary-front는 실제로 쓰이는 경로라, 거기서 접속이 끊기면 사이트가 죽은 것이다(CodeRabbit #47)
+                // 그 실패가 시간 초과여도 같다 — 진짜 경로 둘이 이미 404를 줬고, 443이 막힌(패킷을 버리는) http 사이트는 https
+                // 추측이 늘 시간 초과로 끝난다. 시간 초과로 바꾸면 업체가 검색 주소를 바꿨을 때 그런 사이트가 '주소 없음'으로 안 세어져
+                // 업체 변경 알림이 덜 울린다(T4 PR ③ 1차 리뷰 2를 검토하고 되돌림). 한계: 앞 두 경로가 느린 404로 사이트 마감을
+                // 다 쓰면 https 추측을 보내기도 전에 remainingMillis가 TIMEOUT을 던져(IOException이 아니라 여기 안 옴) 시간 초과가 된다
                 if (lastException != null && candidate.startsWith("https://") && baseUrl.startsWith("http://")) {
                     log.debug("교보 전자도서관 https 대체 경로도 실패: {}", candidate, e);
                     continue;
@@ -148,12 +157,17 @@ public class KyoboELibClient implements ELibClient {
                 + "&schTxt=" + URLEncoder.encode(keyword, StandardCharsets.UTF_8);
     }
 
+    // 시간 제한은 요청마다 그때 남은 사이트 마감 — 갈래마다 새로 15초를 받던 것(갈래 수 × 15초)을 막는다.
+    // 한계: Jsoup은 요청 하나 안에서도 연결 대기(T) 뒤 첫 응답 대기(T/2)를 따로 재 최대 약 1.5배까지 갈 수 있고(DNS는 안 묶임),
+    // Jsoup이 리다이렉트를 따라갈 때(사용자 검색)는 홉마다 시간 제한을 새로 받는다(최대 20홉). 교보 사이트는 대개 0~2홉이라
+    // 받아들였다 — 홉까지 묶으려면 계약 확인처럼 수동 리다이렉트(getFollowingAllowedRedirects)를 쓰면 된다(1차 리뷰 3)
     private List<ELibrarySearchResponse.ELibraryBook> doSearch(String searchBase, String keyword,
-                                                                Predicate<String> redirectGuard) throws IOException {
+                                                                Predicate<String> redirectGuard, long deadlineNanos)
+            throws IOException {
         String url = searchUrl(searchBase, keyword);
         Document document = redirectGuard == null
-                ? Jsoup.connect(url).headers(HEADERS).timeout(15_000).get()
-                : getFollowingAllowedRedirects(url, redirectGuard);
+                ? Jsoup.connect(url).headers(HEADERS).timeout(ELibClient.remainingMillis(deadlineNanos)).get()
+                : getFollowingAllowedRedirects(url, redirectGuard, deadlineNanos);
 
         return parseResults(document, searchBase);
     }
@@ -161,7 +175,8 @@ public class KyoboELibClient implements ELibClient {
     // Jsoup에 리다이렉트를 맡기면 어디로 갔는지 묻지 못한다 — 한 번씩 받아 다음 주소를 물은 뒤 따라간다.
     // Jsoup이 따라갈 때 하는 일을 같게 한다: 받은 쿠키(세션)를 같은 호스트로 가는 다음 요청에 싣고, Location의 공백을 고치고,
     // 리다이렉트 응답의 형식은 보지 않는다. 마지막 응답은 get()과 같게 404 → HttpStatusException, HTML 아님 → 구조 변경
-    private static Document getFollowingAllowedRedirects(String url, Predicate<String> redirectGuard) throws IOException {
+    private static Document getFollowingAllowedRedirects(String url, Predicate<String> redirectGuard, long deadlineNanos)
+            throws IOException {
         String current = url;
         Map<String, String> cookies = new HashMap<>();
         String cookieHost = hostOf(url);
@@ -175,7 +190,7 @@ public class KyoboELibClient implements ELibClient {
             Connection.Response response = Jsoup.connect(current)
                     .headers(HEADERS)
                     .cookies(cookies)
-                    .timeout(15_000)
+                    .timeout(ELibClient.remainingMillis(deadlineNanos))
                     .followRedirects(false)
                     .ignoreContentType(true)
                     .execute();

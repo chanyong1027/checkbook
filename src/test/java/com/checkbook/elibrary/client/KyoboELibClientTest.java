@@ -5,6 +5,8 @@ import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.TimeUnit;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -179,6 +181,85 @@ class KyoboELibClientTest {
 
             assertThat(client.search(server.url("/").toString().replaceAll("/$", ""), "자바")).isEmpty();
         }
+    }
+
+    // ---- 사이트 마감(T4 카드 11): 갈래·리다이렉트마다 남은 시간만 쓴다 ----
+
+    @Test
+    void 마감이_이미_지났으면_요청하지_않고_시간_초과다() throws Exception {
+        try (MockWebServer server = new MockWebServer()) {
+            server.start();
+
+            assertThatThrownBy(() -> client.search(base(server), "자바", System.nanoTime() - 1))
+                    .isInstanceOfSatisfying(ELibraryClientException.class,
+                            e -> assertThat(e.kind()).isEqualTo(ELibraryClientException.Kind.TIMEOUT));
+            assertThat(server.getRequestCount()).isZero();
+        }
+    }
+
+    @Test
+    void 느린_사이트는_남은_마감에서_끊긴다() throws Exception {
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(emptyResult().setHeadersDelay(3, TimeUnit.SECONDS));
+            server.start();
+
+            long started = System.nanoTime();
+            assertThatThrownBy(() -> client.search(base(server), "자바", System.nanoTime() + ms(300)))
+                    .isInstanceOfSatisfying(ELibraryClientException.class,
+                            e -> assertThat(e.kind()).isEqualTo(ELibraryClientException.Kind.TIMEOUT));
+            assertThat(elapsedMs(started)).as("Jsoup 고정 15초가 아니라 남은 마감(300ms)").isLessThan(1_500);
+        }
+    }
+
+    // 다음 갈래는 첫 갈래가 쓰고 남은 시간만 쓴다 — 갈래마다 새로 15초를 받던 문제(갈래 수 × 15초)
+    @Test
+    void 갈래는_사이트_마감을_나눠_쓴다() throws Exception {
+        try (MockWebServer server = new MockWebServer()) {
+            // 첫 응답 대기는 남은 시간의 절반까지라(아래 시험) 700ms 마감의 첫 갈래는 350ms 안에 404를 줘야 한다
+            server.enqueue(new MockResponse().setResponseCode(404).setHeadersDelay(150, TimeUnit.MILLISECONDS));
+            server.enqueue(emptyResult().setHeadersDelay(3, TimeUnit.SECONDS));
+            server.start();
+
+            long started = System.nanoTime();
+            assertThatThrownBy(() -> client.search(base(server), "자바", System.nanoTime() + ms(700)))
+                    .isInstanceOfSatisfying(ELibraryClientException.class,
+                            e -> assertThat(e.kind()).isEqualTo(ELibraryClientException.Kind.TIMEOUT));
+            assertThat(server.getRequestCount()).isEqualTo(2);
+            assertThat(elapsedMs(started)).isLessThan(1_500);
+        }
+    }
+
+    // Jsoup은 시간 제한을 연결 상한으로 쓰고, 응답을 기다리는 읽기 상한은 그 절반으로 둔다(HttpConnection: setReadTimeout(timeout / 2)).
+    // 그래서 사이트 마감 5초면 첫 바이트는 2.5초까지만 기다린다 — 예전 15초일 땐 7.5초였다(T4 카드 11 구현 중 발견)
+    @Test
+    void 첫_응답은_남은_마감의_절반까지만_기다린다() throws Exception {
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(emptyResult().setHeadersDelay(700, TimeUnit.MILLISECONDS));
+            server.start();
+
+            // 700ms 지연 < 1,000ms 마감이지만 절반(500ms)을 넘어 끊긴다
+            assertThatThrownBy(() -> client.search(base(server), "자바", System.nanoTime() + ms(1_000)))
+                    .isInstanceOfSatisfying(ELibraryClientException.class,
+                            e -> assertThat(e.kind()).isEqualTo(ELibraryClientException.Kind.TIMEOUT));
+        }
+    }
+
+    private static String base(MockWebServer server) {
+        return server.url("/").toString().replaceAll("/$", "");
+    }
+
+    private static MockResponse emptyResult() {
+        return new MockResponse()
+                .setHeader("Content-Type", "text/html; charset=UTF-8")
+                .setBody("<html><body><ul class=\"book_resultList\"></ul></body></html>");
+    }
+
+    private static long ms(long millis) {
+        return TimeUnit.MILLISECONDS.toNanos(millis);
+    }
+
+    private static long elapsedMs(long startedNanos) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedNanos);
     }
 
     @Test
