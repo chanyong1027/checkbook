@@ -187,8 +187,11 @@ class ELibrarySearchServiceTest {
         when(eLibraryRepository.findAllById(List.of(1L, 2L))).thenReturn(List.of(first, second));
         when(clientResolver.resolve(VendorType.KYOBO)).thenReturn(mockClient);
         java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.List<Long> remainingAtCall = new java.util.concurrent.CopyOnWriteArrayList<>();
         // 첫 사이트 600ms, 두 번째 300ms — 두 번째는 큐에서 600ms를 기다린다. 제출부터 재면 900ms로 800ms를 넘는다
         when(mockClient.search(anyString(), anyString(), anyLong())).thenAnswer(invocation -> {
+            long deadlineNanos = invocation.getArgument(2);
+            remainingAtCall.add(TimeUnit.NANOSECONDS.toMillis(deadlineNanos - System.nanoTime()));
             Thread.sleep(calls.getAndIncrement() == 0 ? 600 : 300);
             return List.of();
         });
@@ -198,6 +201,43 @@ class ELibrarySearchServiceTest {
 
         assertThat(response.results()).extracting(ELibrarySearchResponse.ELibraryResult::status)
                 .containsExactly(ELibrarySearchStatus.SUCCESS, ELibrarySearchStatus.SUCCESS);
+        // 두 번째 사이트도 시작할 때 거의 온전한 800ms를 받았다(제출부터 쟀다면 약 200ms)
+        assertThat(remainingAtCall.get(1)).isGreaterThanOrEqualTo(700L);
+    }
+
+    // 응답(전체 마감)이 이미 나간 뒤에 큐에서 꺼낸 작업은 사이트를 부르지도, 하루 예산을 쓰지도 않는다(1차 리뷰 1).
+    // 결과는 이미 TIMEOUT으로 나갔는데 사이트에 부하만 주고 예산(robots 차단 사이트는 하루 200)을 깎으면 안 된다
+    @Test
+    void 응답이_이미_나간_뒤에_시작한_작업은_수집하지_않고_예산도_쓰지_않는다() throws Exception {
+        ExecutorService onePool = Executors.newFixedThreadPool(1);
+        BookMetadataNormalizer normalizer = new BookMetadataNormalizer();
+        ELibrarySearchService oneByOne = new ELibrarySearchService(eLibraryRepository, clientResolver,
+                onePool, new BookMatcher(normalizer), normalizer, budget, concurrencyLimiter, meterRegistry);
+        ReflectionTestUtils.setField(oneByOne, "totalTimeoutMs", 300L);
+        ELibrary slow = activeLibrary(1L);
+        ELibrary late = activeLibrary(2L);
+        ReflectionTestUtils.setField(late, "baseUrl", "https://late.dkyobobook.co.kr");   // 사이트를 주소로 구분
+        when(eLibraryRepository.findAllById(List.of(1L, 2L))).thenReturn(List.of(slow, late));
+        when(clientResolver.resolve(VendorType.KYOBO)).thenReturn(mockClient);
+        // 첫 사이트가 600ms를 쥐어, 두 번째는 전체 마감(300ms)이 지난 뒤에야 큐에서 나온다
+        when(mockClient.search(eq(slow.getBaseUrl()), anyString(), anyLong())).thenAnswer(invocation -> {
+            Thread.sleep(600);
+            return List.of();
+        });
+
+        ELibrarySearchResponse response = oneByOne.search("자바의 정석", "남궁성", "1,2");
+        onePool.shutdown();
+        assertThat(onePool.awaitTermination(3, TimeUnit.SECONDS)).isTrue();   // 늦게 시작한 작업까지 다 끝난 뒤 확인
+
+        assertThat(response.results()).extracting(ELibrarySearchResponse.ELibraryResult::status)
+                .containsExactly(ELibrarySearchStatus.TIMEOUT, ELibrarySearchStatus.TIMEOUT);
+        verify(mockClient, times(1)).search(anyString(), anyString(), anyLong());   // 두 번째 사이트는 부르지 않았다
+        // 예산 상한이 1이라, 두 번째 사이트가 예산을 썼다면 다음 검색은 DAILY_LIMIT이 된다
+        when(eLibraryRepository.findAllById(List.of(2L))).thenReturn(List.of(late));
+        when(mockClient.search(eq(late.getBaseUrl()), anyString(), anyLong())).thenReturn(List.of());
+        assertThat(service.search("자바의 정석", "남궁성", "2").results())
+                .extracting(ELibrarySearchResponse.ELibraryResult::status)
+                .containsExactly(ELibrarySearchStatus.SUCCESS);
     }
 
     // 수집기에 사이트 마감(시작 + perLibraryTimeoutMs)을 넘긴다 — 수집기는 갈래·리다이렉트마다 남은 시간만 쓴다

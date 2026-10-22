@@ -107,6 +107,9 @@ public class KyoboELibClient implements ELibClient {
             } catch (IOException e) {
                 // http 주소를 https로 바꿔 본 마지막 후보만 추측이다 — 앞 경로들이 404였다면 그 실패는 '검색 주소 없음'으로 본다.
                 // /elibrary-front는 실제로 쓰이는 경로라, 거기서 접속이 끊기면 사이트가 죽은 것이다(CodeRabbit #47)
+                // 그 실패가 시간 초과여도 같다 — 진짜 경로 둘이 이미 404를 줬고, 443이 막힌(패킷을 버리는) http 사이트는 https
+                // 추측이 늘 시간 초과로 끝난다. 시간 초과로 바꾸면 업체가 검색 주소를 바꿨을 때 그런 사이트가 '주소 없음'으로 안 세어져
+                // 업체 변경 알림이 덜 울린다(T4 PR ③ 1차 리뷰 2를 검토하고 되돌림)
                 if (lastException != null && candidate.startsWith("https://") && baseUrl.startsWith("http://")) {
                     log.debug("교보 전자도서관 https 대체 경로도 실패: {}", candidate, e);
                     continue;
@@ -154,7 +157,9 @@ public class KyoboELibClient implements ELibClient {
     }
 
     // 시간 제한은 요청마다 그때 남은 사이트 마감 — 갈래마다 새로 15초를 받던 것(갈래 수 × 15초)을 막는다.
-    // Jsoup이 리다이렉트를 따라갈 때(사용자 검색)는 홉마다 같은 시간 제한이 걸려, 홉이 많으면 마감을 조금 넘을 수 있다
+    // 한계: Jsoup은 요청 하나 안에서도 연결 대기(T) 뒤 첫 응답 대기(T/2)를 따로 재 최대 약 1.5배까지 갈 수 있고(DNS는 안 묶임),
+    // Jsoup이 리다이렉트를 따라갈 때(사용자 검색)는 홉마다 시간 제한을 새로 받는다(최대 20홉). 교보 사이트는 대개 0~2홉이라
+    // 받아들였다 — 홉까지 묶으려면 계약 확인처럼 수동 리다이렉트(getFollowingAllowedRedirects)를 쓰면 된다(1차 리뷰 3)
     private List<ELibrarySearchResponse.ELibraryBook> doSearch(String searchBase, String keyword,
                                                                 Predicate<String> redirectGuard, long deadlineNanos)
             throws IOException {

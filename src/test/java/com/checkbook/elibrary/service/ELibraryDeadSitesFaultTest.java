@@ -117,7 +117,8 @@ class ELibraryDeadSitesFaultTest {
 
         assertThat(healthy).containsExactly(Map.entry(ELibrarySearchStatus.SUCCESS, (long) (TOTAL - DEAD)));
         assertThat(dead).containsExactly(Map.entry(ELibrarySearchStatus.TIMEOUT, (long) DEAD));
-        // 죽은 사이트 6곳이 스레드 5개에서 두 번에 나뉘어 각자 사이트 마감만큼 쥔다 → 대략 2 × 마감
+        // 죽은 사이트 6곳이 스레드 5개에서 두 번에 나뉜다. 답하지 않는 사이트는 Jsoup의 응답 대기(시간 제한의 절반)에서
+        // 끊겨 한 번에 약 0.5 × 마감 → 대략 1 × 마감. 상한은 넉넉히
         assertThat(elapsedMs).isLessThan(4 * SITE_DEADLINE_MS);
     }
 

@@ -126,13 +126,15 @@ public class ELibrarySearchService {
         }
 
         Map<Long, ScrapeTask> futureMap = new LinkedHashMap<>();
+        // 응답(전체 마감)이 나가는 시각. 이 뒤에 큐에서 꺼낸 작업은 결과가 이미 TIMEOUT으로 나갔으니 사이트를 부르지 않는다
+        long responseDeadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(totalTimeoutMs);
         for (Long id : validIds) {
             ELibrary library = foundMap.get(id);
             long startedAt = System.currentTimeMillis();
             // 사이트 마감은 작업 안에서 지킨다(자리 대기 상한 + 수집기에 남은 시간). 제출 시각부터 재는 orTimeout을 두면
             // 큐에서 기다린 사이트가 시작하자마자 잘린다(T4 카드 11-1). 큐 대기까지 포함한 상한은 아래 전체 마감
             futureMap.put(id, new ScrapeTask(
-                    submitSafely(() -> searchWithinLimits(library, selected)),
+                    submitSafely(() -> searchWithinLimits(library, selected, responseDeadlineNanos)),
                     startedAt
             ));
         }
@@ -186,11 +188,18 @@ public class ELibrarySearchService {
      * 예산은 작업이 실제로 돌 때, 그리고 자리를 얻은 뒤에 차감한다 — 풀 포화로 거절되거나 자리를 못 얻어 수집을 안 했는데도
      * 하루 예산이 줄면 자정까지 막힐 수 있다. 소진이면 toResult가 DAILY_LIMIT으로 바꾼다.
      * 사이트 마감은 작업이 실제로 시작한 때부터 잰다. 자리는 상한(slotWaitTimeoutMs)까지만 기다린다 — 마감 끝까지 기다리면
-     * 자리를 얻어도 수집할 시간이 없고 그동안 풀 스레드를 쥔다(T4 카드 12). 못 얻으면 시간 초과로 본다
+     * 자리를 얻어도 수집할 시간이 없고 그동안 풀 스레드를 쥔다(T4 카드 12). 못 얻으면 시간 초과로 본다.
+     * 사이트 마감은 응답 마감을 넘지 않는다 — 큐에서 오래 기다려 응답이 이미 나간 뒤라면 자리·예산을 잡기 전에 끝낸다
+     * (안 그러면 결과는 TIMEOUT으로 나갔는데 사이트에 부하만 주고 하루 예산을 깎는다, 1차 리뷰 1)
      */
-    private ScrapeOutcome searchWithinLimits(ELibrary library, BookMatcher.Selected selected) {
+    private ScrapeOutcome searchWithinLimits(ELibrary library, BookMatcher.Selected selected, long responseDeadlineNanos) {
         // 마감은 단조 시계로 잰다(벽시계는 NTP 보정으로 앞뒤로 움직인다)
-        long deadlineNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(perLibraryTimeoutMs);
+        long startedNanos = System.nanoTime();
+        if (startedNanos - responseDeadlineNanos >= 0) {
+            throw timedOut(library, "응답이 이미 나간 뒤에 시작해 수집하지 않음");
+        }
+        long deadlineNanos = Math.min(startedNanos + TimeUnit.MILLISECONDS.toNanos(perLibraryTimeoutMs),
+                responseDeadlineNanos);
         long waitStarted = System.nanoTime();
         boolean acquired = concurrencyLimiter.tryAcquire(library.getId(),
                 Math.min(slotWaitTimeoutMs, remainingMs(deadlineNanos)));
@@ -342,8 +351,8 @@ public class ELibrarySearchService {
     /**
      * 수집 한 번의 결과와 시간. 태그는 업체 × 결과뿐이다 — 사이트(1,964곳)를 태그에 넣으면 시리즈가 폭증한다.
      * 업체 템플릿이 바뀌면 한 업체의 structure_changed·parse_failed·endpoint_not_found가 여러 사이트에서 한꺼번에 늘어난다.
-     * 걸린 시간은 제출 시점부터 잰다 — 우리 풀이 붐벼 큐에서 기다린 시간, 사이트당 동시 요청 자리를 기다린 시간도 들어가
-     * timeout이 사이트 탓만은 아니다. 자리 대기는 elibrary.slot.wait, 그 밖은 INFO 로그로 본다
+     * 걸린 시간: timeout·실패는 제출 시점부터(큐·자리 대기 포함 — 사이트 탓만은 아니다), found·empty는 수집 시작부터,
+     * daily_limit은 0. 자리 대기는 elibrary.slot.wait, 그 밖은 INFO 로그로 본다
      */
     private void recordScrape(ELibrary library, String outcome, long elapsedMs) {
         scrapeTimer(library.getVendorType(), outcome).record(elapsedMs, TimeUnit.MILLISECONDS);
