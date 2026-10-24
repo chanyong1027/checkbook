@@ -10,8 +10,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.Optional;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -21,7 +19,6 @@ class LibraryAvailabilitySnapshotRefresherTest {
 
     @Mock DatanaruClient datanaruClient;
     @Mock LibraryAvailabilitySnapshotPersister persister;
-    @Mock LibraryAvailabilitySnapshotReader reader;
 
     @InjectMocks
     LibraryAvailabilitySnapshotRefresher refresher;
@@ -39,24 +36,9 @@ class LibraryAvailabilitySnapshotRefresherTest {
         verify(persister).upsert("9781234567890", "LIB001", true, true);
     }
 
+    // 만료된 스냅샷을 꺼내지 않는다(D7-0 결정 카드 1) — 스냅샷이 있는 경우는 서킷 통합 시험이 본다
     @Test
-    void refreshFallback_returnsStaleSnapshot_whenExists() {
-        LibraryAvailabilityResult stale = new LibraryAvailabilityResult(
-                "LIB001", true, false, SnapshotSourceStatus.STALE
-        );
-        when(reader.findStale("9781234567890", "LIB001")).thenReturn(Optional.of(stale));
-
-        LibraryAvailabilityResult result =
-                refresher.refreshFallback("9781234567890", "LIB001", new RuntimeException("API 장애"));
-
-        assertThat(result.sourceStatus()).isEqualTo(SnapshotSourceStatus.STALE);
-        assertThat(result.hasBook()).isTrue();
-    }
-
-    @Test
-    void refreshFallback_returnsFailedResult_whenNoSnapshotExists() {
-        when(reader.findStale("9781234567890", "LIB001")).thenReturn(Optional.empty());
-
+    void refreshFallback_returnsFailedResult() {
         LibraryAvailabilityResult result =
                 refresher.refreshFallback("9781234567890", "LIB001", new RuntimeException("API 장애"));
 

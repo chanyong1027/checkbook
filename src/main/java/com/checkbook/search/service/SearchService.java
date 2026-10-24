@@ -119,7 +119,7 @@ public class SearchService {
         // ---- 섹션별 결과: 각 작업 상태를 한 번만 읽는다 ----
         Section<PublicLibraryAvailabilityPage> library = !standard
                 ? Section.skipped(SearchSectionReason.NON_STANDARD_ISBN)
-                : !hasLocation ? Section.skipped(SearchSectionReason.NO_LOCATION) : Section.of(publicFuture);
+                : !hasLocation ? Section.skipped(SearchSectionReason.NO_LOCATION) : failIfAllLibrariesFailed(Section.of(publicFuture));
         Section<SearchResponse.UsedBookInfo> used = standard
                 ? Section.success(new SearchResponse.UsedBookInfo(
                         "https://www.aladin.co.kr/shop/UsedShop/wuseditemall.aspx?ISBN=" + code
@@ -155,6 +155,20 @@ public class SearchService {
                         publicPage != null ? publicPage.nextOffset() : null,
                         new SearchResponse.IdentificationInfo(identification.source(), identification.yes24()))
         );
+    }
+
+    // 조회한 도서관이 모두 실패하면 빈 성공이 아니라 실패다 — 정보나루가 통째로 멈춘 것을 섹션 실패 지표·알림이 보게 한다
+    // (D7-0 결정 카드 3). 하루 예산 소진은 fetch가 예외로 알려 이미 SKIPPED. 더보기 API는 섹션이 없어 실패 수만 준다.
+    // 사유는 늘 UNAVAILABLE이다 — 도서관별 시간 초과(1.2s)·fan-out 창 초과도 fetch 안에서 '실패 수'로만 남아 원인을 구분하지 못한다.
+    // 가까운 몇 곳만 실패했을 수 있으니 페이지 값(전체 수·다음 위치)은 남겨 화면이 '더 보기'를 이어 가게 한다
+    private static Section<PublicLibraryAvailabilityPage> failIfAllLibrariesFailed(Section<PublicLibraryAvailabilityPage> section) {
+        PublicLibraryAvailabilityPage page = section.value();
+        if (section.status() != SearchSectionStatus.SUCCESS || page == null
+                || !page.libraries().isEmpty() || page.failedCount() == 0) {
+            return section;
+        }
+        return new Section<>(SearchSectionStatus.FAILED, SearchSectionReason.UNAVAILABLE, page,
+                "근처 도서관 " + page.failedCount() + "곳이 모두 응답하지 않음");
     }
 
     // 새 책은 YES24 결과로만 정한다(힌트 무관). 한도 거절은 우리가 호출하지 않았으면 SKIPPED, YES24가 거절했으면 FAILED

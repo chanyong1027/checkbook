@@ -66,23 +66,4 @@ class LibraryAvailabilitySnapshotReaderTest {
 
         assertThat(reader.find("9781234567890", "LIB001")).isEmpty();
     }
-
-    @Test
-    void findStale_returnsResult_withStaleStatus_evenWhenExpired() {
-        LibraryAvailabilitySnapshot snapshot = LibraryAvailabilitySnapshot.builder()
-                .isbn13("9781234567890").libCode("LIB001")
-                .hasBook(true).loanAvailable(false)
-                .sourceStatus(SnapshotSourceStatus.SUCCESS)
-                .lastFetchedAt(Instant.now().minusSeconds(90000))
-                .expiresAt(Instant.now().minusSeconds(3600))
-                .build();
-        when(repository.findByIsbn13AndLibCode("9781234567890", "LIB001"))
-                .thenReturn(Optional.of(snapshot));
-
-        Optional<LibraryAvailabilityResult> result = reader.findStale("9781234567890", "LIB001");
-
-        assertThat(result).isPresent();
-        assertThat(result.get().sourceStatus()).isEqualTo(SnapshotSourceStatus.STALE);
-        assertThat(result.get().hasBook()).isTrue();
-    }
 }

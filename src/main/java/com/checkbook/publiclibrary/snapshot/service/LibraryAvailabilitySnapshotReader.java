@@ -1,7 +1,6 @@
 package com.checkbook.publiclibrary.snapshot.service;
 
 import com.checkbook.publiclibrary.snapshot.domain.LibraryAvailabilitySnapshot;
-import com.checkbook.publiclibrary.snapshot.domain.SnapshotSourceStatus;
 import com.checkbook.publiclibrary.snapshot.dto.LibraryAvailabilityResult;
 import com.checkbook.publiclibrary.snapshot.repository.LibraryAvailabilitySnapshotRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,18 +22,6 @@ public class LibraryAvailabilitySnapshotReader {
         return repository.findByIsbn13AndLibCode(isbn13, libCode)
                 .filter(snapshot -> snapshot.getExpiresAt().isAfter(Instant.now()))
                 .map(this::toResult);
-    }
-
-    /** 만료 여부 무관하게 있으면 반환 (폴백용), sourceStatus는 STALE로 강제 */
-    @Transactional(readOnly = true)
-    public Optional<LibraryAvailabilityResult> findStale(String isbn13, String libCode) {
-        return repository.findByIsbn13AndLibCode(isbn13, libCode)
-                .map(snapshot -> new LibraryAvailabilityResult(
-                        snapshot.getLibCode(),
-                        snapshot.isHasBook(),
-                        snapshot.isLoanAvailable(),
-                        SnapshotSourceStatus.STALE
-                ));
     }
 
     private LibraryAvailabilityResult toResult(LibraryAvailabilitySnapshot snapshot) {

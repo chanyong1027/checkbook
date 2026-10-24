@@ -735,7 +735,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                   </button>
                 </div>
               </SectionCard>
-            ) : libSectionStatus === 'FAILED' ? (
+            ) : libSectionStatus === 'FAILED' && !searchResult.metadata.publicLibraryHasMore ? (
               <SectionCard
                 icon={
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
@@ -745,7 +745,9 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                 }
                 title="공공도서관"
               >
-                <p className="text-sm text-slate-600 text-center py-2">검색에 실패했습니다</p>
+                {/* 조회한 도서관이 모두 실패하면 서버가 FAILED로 준다(D7-0) — 빈 목록 때와 같은 말로.
+                    더 볼 도서관이 남았으면 이 분기를 지나 아래 목록(건너뜀 수 + 더 보기)으로 간다 */}
+                <p className="text-sm text-slate-600 text-center py-2">근처 도서관의 응답을 받지 못했어요</p>
               </SectionCard>
             ) : searchResult.publicLibraries.length === 0 &&
               !searchResult.metadata.publicLibraryHasMore ? (
@@ -782,6 +784,10 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
                     위치 기반 검색
                   </div>
                 )}
+                {/* 정보나루는 전날 자료이고 대출중만 '불가'로 준다(예약·상호대차 중은 가능으로 옴, 운영처 문의 결과 못 바꿈) — D7-0 */}
+                <p className="mb-2 text-xs text-slate-500">
+                  대출 상태는 전날 자료 기준이라 실제와 다를 수 있어요. 예약·상호대차 중인 책도 '대출가능'으로 보여요
+                </p>
                 <PublicLibraryList
                   key={searchSeq}
                   isbn13={searchResult.book.isbn13 ?? isbn13}

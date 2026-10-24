@@ -45,7 +45,7 @@ class LibraryAvailabilitySnapshotCircuitBreakerIT {
     void setUp() {
         // 다른 테스트에서 공유되는 서킷브레이커 상태 초기화
         circuitBreakerRegistry.circuitBreaker("datanaru").reset();
-        // 서킷 OPEN 시 폴백에서 반환될 만료된(stale) snapshot 삽입
+        // 만료된 snapshot이 있어도 폴백은 옛 값을 꺼내지 않는다(D7-0 카드 1) — 그걸 확인하려고 넣어 둔다
         // persister.upsert()는 expiresAt을 미래로 설정해 fresh로 인식되므로 repository 직접 사용
         Instant past = Instant.now().minus(1, ChronoUnit.HOURS);
         repository.save(LibraryAvailabilitySnapshot.builder()
@@ -60,7 +60,7 @@ class LibraryAvailabilitySnapshotCircuitBreakerIT {
     }
 
     @Test
-    void circuitBreakerOpens_andReturnsStaleFallback_afterConsecutiveFailures() {
+    void 연속_실패로_서킷이_열리면_만료된_스냅샷이_있어도_실패를_돌려준다() {
         // DatanaruClient가 계속 실패하도록 설정
         when(datanaruClient.bookExist("9781234567890", "LIB001"))
                 .thenThrow(new RuntimeException("API 장애"));
@@ -69,15 +69,15 @@ class LibraryAvailabilitySnapshotCircuitBreakerIT {
         snapshotService.getAvailability("9781234567890", "LIB001");
         snapshotService.getAvailability("9781234567890", "LIB001");
 
-        // 서킷 OPEN 상태에서 stale fallback 반환 확인
         LibraryAvailabilityResult result = snapshotService.getAvailability("9781234567890", "LIB001");
 
-        assertThat(result.sourceStatus())
-                .isIn(SnapshotSourceStatus.STALE, SnapshotSourceStatus.FAILED);
+        assertThat(circuitBreakerRegistry.circuitBreaker("datanaru").getState())
+                .isEqualTo(CircuitBreaker.State.OPEN);
+        assertThat(result.sourceStatus()).isEqualTo(SnapshotSourceStatus.FAILED);
     }
 
     @Test
-    void 예산_소진은_서킷을_열지_않고_stale로_대체한다() {
+    void 예산_소진은_서킷을_열지_않고_실패로_끝난다() {
         when(datanaruClient.bookExist("9781234567890", "LIB001"))
                 .thenThrow(new DailyBudgetExceededException(ExternalProvider.DATANARU, Duration.ofHours(1)));
 
@@ -89,6 +89,6 @@ class LibraryAvailabilitySnapshotCircuitBreakerIT {
         // 호출을 안 한 것이라 정보나루 장애가 아니다 — 실패로 세지 않아 서킷이 닫혀 있어야 한다
         assertThat(circuitBreakerRegistry.circuitBreaker("datanaru").getState())
                 .isEqualTo(CircuitBreaker.State.CLOSED);
-        assertThat(result.sourceStatus()).isEqualTo(SnapshotSourceStatus.STALE);
+        assertThat(result.sourceStatus()).isEqualTo(SnapshotSourceStatus.FAILED);
     }
 }
