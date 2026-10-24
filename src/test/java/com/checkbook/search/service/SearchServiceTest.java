@@ -427,6 +427,10 @@ class SearchServiceTest {
 
         assertStatus(r, SearchSection.PUBLIC_LIBRARY, SearchSectionStatus.FAILED, SearchSectionReason.UNAVAILABLE);
         assertThat(r.publicLibraries()).isEmpty();
+        // 가까운 5곳만 실패했을 수 있다 — 화면이 나머지로 '더 보기'를 이어 가게 위치 정보는 남긴다
+        assertThat(r.metadata().publicLibraryTotal()).isEqualTo(20);
+        assertThat(r.metadata().publicLibraryHasMore()).isTrue();
+        assertThat(r.metadata().publicLibraryNextOffset()).isEqualTo(5);
         assertThat(meterRegistry.get("search.section")
                 .tags("section", "PUBLIC_LIBRARY", "status", "FAILED", "reason", "UNAVAILABLE")
                 .counter().count()).isEqualTo(1.0);

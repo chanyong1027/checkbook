@@ -36,6 +36,7 @@ datanaru:
   base-url: https://data4library.kr/api
   # 연결·읽기 간격 각각의 상한(SimpleClientHttpRequestFactory — 전체 마감이 아님). 오사카 탐침 1,000회 최대 863ms × 약 1.4
   # (T4 결정 카드 3). 2초면 타임아웃 뒤 지난 값 폴백이 fan-out 창(2.2초) 안에 들어오기 빠듯했다. 재시도는 없음(한도·폴백)
+  # D7-0(10-24)부터 폴백은 지난 값 대신 실패를 돌려준다 — 그 도서관은 건너뜀
   timeout: 1200
   list-timeout: 90000
 
