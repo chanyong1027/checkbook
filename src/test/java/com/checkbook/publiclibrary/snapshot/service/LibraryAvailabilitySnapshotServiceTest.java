@@ -52,15 +52,12 @@ class LibraryAvailabilitySnapshotServiceTest {
     }
 
     @Test
-    void getAvailability_returnsStaleFallback_whenRefresherReturnsStaleDueToCircuitOpen() {
-        LibraryAvailabilityResult stale = new LibraryAvailabilityResult(
-                "LIB001", true, false, SnapshotSourceStatus.STALE
-        );
+    void getAvailability_returnsFailed_whenRefresherFailsDueToCircuitOpen() {
         when(reader.find("9781234567890", "LIB001")).thenReturn(Optional.empty());
-        when(refresher.refresh("9781234567890", "LIB001")).thenReturn(stale);
+        when(refresher.refresh("9781234567890", "LIB001")).thenReturn(LibraryAvailabilityResult.failed("LIB001"));
 
         LibraryAvailabilityResult result = service.getAvailability("9781234567890", "LIB001");
 
-        assertThat(result.sourceStatus()).isEqualTo(SnapshotSourceStatus.STALE);
+        assertThat(result.sourceStatus()).isEqualTo(SnapshotSourceStatus.FAILED);
     }
 }
