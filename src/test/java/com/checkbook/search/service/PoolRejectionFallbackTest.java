@@ -116,7 +116,7 @@ class PoolRejectionFallbackTest {
     }
 
     @Test
-    void 자식만_거절되면_해당_도서관만_스킵되고_섹션은_SUCCESS다() {
+    void 자식이_모두_거절되면_도서관이_전부_빠지고_섹션은_FAILED다() {
         when(identificationService.identify(anyString(), any()))
                 .thenReturn(new IdentificationResult(IdentificationResult.Source.YES24,
                         IdentificationResult.Yes24Status.FOUND, true,
@@ -154,14 +154,14 @@ class PoolRejectionFallbackTest {
 
             SearchResponse response = service.search(TEST_ISBN, 37.5665, 126.9780, null);
 
-            // 자식 거절 = 도서관 개별 스킵 시맨틱: 목록은 비지만 섹션은 SUCCESS (부분 실패는
-            // 측정에서 public_library_incomplete 지표가 담당), 요청은 500 없이 정상 응답
+            // 자식 거절 = 도서관 개별 스킵. 하나도 못 받았으면 빈 성공이 아니라 FAILED(D7-0 결정 카드 3 —
+            // 그 전엔 SUCCESS였고 측정에서 public_library_incomplete로 셌다). 요청은 500 없이 정상 응답
             assertThat(response.publicLibraries()).isEmpty();
             Map<SearchSection, SearchSectionStatus> statuses = response.metadata().sectionStatuses().stream()
                     .collect(Collectors.toMap(
                             SearchResponse.SectionStatusDetail::section,
                             SearchResponse.SectionStatusDetail::status));
-            assertThat(statuses.get(SearchSection.PUBLIC_LIBRARY)).isEqualTo(SearchSectionStatus.SUCCESS);
+            assertThat(statuses.get(SearchSection.PUBLIC_LIBRARY)).isEqualTo(SearchSectionStatus.FAILED);
         } finally {
             blocker.countDown();
             healthyParents.shutdownNow();

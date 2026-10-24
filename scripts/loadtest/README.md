@@ -133,6 +133,9 @@ closed-loop(VU)은 시스템이 느려지면 유입도 줄어드는 coordinated 
 > ⚠️ T4 회복력 PR(10-21)부터 정보나루 타임아웃 2s → 1.2s, YES24 식별 재시도·서킷, 밀리 서킷이 붙었다. 지연 주입
 > (`inject-datanaru-delay.sh`) 결과는 그 전 측정과 직접 비교하지 않는다.
 
+> ⚠️ D7-0(10-24)부터 조회한 도서관이 모두 실패하면 PUBLIC_LIBRARY가 SUCCESS가 아니라 FAILED다. 그 요청이 `public_library_incomplete`에서
+> `public_library_failed`로 옮겨 가므로(합은 같다) FAILED율은 그 전 측정과 직접 비교하지 않는다. 정보나루 실패 때 만료된 스냅샷 대체도 없어졌다.
+
 런 직후 판정 게이트(스크립트 출력에서 순서대로 확인):
 1. **http rps ≈ 목표 도착률(±2%)** — 괴리 시 결과 폐기하고 하네스부터 의심(§7 시계 표류 사례:
    -10% 괴리가 W32Time 문제의 첫 신호였다).

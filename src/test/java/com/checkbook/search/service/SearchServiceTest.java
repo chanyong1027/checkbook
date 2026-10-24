@@ -416,6 +416,46 @@ class SearchServiceTest {
         assertThat(r.metadata().publicLibraryTotal()).isNull();
     }
 
+    // 정보나루가 통째로 멈추면 빈 성공이 아니라 실패 — 섹션 실패 지표·알림이 보게 한다(D7-0 카드 3)
+    @Test
+    void 조회한_도서관이_모두_실패하면_FAILED_UNAVAILABLE() {
+        when(identificationService.identify(ISBN, null)).thenReturn(found(13500, YES24_URL));
+        when(publicLibraryAvailabilityService.fetch(ISBN, LAT, LON, 0))
+                .thenReturn(new PublicLibraryAvailabilityPage(List.of(), 0, 20, 5, true, 5));
+
+        SearchResponse r = assertConsistent(searchService.search(ISBN, LAT, LON, null));
+
+        assertStatus(r, SearchSection.PUBLIC_LIBRARY, SearchSectionStatus.FAILED, SearchSectionReason.UNAVAILABLE);
+        assertThat(r.publicLibraries()).isEmpty();
+        assertThat(meterRegistry.get("search.section")
+                .tags("section", "PUBLIC_LIBRARY", "status", "FAILED", "reason", "UNAVAILABLE")
+                .counter().count()).isEqualTo(1.0);
+    }
+
+    @Test
+    void 도서관_일부만_실패하면_SUCCESS() {
+        when(identificationService.identify(ISBN, null)).thenReturn(found(13500, YES24_URL));
+        PublicLibraryAvailabilityPage partial = libraryPage();
+        when(publicLibraryAvailabilityService.fetch(ISBN, LAT, LON, 0))
+                .thenReturn(new PublicLibraryAvailabilityPage(partial.libraries(), 0, 20, 5, true, 4));
+
+        SearchResponse r = assertConsistent(searchService.search(ISBN, LAT, LON, null));
+
+        assertStatus(r, SearchSection.PUBLIC_LIBRARY, SearchSectionStatus.SUCCESS, null);
+        assertThat(r.publicLibraries()).hasSize(1);
+    }
+
+    @Test
+    void 근처에_조회할_도서관이_없으면_SUCCESS() {
+        when(identificationService.identify(ISBN, null)).thenReturn(found(13500, YES24_URL));
+        when(publicLibraryAvailabilityService.fetch(ISBN, LAT, LON, 0))
+                .thenReturn(new PublicLibraryAvailabilityPage(List.of(), 0, 0, null, false, 0));
+
+        SearchResponse r = assertConsistent(searchService.search(ISBN, LAT, LON, null));
+
+        assertStatus(r, SearchSection.PUBLIC_LIBRARY, SearchSectionStatus.SUCCESS, null);
+    }
+
     @Test
     void usedLinkWithNoMetadataOrLocationDoesNotUseExecutor() {
         when(identificationService.identify(ISBN, null)).thenReturn(miss(Yes24Status.NOT_FOUND, true));
