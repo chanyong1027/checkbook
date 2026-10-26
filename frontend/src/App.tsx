@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import type { BookCandidate } from './types'
 import { BookSearchStep } from './components/BookSearchStep'
 import { BookDetailPage } from './components/BookDetailPage'
+import { BookIcon, ChevronLeftIcon } from './components/shared/icons'
 
 const SEARCH_CACHE_KEY = 'cb_search_cache'
 const BOOK_FALLBACK_KEY = 'cb_book'
@@ -119,64 +120,59 @@ export default function App() {
 
   return (
     <div className="min-h-dvh bg-surface flex flex-col">
-      {/* Header */}
       <header
-        className="sticky top-0 z-10 bg-white/90 backdrop-blur-sm border-b border-orange-100"
+        className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-ink-100"
         style={{ paddingTop: 'env(safe-area-inset-top)' }}
       >
-        <div className="px-4 h-14 flex items-center gap-3">
-          {/* Back button — only on detail step */}
+        <div className="mx-auto max-w-content px-4 md:px-6 h-14 md:h-16 flex items-center gap-2">
           {route.step === 'detail' && (
             <button
               onClick={() => window.history.back()}
-              className="p-2 -ml-2 rounded-xl hover:bg-orange-50 transition cursor-pointer"
+              className="w-11 h-11 -ml-3 rounded-xl flex items-center justify-center text-ink-700 hover:bg-ink-50 transition cursor-pointer"
               aria-label="뒤로"
             >
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
+              <ChevronLeftIcon size={22} strokeWidth={2} />
             </button>
           )}
 
           <button
             onClick={handleReset}
-            className="flex items-center gap-2 cursor-pointer"
+            className="flex items-center gap-2 min-h-11 cursor-pointer"
             aria-label="홈으로"
           >
-            <div className="w-8 h-8 bg-primary rounded-xl flex items-center justify-center shadow-sm shadow-orange-200">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-              </svg>
-            </div>
-            <span className="font-bold text-slate-800 text-[15px] tracking-tight">CheckBook</span>
+            <span className="w-8 h-8 bg-accent rounded-[9px] flex items-center justify-center text-white">
+              <BookIcon size={17} strokeWidth={2.2} />
+            </span>
+            <span className="font-bold text-ink-900 text-body-lg tracking-tight">CheckBook</span>
           </button>
         </div>
       </header>
 
-      {/* Main */}
-      <main className="flex-1 flex justify-center px-4 py-5 overflow-x-hidden">
-        <div className="w-full max-w-sm">
-          <div
-            key={route.step}
-            className={direction === 'forward' ? 'slide-in-right' : 'slide-in-left'}
-          >
-            {route.step === 'search' && (
-              <BookSearchStep
-                key={resetKey}
-                onSelect={goToDetail}
-              />
-            )}
+      <main className="flex-1 overflow-x-hidden">
+        <div
+          key={route.step}
+          className={direction === 'forward' ? 'slide-in-right' : 'slide-in-left'}
+        >
+          {route.step === 'search' && (
+            <BookSearchStep
+              key={resetKey}
+              onSelect={goToDetail}
+            />
+          )}
 
-            {route.step === 'detail' && (
-              <BookDetailPage
-                key={route.isbn}
-                isbn13={route.isbn}
-                initialBook={selectedBook}
-                onReset={handleReset}
-              />
-            )}
-          </div>
+          {/* 상세 화면은 재디자인 2단계(PR ②)에서 넓힌다 — 그때까지 지금 폭 그대로 */}
+          {route.step === 'detail' && (
+            <div className="px-4 py-5">
+              <div className="mx-auto w-full max-w-sm">
+                <BookDetailPage
+                  key={route.isbn}
+                  isbn13={route.isbn}
+                  initialBook={selectedBook}
+                  onReset={handleReset}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>

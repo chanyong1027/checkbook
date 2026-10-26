@@ -4,14 +4,18 @@
 
 @layer base {
   body {
-    @apply bg-surface text-slate-900 font-sans antialiased;
+    @apply bg-surface text-ink-900 font-sans antialiased;
+    /* 한국어는 낱말 중간에서 끊지 않는다. 긴 ISBN·주소 같은 한 덩어리는 넘칠 때만 끊는다
+       (anywhere가 아니라 break-word — anywhere는 flex 칸의 최소 폭까지 줄여 글자가 과하게 접힌다) */
+    word-break: keep-all;
+    overflow-wrap: break-word;
   }
 }
 
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: #fed7aa transparent;
+    scrollbar-color: #d1d6db transparent;
   }
 }
 
