@@ -3,6 +3,17 @@ import { searchBooks } from '../api'
 import { toUserMessage } from '../api/errors.ts'
 import type { BookCandidate } from '../types'
 import { FeaturedBooksSection } from './FeaturedBooksSection'
+import {
+  BookIcon,
+  ChevronRightIcon,
+  CloseIcon,
+  HeadphonesIcon,
+  LibraryIcon,
+  SearchIcon,
+  SpinnerIcon,
+  StoreIcon,
+  TabletIcon,
+} from './shared/icons'
 
 interface Props {
   onSelect: (book: BookCandidate) => void
@@ -25,82 +36,106 @@ function saveHistory(query: string) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify([query, ...prev].slice(0, MAX_HISTORY)))
 }
 
-function BookCover({ src, title }: { src?: string; title: string }) {
+// 출판 연도만(판본 구분용). 형식이 낯설면 표시하지 않는다
+function publishedYear(publishedAt: string): string | null {
+  const m = publishedAt?.match(/^(\d{4})/)
+  return m ? m[1] : null
+}
+
+function BookCover({ src }: { src?: string }) {
   if (src) {
     return (
       <img
         src={src}
-        alt={title}
-        className="w-12 h-[68px] object-cover rounded-lg shrink-0 shadow-sm"
+        alt=""
+        loading="lazy"
+        className="w-[60px] h-[87px] object-cover rounded-md shrink-0 ring-1 ring-black/5 shadow-sm"
       />
     )
   }
   return (
-    <div className="w-12 h-[68px] bg-orange-50 rounded-lg shrink-0 flex items-center justify-center">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fdba74" strokeWidth="1.5">
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-      </svg>
+    <div className="w-[60px] h-[87px] bg-ink-50 rounded-md shrink-0 flex items-center justify-center text-ink-300">
+      <BookIcon size={20} />
     </div>
   )
 }
 
 function BookRowSkeleton() {
   return (
-    <div className="flex gap-3 p-3.5 bg-white rounded-2xl border border-orange-50 animate-pulse">
-      <div className="w-12 h-[68px] bg-orange-50 rounded-lg shrink-0" />
+    <div className="flex gap-4 p-4 bg-white rounded-2xl border border-ink-100 animate-pulse">
+      <div className="w-[60px] h-[87px] bg-ink-100 rounded-md shrink-0" />
       <div className="flex-1 self-center space-y-2">
-        <div className="h-3.5 bg-slate-100 rounded w-3/4" />
-        <div className="h-3 bg-slate-100 rounded w-1/2" />
-        <div className="h-3 bg-slate-100 rounded w-1/3" />
+        <div className="h-4 bg-ink-100 rounded w-3/4" />
+        <div className="h-3.5 bg-ink-100 rounded w-1/2" />
+        <div className="h-3.5 bg-ink-100 rounded w-1/3" />
       </div>
     </div>
   )
 }
 
+// 홈 첫 화면에서 '한 번에 확인하는 곳'을 알린다(상세 화면의 칸 순서와 같게)
+const SOURCES = [
+  { label: '근처 공공도서관 소장·대출', short: '근처 도서관', Icon: LibraryIcon },
+  { label: '내 전자도서관 대출', short: '전자도서관', Icon: TabletIcon },
+  { label: '밀리의서재 구독', short: '밀리의서재', Icon: HeadphonesIcon },
+  { label: '새 책 가격 · 중고 · 가까운 매장', short: '새 책 · 중고', Icon: StoreIcon },
+]
+
 const SEARCH_CACHE_KEY = 'cb_search_cache'
 const SEARCH_CACHE_MAX_ITEMS = 30
 
+interface SearchCache {
+  query: string
+  results: BookCandidate[]
+  page: number
+  isEnd: boolean
+}
+
+// 상세에서 뒤로 왔을 때의 검색 결과. 첫 렌더 전에 읽어야 큰 소개가 한 번 그려졌다가 접히는 깜빡임이 없다
+function readSearchCache(): SearchCache | null {
+  try {
+    const raw = sessionStorage.getItem(SEARCH_CACHE_KEY)
+    if (!raw) return null
+    const cache = JSON.parse(raw)
+    if (!cache || typeof cache.query !== 'string' || !Array.isArray(cache.results)) {
+      sessionStorage.removeItem(SEARCH_CACHE_KEY)
+      return null
+    }
+    const safeResults = (cache.results as unknown[])
+      .filter((v): v is BookCandidate => {
+        if (!v || typeof v !== 'object') return false
+        const b = v as Record<string, unknown>
+        return typeof b.title === 'string' && typeof b.isbn13 === 'string'
+      })
+      .slice(0, SEARCH_CACHE_MAX_ITEMS)
+    const safePage = Number.isInteger(cache.page) && cache.page >= 1 ? cache.page : 1
+    return { query: cache.query, results: safeResults, page: safePage, isEnd: cache.isEnd === true }
+  } catch {
+    sessionStorage.removeItem(SEARCH_CACHE_KEY)
+    return null
+  }
+}
+
 export function BookSearchStep({ onSelect }: Props) {
-  const [query, setQuery] = useState('')
-  const [results, setResults] = useState<BookCandidate[]>([])
-  const [page, setPage] = useState(1)
-  const [isEnd, setIsEnd] = useState(false)
+  const [cached] = useState(readSearchCache)
+  const [query, setQuery] = useState(cached?.query ?? '')
+  const [results, setResults] = useState<BookCandidate[]>(cached?.results ?? [])
+  const [page, setPage] = useState(cached?.page ?? 1)
+  const [isEnd, setIsEnd] = useState(cached?.isEnd ?? false)
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [searched, setSearched] = useState(false)
+  const [searched, setSearched] = useState(cached !== null)
   const [history, setHistory] = useState<string[]>(getHistory)
-  const currentQueryRef = useRef('')
+  const currentQueryRef = useRef(cached?.query ?? '')
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  // Restore cached search results on mount
+  // 처음 열 때만 검색칸에 포커스(autoFocus는 폼이 다시 그려질 때마다 포커스를 옮겨 모바일 키보드를 다시 띄운다).
+  // 상세에서 뒤로 와 결과를 복원할 때는 옮기지 않는다
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(SEARCH_CACHE_KEY)
-      if (!raw) return
-      const cache = JSON.parse(raw)
-      if (!cache || typeof cache.query !== 'string' || !Array.isArray(cache.results)) {
-        sessionStorage.removeItem(SEARCH_CACHE_KEY)
-        return
-      }
-      const safeResults = (cache.results as unknown[])
-        .filter((v): v is BookCandidate => {
-          if (!v || typeof v !== 'object') return false
-          const b = v as Record<string, unknown>
-          return typeof b.title === 'string' && typeof b.isbn13 === 'string'
-        })
-        .slice(0, SEARCH_CACHE_MAX_ITEMS)
-      const safePage = Number.isInteger(cache.page) && cache.page >= 1 ? cache.page : 1
-      setResults(safeResults)
-      setQuery(cache.query)
-      currentQueryRef.current = cache.query
-      setPage(safePage)
-      setIsEnd(cache.isEnd === true)
-      setSearched(true)
-    } catch {
-      sessionStorage.removeItem(SEARCH_CACHE_KEY)
-    }
+    if (!cached) inputRef.current?.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Save cache when search state changes
@@ -194,169 +229,224 @@ export function BookSearchStep({ onSelect }: Props) {
     setHistory([])
   }
 
+  // 검색을 시작하면 큰 소개를 접고 검색칸만 위에 남긴다
+  const compact = searched || loading || results.length > 0 || error !== null
+
+  const searchForm = (
+    <form onSubmit={handleSearch} role="search" className="flex gap-2">
+      <div className="flex-1 relative">
+        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink-500">
+          <SearchIcon size={20} />
+        </span>
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="책 제목, 저자, ISBN"
+          aria-label="책 검색"
+          className="w-full h-12 md:h-14 pl-11 pr-11 rounded-2xl border-[1.5px] border-ink-900 bg-white text-ink-900
+            text-body md:text-body-lg placeholder:text-ink-500
+            focus:outline-none focus:border-primary focus:ring-4 focus:ring-accent/30 transition"
+          maxLength={200}
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => setQuery('')}
+            aria-label="검색어 지우기"
+            className="absolute right-1 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center
+              text-ink-500 hover:text-ink-900 cursor-pointer"
+          >
+            <CloseIcon size={18} strokeWidth={2} />
+          </button>
+        )}
+      </div>
+      <button
+        type="submit"
+        disabled={loading || !query.trim()}
+        aria-label="검색"
+        className="h-12 md:h-14 min-w-12 md:min-w-0 md:px-7 bg-primary text-white rounded-2xl font-bold text-body-lg
+          hover:bg-primary-dark transition disabled:opacity-40 disabled:cursor-not-allowed
+          flex items-center justify-center gap-1.5 cursor-pointer"
+      >
+        {loading ? <SpinnerIcon size={20} strokeWidth={2.2} /> : <SearchIcon size={20} strokeWidth={2.2} className="md:hidden" />}
+        <span className="hidden md:inline">검색</span>
+      </button>
+    </form>
+  )
+
+  const historyChips = !searched && history.length > 0 && (
+    <div className="mt-5">
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-label font-semibold text-ink-600">최근 검색</span>
+        <button
+          onClick={clearHistory}
+          className="min-h-10 px-2 -mr-2 text-label text-ink-600 hover:text-ink-900 cursor-pointer"
+        >
+          전체 삭제
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {history.map(q => (
+          <button
+            key={q}
+            onClick={() => handleHistoryClick(q)}
+            className="min-h-10 px-4 rounded-full bg-white border border-ink-200 text-meta text-ink-700
+              hover:border-ink-500 hover:text-ink-900 transition cursor-pointer"
+          >
+            {q}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+
   return (
     <div>
-      {/* Title */}
-      <div className="mb-5">
-        <h1 className="text-2xl font-bold text-slate-900 tracking-tight">책, 어디 있을까?</h1>
-        <p className="text-sm text-slate-600 mt-1 leading-relaxed">
-          YES24 가격 · 우리 동네 도서관 · 전자도서관 · 밀리,
-          <br />
-          <span className="text-slate-800 font-medium">한 번에 확인</span>하세요.
-        </p>
-      </div>
-
-      {/* Search form */}
-      <form onSubmit={handleSearch} className="mb-4">
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="예) 채식주의자"
-              aria-label="책 검색"
-              className="w-full pl-4 pr-10 py-3 rounded-2xl border border-orange-100 bg-white text-slate-900
-                placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30
-                focus:border-primary transition text-base shadow-sm"
-              maxLength={200}
-              autoFocus
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery('')}
-                aria-label="검색어 지우기"
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-          </div>
-          <button
-            type="submit"
-            disabled={loading || !query.trim()}
-            className="px-5 py-3 bg-primary text-white rounded-2xl font-semibold hover:bg-primary-dark
-              active:scale-95 transition disabled:opacity-40 disabled:cursor-not-allowed
-              flex items-center gap-1.5 cursor-pointer shadow-sm shadow-orange-200"
+      {/* 검색 폼은 늘 같은 자리에 둔다 — 큰 소개를 접고 펼 때 폼이 새로 만들어지면 입력 상태·포커스가 흔들린다 */}
+      <section className="bg-white border-b border-ink-100">
+        <div className="mx-auto max-w-content px-4 md:px-6">
+          <div
+            className={
+              compact
+                ? 'py-4 md:py-6'
+                : 'py-7 md:py-12 lg:py-16 lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-14 lg:items-center'
+            }
           >
-            {loading ? (
-              <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-              </svg>
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-              </svg>
-            )}
-          </button>
-        </div>
-      </form>
-
-      {/* Recent history */}
-      {!searched && history.length > 0 && (
-        <div className="mb-5">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-slate-600">최근 검색</span>
-            <button
-              onClick={clearHistory}
-              className="px-2 py-1 -mr-1 text-xs text-slate-500 hover:text-slate-700 cursor-pointer"
-            >
-              전체 삭제
-            </button>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {history.map(q => (
-              <button
-                key={q}
-                onClick={() => handleHistoryClick(q)}
-                className="px-3 py-2 rounded-full bg-white border border-orange-100 text-sm text-slate-700
-                  hover:border-primary hover:text-primary transition cursor-pointer"
-              >
-                {q}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Error */}
-      {error && (
-        <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm mb-4">
-          {error}
-        </div>
-      )}
-
-      {/* Featured (검색 전에만 노출) */}
-      {!searched && !loading && !error && (
-        <FeaturedBooksSection onSelect={onSelect} />
-      )}
-
-      {/* Empty */}
-      {searched && results.length === 0 && (
-        <div className="text-center py-14">
-          <div className="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fdba74" strokeWidth="1.5">
-              <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-            </svg>
-          </div>
-          <p className="text-slate-600 text-sm">검색 결과가 없습니다</p>
-        </div>
-      )}
-
-      {/* Results */}
-      {results.length > 0 && (
-        <div className="space-y-2">
-          {results.map(book => (
-            <button
-              key={book.isbn13}
-              onClick={() => onSelect(book)}
-              className="w-full flex gap-3 p-3.5 bg-white rounded-2xl border border-orange-50
-                hover:border-primary/40 hover:shadow-sm active:scale-[0.98] transition text-left
-                cursor-pointer group"
-            >
-              <BookCover src={book.coverUrl} title={book.title} />
-              <div className="flex-1 min-w-0 self-center">
-                <p className="font-semibold text-slate-800 truncate text-sm group-hover:text-primary transition leading-snug">
-                  {book.title}
-                </p>
-                <p className="text-xs text-slate-600 mt-0.5 truncate">{book.author}</p>
-                <p className="text-xs text-slate-500 truncate">{book.publisher}</p>
-              </div>
-              <div className="self-center text-slate-200 group-hover:text-primary/50 transition shrink-0">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <path d="M9 18l6-6-6-6" />
-                </svg>
-              </div>
-            </button>
-          ))}
-
-          {/* Sentinel + 로딩 인디케이터 */}
-          {!isEnd && (
-            <div ref={sentinelRef} className="py-2">
-              {loadingMore && (
-                <div className="flex justify-center py-2">
-                  <svg className="animate-spin text-orange-300" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-                  </svg>
-                </div>
+            <div>
+              {compact ? (
+                <h1 className="sr-only">책 검색 결과</h1>
+              ) : (
+                <>
+                  <p className="text-label md:text-meta font-bold text-accent-strong">
+                    도서관 · 전자도서관 · 구독 · 서점을 한 번에
+                  </p>
+                  <h1 className="mt-2 text-display lg:text-display-lg font-bold text-ink-900">책, 어디 있을까?</h1>
+                  <p className="mt-3 text-body md:text-body-lg text-ink-600 max-w-xl">
+                    읽고 싶은 책 한 권을 검색하면 근처 도서관 대출부터 전자도서관, 밀리의서재, 새 책 가격까지
+                    한 화면에 모아 보여 드려요.
+                  </p>
+                </>
               )}
-              {!loadingMore && (
-                <div className="space-y-2">
-                  <BookRowSkeleton />
-                  <BookRowSkeleton />
-                </div>
+              <div className={compact ? 'max-w-2xl' : 'mt-6 max-w-2xl'}>{searchForm}</div>
+              {!compact && (
+                <>
+                  <ul role="list" className="mt-4 flex flex-wrap gap-2 lg:hidden" aria-label="한 번에 확인하는 곳">
+                    {SOURCES.map(({ short, Icon }) => (
+                      <li key={short} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-ink-50 text-label text-ink-700">
+                        <Icon size={15} />
+                        {short}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="max-w-2xl">{historyChips}</div>
+                </>
               )}
             </div>
-          )}
 
-          {isEnd && results.length > PAGE_SIZE && (
-            <p className="text-center text-xs text-slate-500 py-3">모든 결과를 불러왔습니다</p>
-          )}
+            {!compact && (
+              <aside className="hidden lg:block rounded-2xl border border-ink-100 bg-surface px-6 py-5">
+                <h2 className="text-meta font-bold text-ink-900 mb-1">한 번에 확인하는 곳</h2>
+                <ul role="list">
+                  {SOURCES.map(({ label, Icon }, i) => (
+                    <li
+                      key={label}
+                      className={'flex items-center gap-3 min-h-[52px] text-body text-ink-700' + (i > 0 ? ' border-t border-ink-100' : '')}
+                    >
+                      <span className="w-9 h-9 rounded-xl bg-white flex items-center justify-center text-ink-700 shrink-0">
+                        <Icon size={18} />
+                      </span>
+                      {label}
+                    </li>
+                  ))}
+                </ul>
+              </aside>
+            )}
+          </div>
         </div>
-      )}
+      </section>
+
+      <div className="mx-auto max-w-content px-4 md:px-6 py-6 md:py-10">
+        {error && (
+          <div role="alert" className="p-4 mb-6 bg-status-danger-soft rounded-2xl text-status-danger text-meta">
+            {error}
+          </div>
+        )}
+
+        {/* 추천(검색 전에만) */}
+        {!searched && !loading && !error && <FeaturedBooksSection onSelect={onSelect} />}
+
+        {loading && results.length === 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <BookRowSkeleton />
+            <BookRowSkeleton />
+            <BookRowSkeleton />
+            <BookRowSkeleton />
+          </div>
+        )}
+
+        {searched && results.length === 0 && (
+          <div className="text-center py-16">
+            <div className="w-14 h-14 bg-ink-50 rounded-2xl flex items-center justify-center mx-auto mb-3 text-ink-400">
+              <SearchIcon size={24} />
+            </div>
+            <p className="text-body text-ink-700">검색 결과가 없어요</p>
+            <p className="mt-1 text-meta text-ink-600">제목을 짧게 줄이거나 ISBN으로 찾아보세요</p>
+          </div>
+        )}
+
+        {/* 결과: 모바일 1열, PC 2열. 같은 책의 여러 판본을 고를 수 있게 제목 2줄 + 저자·출판사·연도 */}
+        {results.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {results.map(book => {
+              const year = publishedYear(book.publishedAt)
+              return (
+                <button
+                  key={book.isbn13}
+                  onClick={() => onSelect(book)}
+                  className="w-full flex gap-4 p-4 bg-white rounded-2xl border border-ink-100
+                    hover:border-ink-300 hover:shadow-sm transition text-left cursor-pointer group"
+                >
+                  <BookCover src={book.coverUrl} />
+                  <div className="flex-1 min-w-0 self-center">
+                    <p className="text-body font-semibold text-ink-900 line-clamp-2 group-hover:underline underline-offset-2">
+                      {book.title}
+                    </p>
+                    <p className="mt-1 text-meta text-ink-600 truncate">{book.author}</p>
+                    <p className="text-meta text-ink-500 truncate">
+                      {[book.publisher, year].filter(Boolean).join(' · ')}
+                    </p>
+                  </div>
+                  <span className="self-center text-ink-300 group-hover:text-ink-600 transition shrink-0">
+                    <ChevronRightIcon size={18} strokeWidth={2} />
+                  </span>
+                </button>
+              )
+            })}
+
+            {/* Sentinel + 로딩 표시 */}
+            {!isEnd && (
+              <div ref={sentinelRef} className="col-span-full py-2">
+                {loadingMore ? (
+                  <div className="flex justify-center py-2 text-ink-400">
+                    <SpinnerIcon size={20} strokeWidth={2.2} />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                    <BookRowSkeleton />
+                    <BookRowSkeleton />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isEnd && results.length > PAGE_SIZE && (
+              <p className="col-span-full text-center text-label text-ink-600 py-3">모든 결과를 불러왔어요</p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
