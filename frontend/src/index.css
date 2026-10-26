@@ -42,11 +42,11 @@
 }
 
 .slide-in-right {
-  animation: slideInFromRight 0.22s ease-out both;
+  animation: slideInFromRight 0.22s ease-out backwards;
 }
 
 .slide-in-left {
-  animation: slideInFromLeft 0.22s ease-out both;
+  animation: slideInFromLeft 0.22s ease-out backwards;
 }
 
 @keyframes slide-up-sheet {
@@ -67,6 +67,8 @@
   animation: fade-in 0.2s ease-out both;
 }
 
+/* 화면 전환 슬라이드는 끝난 뒤 transform을 남기지 않는다(fill-mode backwards). 남으면 그 안의 position: fixed
+   (전자도서관 시트·확인 대화창)가 화면이 아니라 콘텐츠 전체를 기준으로 놓여 화면 밖에 뜬다 */
 /* 사용자가 시스템 설정에서 모션 감소를 선호하면 장식성 애니메이션·트랜지션 제거.
    단, .animate-spin(로딩 인디케이터)은 작업 진행 중임을 알리는 기능적 모션이므로 유지. */
 @media (prefers-reduced-motion: reduce) {

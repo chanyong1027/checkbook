@@ -7,15 +7,27 @@ import type {
   SearchResponse,
   SearchSectionStatus,
   ELibraryInfo,
+  ELibraryResult,
   ELibrarySearchResponse,
 } from '../types'
 import { OffStoreList } from './OffStoreList'
 import { PublicLibraryList } from './PublicLibraryList'
-import { BookDetailCard } from './shared/BookDetailCard'
-import { SectionCard } from './shared/SectionCard'
-import { Skeleton } from './shared/Skeleton'
 import { BottomSheet } from './shared/BottomSheet'
 import { ConfirmDialog } from './shared/ConfirmDialog'
+import {
+  BookIcon,
+  ClockIcon,
+  HeadphonesIcon,
+  LibraryIcon,
+  RefreshIcon,
+  SearchIcon,
+  SettingsIcon,
+  SpinnerIcon,
+  StoreIcon,
+  TabletIcon,
+} from './shared/icons'
+import { BookPanel, type SummaryItem } from './detail/BookPanel'
+import { DetailSection, ExternalButton, GroupHeading, SectionNotice, SectionSkeleton, StatusChip, type Tone } from './detail/parts'
 import { isSafeUrl } from '../utils/url'
 
 interface Props {
@@ -51,19 +63,23 @@ function saveIds(ids: number[]) {
 
 // --- Status helpers ---
 
-const elibStatusColor: Record<string, string> = {
-  SUCCESS: 'text-emerald-600',
-  FAILED: 'text-red-500',
-  TIMEOUT: 'text-orange-500',
-  DAILY_LIMIT: 'text-slate-500',
+// 전자도서관 사이트 하나의 결과를 상태 칩으로. 사이트가 실패하면 '없음'과 구분해 보인다
+function elibSiteStatus(result: ELibraryResult): { tone: Tone; label: string } {
+  switch (result.status) {
+    case 'FAILED': return { tone: 'danger', label: '접속 실패' }
+    case 'TIMEOUT': return { tone: 'unknown', label: '응답 없음' }
+    // 이 도서관 사이트의 하루 조회 상한(작은 사이트 보호) — 자정에 풀린다
+    case 'DAILY_LIMIT': return { tone: 'unknown', label: '오늘 조회 마감' }
+  }
+  if (result.books.some(b => b.available)) return { tone: 'ok', label: '대출가능' }
+  if (result.books.length > 0) return { tone: 'off', label: '대출중' }
+  return { tone: 'off', label: '소장 없음' }
 }
 
-const elibStatusLabel: Record<string, string> = {
-  SUCCESS: '완료',
-  FAILED: '실패',
-  TIMEOUT: '타임아웃',
-  // 이 도서관 사이트의 하루 조회 상한(작은 사이트 보호) — 자정에 풀린다
-  DAILY_LIMIT: '오늘 조회 마감',
+// 대출가능 → 대출중·소장 없음 → 확인 못 함 순
+function elibRank(result: ELibraryResult): number {
+  const tone = elibSiteStatus(result).tone
+  return tone === 'ok' ? 0 : tone === 'off' ? 1 : 2
 }
 
 /** 공유 링크 첫 진입 때 카카오 후보 조회를 기다리는 최대 시간. 넘기면 힌트 없이 통합 검색을 시작한다 */
@@ -88,56 +104,9 @@ function formatLabel(format: MillieAvailability['format']): string {
   switch (format) {
     case 'EBOOK': return '전자책'
     case 'AUDIOBOOK': return '오디오북'
-    case 'EBOOK_AND_AUDIOBOOK': return '전자책+오디오북'
+    case 'EBOOK_AND_AUDIOBOOK': return '전자책·오디오북'
     default: return '구독 가능'
   }
-}
-
-// --- Loading skeletons ---
-
-function SearchLoadingSkeleton() {
-  return (
-    <div className="space-y-3 animate-pulse">
-      <div className="bg-white rounded-2xl border border-orange-50 p-4">
-        <Skeleton className="h-4 w-28 mb-3" />
-        <div className="space-y-2.5">
-          {[1, 2, 3].map(i => (
-            <div key={i} className="flex items-center justify-between">
-              <Skeleton className="h-3.5 w-24" />
-              <Skeleton className="h-5 w-10 rounded-full" />
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="bg-white rounded-2xl border border-orange-50 p-4">
-        <Skeleton className="h-4 w-20 mb-3" />
-        <div className="space-y-2.5">
-          {[1, 2].map(i => (
-            <div key={i} className="flex justify-between">
-              <Skeleton className="h-3.5 w-16" />
-              <Skeleton className="h-3.5 w-14" />
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ElibLoadingSkeleton() {
-  return (
-    <div className="animate-pulse bg-white rounded-2xl border border-orange-50 p-4">
-      <Skeleton className="h-4 w-24 mb-3" />
-      <div className="space-y-2.5">
-        {[1, 2].map(i => (
-          <div key={i} className="flex items-center justify-between">
-            <Skeleton className="h-3.5 w-32" />
-            <Skeleton className="h-5 w-10 rounded-full" />
-          </div>
-        ))}
-      </div>
-    </div>
-  )
 }
 
 // --- E-library selector bottom sheet content ---
@@ -203,29 +172,27 @@ function ELibrarySelector({
   if (loading) {
     return (
       <div className="flex justify-center py-12">
-        <svg className="animate-spin text-primary" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-        </svg>
+        <SpinnerIcon size={28} strokeWidth={2.2} className="text-ink-400" />
       </div>
     )
   }
 
   if (error) {
-    return <div className="p-3 bg-red-50 border border-red-100 rounded-2xl text-red-500 text-sm">{error}</div>
+    return <div role="alert" className="p-3 bg-status-danger-soft rounded-2xl text-status-danger text-meta">{error}</div>
   }
 
   return (
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
-        <p className="text-[13px] font-medium text-slate-600">
+        <p className="text-meta font-semibold text-ink-700">
           도서관 선택
-          <span className={`ml-1.5 ${overLimit ? 'text-red-500' : 'text-slate-500'}`}>
+          <span className={`ml-1.5 ${overLimit ? 'text-status-danger' : 'text-ink-500'}`}>
             {draftIds.size}/{MAX_SELECT}
           </span>
         </p>
         {draftIds.size > 0 && (
-          <button onClick={clearAll} className="px-2 py-1 -mr-1 text-xs text-primary hover:underline cursor-pointer">
+          <button onClick={clearAll} className="min-h-10 px-2 -mr-2 text-label font-semibold text-primary hover:underline cursor-pointer">
             전체 해제
           </button>
         )}
@@ -237,13 +204,13 @@ function ELibrarySelector({
           {selectedLibs.map(lib => (
             <span
               key={lib.libraryId}
-              className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full
-                bg-orange-50 border border-orange-200 text-xs text-orange-700 font-medium"
+              className="inline-flex items-center gap-1 pl-3 pr-1 py-1 rounded-full
+                bg-accent-soft border border-accent/30 text-label text-accent-strong font-semibold"
             >
               {lib.name}
               <button
                 onClick={() => toggle(lib.libraryId)}
-                className="w-6 h-6 rounded-full hover:bg-orange-200 flex items-center justify-center transition cursor-pointer shrink-0"
+                className="w-7 h-7 rounded-full hover:bg-accent/20 flex items-center justify-center transition cursor-pointer shrink-0"
                 aria-label={`${lib.name} 선택 해제`}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -256,30 +223,28 @@ function ELibrarySelector({
       )}
 
       {overLimit && (
-        <p className="text-xs text-red-500 mb-2">최대 {MAX_SELECT}개까지 선택 가능합니다</p>
+        <p className="text-label text-status-danger mb-2">최대 {MAX_SELECT}개까지 선택할 수 있어요</p>
       )}
 
       {/* Filter input */}
       <div className="relative mb-2">
-        <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-          <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-        </svg>
+        <SearchIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-500" />
         <input
           type="text"
           placeholder="이름, 지역으로 필터"
           aria-label="전자도서관 이름·지역 필터"
           value={keyword}
           onChange={e => setKeyword(e.target.value)}
-          className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-orange-100 bg-white text-base
-            focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition
-            placeholder:text-slate-400"
+          className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-ink-200 bg-white text-body
+            focus:outline-none focus:ring-4 focus:ring-accent/30 focus:border-primary transition
+            placeholder:text-ink-500"
         />
       </div>
 
       {/* Library list */}
-      <div className="max-h-48 overflow-y-auto scrollbar-thin space-y-0.5 bg-white rounded-2xl border border-orange-50 p-1 mb-4">
+      <div className="max-h-56 overflow-y-auto scrollbar-thin space-y-0.5 bg-white rounded-2xl border border-ink-100 p-1 mb-4">
         {filteredLibs.length === 0 && (
-          <p className="text-sm text-slate-500 text-center py-4">검색 결과 없음</p>
+          <p className="text-meta text-ink-600 text-center py-4">맞는 도서관이 없어요</p>
         )}
         {filteredLibs.map(lib => {
           const checked = draftIds.has(lib.libraryId)
@@ -287,8 +252,8 @@ function ELibrarySelector({
           return (
             <label
               key={lib.libraryId}
-              className={`flex items-center gap-3 px-3 py-2 rounded-xl transition
-                ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-orange-50/50 cursor-pointer'}`}
+              className={`flex items-center gap-3 px-3 min-h-11 rounded-xl transition
+                ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-ink-50 cursor-pointer'}`}
             >
               <input
                 type="checkbox"
@@ -297,8 +262,8 @@ function ELibrarySelector({
                 onChange={() => toggle(lib.libraryId)}
                 className="w-4 h-4 accent-primary shrink-0"
               />
-              <span className="text-sm text-slate-700 flex-1 truncate">{lib.name}</span>
-              <span className="text-xs text-slate-500 shrink-0">{lib.region}</span>
+              <span className="text-body text-ink-900 flex-1 truncate">{lib.name}</span>
+              <span className="text-label text-ink-500 shrink-0">{lib.region}</span>
             </label>
           )
         })}
@@ -308,45 +273,20 @@ function ELibrarySelector({
       <div className="flex gap-2">
         <button
           onClick={onCancel}
-          className="flex-1 py-3 border border-orange-100 rounded-2xl text-sm text-slate-600
-            hover:border-primary hover:text-primary transition cursor-pointer bg-white"
+          className="flex-1 min-h-12 border border-ink-200 rounded-xl text-meta font-semibold text-ink-900
+            hover:border-ink-400 transition cursor-pointer bg-white"
         >
           취소
         </button>
         <button
           onClick={() => onConfirm([...draftIds])}
           disabled={overLimit}
-          className="flex-1 py-3 bg-primary text-white rounded-2xl font-semibold text-sm
-            hover:bg-primary-dark active:scale-[0.98] transition disabled:opacity-40
-            disabled:cursor-not-allowed cursor-pointer shadow-sm shadow-orange-200"
+          className="flex-1 min-h-12 bg-primary text-white rounded-xl font-bold text-meta
+            hover:bg-primary-dark transition disabled:opacity-40
+            disabled:cursor-not-allowed cursor-pointer"
         >
           {draftIds.size === 0 ? '설정 해제' : `${draftIds.size}개 선택 완료`}
         </button>
-      </div>
-    </div>
-  )
-}
-
-// --- 책 정보(제목)를 확보하지 못했을 때의 책 카드 ---
-// '없는 책'과 '조회 실패'를 구분해 이유를 보여 준다. 화면 전체를 막지 않아 받은 도서관·중고 결과는 그대로 보인다
-
-function BookInfoUnavailableCard({ isbn13, notice }: { isbn13: string; notice: string }) {
-  return (
-    <div className="bg-white rounded-2xl border border-orange-50 p-4 mb-5 shadow-sm shadow-orange-50">
-      <div className="flex gap-4 items-center">
-        <div className="w-[72px] h-[100px] bg-orange-50 rounded-xl shrink-0 flex items-center justify-center">
-          <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fdba74" strokeWidth="1.5">
-            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-          </svg>
-        </div>
-        <div className="flex-1 min-w-0">
-          {/* 책 카드의 제목 자리라 제목 수준으로 둔다(BookDetailCard의 h2와 같은 위치) */}
-          <h2 className="text-sm font-semibold text-slate-700 leading-snug">{notice}</h2>
-          <span className="mt-2 inline-block text-xs font-mono bg-orange-50 text-orange-700 px-2 py-0.5 rounded-lg">
-            {isbn13}
-          </span>
-        </div>
       </div>
     </div>
   )
@@ -364,24 +304,6 @@ function bookInfoNoticeText(yes24?: string): string {
     case 'DAILY_LIMIT': return '요청이 많아 책 정보를 잠시 불러오지 못했어요'
     default: return '책 정보를 잠시 불러오지 못했어요'
   }
-}
-
-// --- Header skeleton (cold-entry: book metadata not yet loaded) ---
-
-function BookDetailCardSkeleton() {
-  return (
-    <div className="bg-white rounded-2xl border border-orange-50 p-4 mb-5 shadow-sm shadow-orange-50 animate-pulse">
-      <div className="flex gap-4">
-        <div className="w-[72px] h-[100px] bg-orange-50 rounded-xl shrink-0" />
-        <div className="flex-1 min-w-0 space-y-2 self-center">
-          <div className="h-4 bg-slate-100 rounded w-4/5" />
-          <div className="h-3 bg-slate-100 rounded w-1/2" />
-          <div className="h-3 bg-slate-100 rounded w-2/5" />
-          <div className="h-5 bg-orange-50 rounded-lg w-32 mt-2" />
-        </div>
-      </div>
-    </div>
-  )
 }
 
 // --- Main component ---
@@ -628,489 +550,462 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
     setSheetOpen(false)
   }
 
-  // Get section statuses from metadata
+  // --- 칸 상태(메타데이터) ---
   const usedBookProductUrl = searchResult?.usedBook?.productUrl
   const usedSection = searchResult?.metadata.sectionStatuses.find(s => s.section === 'USED_BOOK')
   const libSection = searchResult?.metadata.sectionStatuses.find(s => s.section === 'PUBLIC_LIBRARY')
   const libSectionStatus = libSection?.status
   const newBookSection = searchResult?.metadata.sectionStatuses.find(s => s.section === 'NEW_BOOK')
   const newBookNotice = newBookSection ? newBookNoticeText(newBookSection.status, newBookSection.reason) : null
+  const subSection = searchResult?.metadata.sectionStatuses.find(s => s.section === 'SUBSCRIPTION')
+  // 다시 검색이 실패하면 옛 결과를 쓰지 않는다(runSearch는 searchResult를 지우지 않는다) — 본문은 이 값만 본다
+  const result = searchError ? null : searchResult
+  const libraries = result?.publicLibraries ?? []
+  const libHasMore = result?.metadata.publicLibraryHasMore === true
 
   const hasSavedElibs = savedElibIds.length > 0
 
   // 통합 검색·카카오 조회가 모두 끝났는데도 책 제목이 없을 때. '없는 책'으로 단정하지 않는다 —
-  // 호출 제한·장애·YES24 미등록을 구분해 책 카드에 이유를 보이고, 나머지 칸(도서관·중고 등)은 그대로 보여 준다
+  // 호출 제한·장애·YES24 미등록을 구분해 책 패널에 이유를 보이고, 나머지 칸(도서관·중고 등)은 그대로 보여 준다
   const bookInfoNotice = !searchLoading && coldFetchDone && !displayBook
     ? bookInfoNoticeText(searchError ? undefined : searchResult?.metadata.identification?.yes24)
     : null
 
-  return (
-    <div>
-      {/* Book detail card */}
-      {displayBook ? (
-        <BookDetailCard book={displayBook} />
-      ) : bookInfoNotice ? (
-        <BookInfoUnavailableCard isbn13={isbn13} notice={bookInfoNotice} />
-      ) : (
-        <BookDetailCardSkeleton />
-      )}
+  // 표준 ISBN이 아니면 도서관·매장 모두 위치로 풀 수 없다 — 그때만 위치를 묻지 않는다
+  const locationNeeded = libSection?.reason !== 'NON_STANDARD_ISBN'
 
-      <div className="space-y-3">
-        {/* ==================== PUBLIC LIBRARY SECTION ==================== */}
-        {searchLoading ? (
-          <SearchLoadingSkeleton />
-        ) : searchError ? (
-          <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm">
-            {searchError}
-          </div>
-        ) : searchResult && (
-          <>
-            {/* Public Library */}
-            {libSectionStatus === 'SKIPPED' && libSection?.reason === 'NON_STANDARD_ISBN' ? (
-              // 서점 내부 코드 등 표준 ISBN이 아님 — 조회 자체가 무의미해 '미보유'로 보이지 않게 이유를 말한다 (F1)
-              <SectionCard
-                icon={
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                    <polyline points="9 22 9 12 15 12 15 22" />
-                  </svg>
-                }
-                title="공공도서관"
-              >
-                <p className="text-sm text-slate-600 text-center py-2">
-                  표준 ISBN이 없는 상품이라 도서관 소장 여부를 확인할 수 없어요
-                </p>
-              </SectionCard>
-            ) : libSectionStatus === 'SKIPPED' && libSection?.reason === 'DAILY_LIMIT' ? (
-              // 정보나루 하루 호출 예산 소진 — 위치 CTA로 보이면 안 된다(위치는 이미 있음)
-              <SectionCard
-                icon={
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                    <polyline points="9 22 9 12 15 12 15 22" />
-                  </svg>
-                }
-                title="공공도서관"
-              >
-                <p className="text-sm text-slate-600 text-center py-2">
-                  오늘은 조회가 많아 도서관 소장 여부를 확인할 수 없어요. 내일 다시 시도해주세요
-                </p>
-              </SectionCard>
-            ) : libSectionStatus === 'SKIPPED' ? (
-              // Location not granted (NO_LOCATION) — show CTA card
-              <SectionCard
-                icon={
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                    <polyline points="9 22 9 12 15 12 15 22" />
-                  </svg>
-                }
-                title="공공도서관"
-              >
-                <div className="text-center py-4">
-                  <p className="text-sm text-slate-600 mb-3">
-                    위치를 허용하면 근처 도서관의<br />소장 여부를 확인할 수 있어요
-                  </p>
-                  {locError && (
-                    <p className="text-xs text-red-500 mb-2">{locError}</p>
-                  )}
-                  <button
-                    onClick={handleGetLocation}
-                    disabled={locLoading}
-                    className="px-5 py-2.5 bg-primary text-white rounded-2xl text-sm font-semibold
-                      hover:bg-primary-dark active:scale-[0.98] transition disabled:opacity-40
-                      cursor-pointer shadow-sm shadow-orange-200 inline-flex items-center gap-2"
-                  >
-                    {locLoading ? (
-                      <svg className="animate-spin" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-                      </svg>
-                    ) : (
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                        <circle cx="12" cy="12" r="3" />
-                        <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83" />
-                      </svg>
-                    )}
-                    위치 허용하기
-                  </button>
+  // --- 한눈 요약(각 칸의 결과로 화면에서 계산) ---
+  const loadingItem = { value: '확인 중', tone: 'loading' as const }
+  const failedItem = { value: '불러오지 못함', tone: 'warn' as const }
+
+  function librarySummary(): Pick<SummaryItem, 'value' | 'tone'> {
+    if (searchLoading) return loadingItem
+    if (searchError || !searchResult) return failedItem
+    if (libSectionStatus === 'SKIPPED') {
+      if (libSection?.reason === 'NON_STANDARD_ISBN') return { value: '확인 불가', tone: 'neutral' }
+      if (libSection?.reason === 'DAILY_LIMIT') return { value: '오늘 조회 마감', tone: 'neutral' }
+      return { value: '위치 필요', tone: 'neutral' }
+    }
+    if (libSectionStatus === 'FAILED' && libraries.length === 0) return { value: '응답 없음', tone: 'warn' }
+    if (libraries.length === 0) {
+      return (searchResult.metadata.publicLibraryTotal ?? 0) > 0
+        ? { value: '응답 없음', tone: 'warn' }
+        : { value: '근처에 없음', tone: 'off' }
+    }
+    const available = libraries.filter(l => l.hasBook && l.loanAvailable).length
+    const held = libraries.filter(l => l.hasBook).length
+    if (available > 0) return { value: `${available}곳 대출가능`, tone: 'ok' }
+    if (held > 0) return { value: libHasMore ? `가까운 ${held}곳 대출중` : `${held}곳 모두 대출중`, tone: 'off' }
+    return { value: '가까운 곳엔 없음', tone: 'off' }
+  }
+
+  function elibSummary(): Pick<SummaryItem, 'value' | 'tone'> {
+    if (!displayBook) return bookInfoNotice ? { value: '확인 불가', tone: 'neutral' } : loadingItem
+    if (!hasSavedElibs) return { value: '설정 필요', tone: 'neutral' }
+    if (elibError) return failedItem
+    if (elibLoading || !elibResult) return loadingItem
+    const checked = elibResult.results.filter(r => ['ok', 'off'].includes(elibSiteStatus(r).tone))
+    if (checked.length === 0) return { value: '확인 못 함', tone: 'warn' }
+    const available = checked.filter(r => elibSiteStatus(r).tone === 'ok').length
+    if (available > 0) return { value: `${available}곳 대출가능`, tone: 'ok' }
+    if (elibResult.results.some(r => r.books.length > 0)) return { value: '모두 대출중', tone: 'off' }
+    return { value: '소장 없음', tone: 'off' }
+  }
+
+  function subscriptionSummary(): Pick<SummaryItem, 'value' | 'tone'> {
+    if (searchLoading) return loadingItem
+    if (searchError || !searchResult) return failedItem
+    if (subSection?.status === 'FAILED') return failedItem
+    if (subSection?.status !== 'SUCCESS') {
+      return subSection?.reason === 'DAILY_LIMIT'
+        ? { value: '오늘 조회 마감', tone: 'neutral' }
+        : { value: '확인 불가', tone: 'neutral' }
+    }
+    const millie = searchResult.subscription.millie
+    return millie.available ? { value: formatLabel(millie.format), tone: 'ok' } : { value: '없음', tone: 'off' }
+  }
+
+  function newBookSummary(): Pick<SummaryItem, 'value' | 'tone'> {
+    if (searchLoading) return loadingItem
+    if (searchError || !searchResult) return failedItem
+    if (!newBookNotice && searchResult.newBook) {
+      return { value: `${searchResult.newBook.price.toLocaleString()}원`, tone: 'neutral' }
+    }
+    if (newBookSection?.reason === 'DAILY_LIMIT') return { value: '오늘 조회 마감', tone: 'neutral' }
+    if (newBookSection?.reason === 'RATE_LIMITED' || newBookSection?.status === 'FAILED') return { value: '확인 못 함', tone: 'warn' }
+    return { value: '가격 정보 없음', tone: 'neutral' }
+  }
+
+  const summary: SummaryItem[] = [
+    { href: '#library', label: '근처 도서관', ...librarySummary() },
+    { href: '#elibrary', label: '전자도서관', ...elibSummary() },
+    { href: '#subscription', label: '밀리의서재', ...subscriptionSummary() },
+    { href: '#buy', label: '새 책', ...newBookSummary() },
+  ]
+
+  function handleSummaryNavigate(href: string) {
+    if (href === '#elibrary' && displayBook && !hasSavedElibs) {
+      setSheetOpen(true)
+      return
+    }
+    const id = href.slice(1)
+    const target = document.getElementById(id)
+    if (!target) return
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    target.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+    // 키보드·화면 읽기 사용자도 그 칸에서 이어 가게 칸 제목으로 포커스(불러오는 중이면 제목이 없어 스크롤만)
+    document.getElementById(`${id}-title`)?.focus({ preventScroll: true })
+  }
+
+  // --- 칸 내용 ---
+
+  const showLibraryList =
+    !!result &&
+    libSectionStatus !== 'SKIPPED' &&
+    !(libSectionStatus === 'FAILED' && !libHasMore) &&
+    !(libraries.length === 0 && !libHasMore)
+
+  function libraryBody() {
+    if (!result) return <SectionNotice>도서관 정보를 불러오지 못했어요</SectionNotice>
+    if (libSectionStatus === 'SKIPPED' && libSection?.reason === 'NON_STANDARD_ISBN') {
+      // 서점 내부 코드 등 표준 ISBN이 아님 — 조회 자체가 무의미해 '미보유'로 보이지 않게 이유를 말한다 (F1)
+      return <SectionNotice>표준 ISBN이 없는 상품이라 도서관 소장 여부를 확인할 수 없어요</SectionNotice>
+    }
+    if (libSectionStatus === 'SKIPPED' && libSection?.reason === 'DAILY_LIMIT') {
+      // 정보나루 하루 호출 예산 소진 — 위치 안내로 보이면 안 된다(위치는 이미 있음)
+      return <SectionNotice>오늘은 조회가 많아 도서관 소장 여부를 확인할 수 없어요. 내일 다시 시도해주세요</SectionNotice>
+    }
+    if (libSectionStatus === 'SKIPPED') {
+      return <SectionNotice>위치를 허용하면 가까운 도서관의 소장·대출 여부를 보여 드려요</SectionNotice>
+    }
+    if (!showLibraryList) {
+      // 조회한 도서관이 모두 실패하면 서버가 FAILED로 준다(D7-0). 더 볼 도서관이 남았으면 목록(건너뜀 수 + 더 보기)으로 간다
+      return (
+        <SectionNotice>
+          {libSectionStatus === 'FAILED' || (result.metadata.publicLibraryTotal ?? 0) > 0
+            ? '근처 도서관의 응답을 받지 못했어요'
+            : '근처에 조회할 도서관이 없어요'}
+        </SectionNotice>
+      )
+    }
+    return (
+      <>
+        {/* 정보나루는 전날 자료이고 대출중만 '불가'로 준다(예약·상호대차 중은 가능으로 옴, 운영처 문의 결과 못 바꿈) — D7-0 */}
+        <p className="mb-3 text-label text-ink-600">예약·상호대차 중인 책도 '대출가능'으로 보일 수 있어요</p>
+        <PublicLibraryList
+          key={searchSeq}
+          isbn13={result.book.isbn13 ?? isbn13}
+          lat={userLatRef.current}
+          lon={userLonRef.current}
+          initialLibraries={result.publicLibraries}
+          initialTotal={result.metadata.publicLibraryTotal}
+          initialNextOffset={result.metadata.publicLibraryNextOffset}
+        />
+      </>
+    )
+  }
+
+  function elibBody() {
+    if (!displayBook) {
+      // 전자도서관 검색은 제목·저자로 한다. 책 정보가 없으면 설정해도 검색할 수 없으므로 설정 버튼을 띄우지 않는다
+      return <SectionNotice>책 정보를 확인하지 못해 전자도서관을 검색할 수 없어요</SectionNotice>
+    }
+    if (!hasSavedElibs) {
+      return (
+        <div>
+          <p className="text-body text-ink-700">자주 쓰는 전자도서관을 고르면 이 책을 빌릴 수 있는지 바로 확인해 드려요</p>
+          <button
+            type="button"
+            onClick={() => setSheetOpen(true)}
+            className="mt-3 min-h-11 px-5 rounded-xl bg-primary text-white text-meta font-bold hover:bg-primary-dark transition cursor-pointer"
+          >
+            전자도서관 고르기
+          </button>
+        </div>
+      )
+    }
+    if (elibError) {
+      return (
+        <div className="flex items-center justify-between gap-3">
+          <p role="alert" className="text-meta text-status-danger">{elibError}</p>
+          <button
+            type="button"
+            onClick={() => runElibSearch(savedElibIds, displayBook.title, displayBook.author)}
+            className="inline-flex items-center gap-1.5 min-h-10 px-2 text-meta font-semibold text-primary hover:text-primary-dark cursor-pointer shrink-0"
+          >
+            <RefreshIcon size={14} strokeWidth={2} />
+            다시 시도
+          </button>
+        </div>
+      )
+    }
+    if (!elibResult) return <SectionNotice>내 전자도서관을 확인하고 있어요</SectionNotice>
+
+    const sites = [...elibResult.results].sort(
+      (a, b) => elibRank(a) - elibRank(b) || a.libraryName.localeCompare(b.libraryName, 'ko'),
+    )
+    const checked = sites.filter(r => ['ok', 'off'].includes(elibSiteStatus(r).tone)).length
+    const available = sites.filter(r => elibSiteStatus(r).tone === 'ok').length
+    return (
+      <>
+        <p className="mb-3 text-meta text-ink-600">
+          {checked === 0 ? (
+            '고른 전자도서관에서 답을 받지 못했어요'
+          ) : (
+            <>
+              {sites.length}곳 중 <span className="font-bold text-ink-900">{available}곳 대출가능</span>
+            </>
+          )}
+        </p>
+        <ul role="list" className="grid gap-3 md:grid-cols-2">
+          {sites.map(site => {
+            const status = elibSiteStatus(site)
+            return (
+              <li key={site.libraryId} className="rounded-xl border border-ink-100 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-body font-semibold text-ink-900">{site.libraryName}</span>
+                  <StatusChip tone={status.tone}>{status.label}</StatusChip>
                 </div>
-              </SectionCard>
-            ) : libSectionStatus === 'FAILED' && !searchResult.metadata.publicLibraryHasMore ? (
-              <SectionCard
-                icon={
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                    <polyline points="9 22 9 12 15 12 15 22" />
-                  </svg>
-                }
-                title="공공도서관"
-              >
-                {/* 조회한 도서관이 모두 실패하면 서버가 FAILED로 준다(D7-0) — 빈 목록 때와 같은 말로.
-                    더 볼 도서관이 남았으면 이 분기를 지나 아래 목록(건너뜀 수 + 더 보기)으로 간다 */}
-                <p className="text-sm text-slate-600 text-center py-2">근처 도서관의 응답을 받지 못했어요</p>
-              </SectionCard>
-            ) : searchResult.publicLibraries.length === 0 &&
-              !searchResult.metadata.publicLibraryHasMore ? (
-              <SectionCard
-                icon={
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                    <polyline points="9 22 9 12 15 12 15 22" />
-                  </svg>
-                }
-                title="공공도서관"
-              >
-                <p className="text-sm text-slate-600 text-center py-2">
-                  {(searchResult.metadata.publicLibraryTotal ?? 0) > 0
-                    ? '근처 도서관의 응답을 받지 못했어요'
-                    : '근처에 조회할 도서관이 없습니다'}
-                </p>
-              </SectionCard>
-            ) : (
-              <SectionCard
-                icon={
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                    <polyline points="9 22 9 12 15 12 15 22" />
-                  </svg>
-                }
-                title="공공도서관"
-              >
-                {useLocation && (
-                  <div className="mb-2 flex items-center gap-2 text-xs text-emerald-600 bg-emerald-50 rounded-xl px-2.5 py-1.5">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                      <path d="M20 6L9 17l-5-5" />
-                    </svg>
-                    위치 기반 검색
-                  </div>
-                )}
-                {/* 정보나루는 전날 자료이고 대출중만 '불가'로 준다(예약·상호대차 중은 가능으로 옴, 운영처 문의 결과 못 바꿈) — D7-0 */}
-                <p className="mb-2 text-xs text-slate-500">
-                  대출 상태는 전날 자료 기준이라 실제와 다를 수 있어요. 예약·상호대차 중인 책도 '대출가능'으로 보여요
-                </p>
-                <PublicLibraryList
-                  key={searchSeq}
-                  isbn13={searchResult.book.isbn13 ?? isbn13}
-                  lat={userLatRef.current}
-                  lon={userLonRef.current}
-                  initialLibraries={searchResult.publicLibraries}
-                  initialTotal={searchResult.metadata.publicLibraryTotal}
-                  initialNextOffset={searchResult.metadata.publicLibraryNextOffset}
-                />
-              </SectionCard>
-            )}
-
-            {/* ==================== E-LIBRARY SECTION ==================== */}
-
-            {/* ... rendered below outside the searchResult block */}
-
-            {/* ==================== SUBSCRIPTION SECTION ==================== */}
-            {(() => {
-              const subscriptionStatus = searchResult.metadata.sectionStatuses
-                .find(s => s.section === 'SUBSCRIPTION')?.status
-
-              const subscriptionReason = searchResult.metadata.sectionStatuses
-                .find(s => s.section === 'SUBSCRIPTION')?.reason
-
-              const sectionIcon = (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="5" y="2" width="14" height="20" rx="2" />
-                  <line x1="12" y1="18" x2="12" y2="18" />
-                </svg>
-              )
-
-              if (subscriptionStatus === 'SKIPPED' && subscriptionReason === 'NO_METADATA') {
-                return (
-                  <SectionCard icon={sectionIcon} title="구독 서비스">
-                    <p className="text-sm text-slate-600 text-center py-2">
-                      책 정보를 확인하지 못해 구독 여부를 확인할 수 없어요
-                    </p>
-                  </SectionCard>
-                )
-              }
-
-              if (subscriptionStatus === 'SKIPPED' && subscriptionReason === 'DAILY_LIMIT') {
-                return (
-                  <SectionCard icon={sectionIcon} title="구독 서비스">
-                    <p className="text-sm text-slate-600 text-center py-2">
-                      오늘은 조회가 많아 구독 여부를 확인할 수 없어요. 내일 다시 시도해주세요
-                    </p>
-                  </SectionCard>
-                )
-              }
-
-              if (!subscriptionStatus || subscriptionStatus === 'SKIPPED') {
-                return null
-              }
-
-              if (subscriptionStatus === 'FAILED') {
-                return (
-                  <SectionCard icon={sectionIcon} title="구독 서비스">
-                    <p className="text-sm text-slate-600 text-center py-2">
-                      구독 정보 조회 실패. 잠시 후 다시 시도해주세요
-                    </p>
-                  </SectionCard>
-                )
-              }
-
-              // SUCCESS — millie.available에 따라 분기
-              const millie = searchResult.subscription.millie
-              return (
-                <SectionCard icon={sectionIcon} title="구독 서비스">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-600">밀리</span>
-                    {millie.available ? (
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-800 text-sm">{formatLabel(millie.format)}</span>
-                        {isSafeUrl(millie.detailUrl) && (
-                          <a
-                            href={millie.detailUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-millie/20
-                              text-xs text-slate-800 font-medium hover:bg-brand-millie/30 transition"
-                          >
-                            밀리
-                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
-                            </svg>
-                          </a>
+                {site.books.length > 0 && (
+                  <ul role="list" className="mt-2">
+                    {site.books.map((b, i) => (
+                      <li key={i} className="flex items-center gap-3 py-2 border-t border-ink-100 first:border-t-0">
+                        {b.coverUrl && (
+                          <img src={b.coverUrl} alt="" className="w-8 h-11 object-cover rounded shrink-0 ring-1 ring-black/5" />
                         )}
-                      </div>
-                    ) : (
-                      <span className="text-sm text-slate-500">구독 정보 없음</span>
-                    )}
-                  </div>
-                </SectionCard>
-              )
-            })()}
+                        <div className="min-w-0 flex-1">
+                          {isSafeUrl(b.detailUrl) ? (
+                            <a
+                              href={b.detailUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-meta font-semibold text-ink-900 hover:underline underline-offset-2 line-clamp-2"
+                            >
+                              {b.title}
+                            </a>
+                          ) : (
+                            <span className="text-meta font-semibold text-ink-900 line-clamp-2">{b.title}</span>
+                          )}
+                          <p className="text-label text-ink-600 truncate">{b.author}</p>
+                        </div>
+                        {/* 한 권이면 사이트 칩과 같은 말이라 빼고, 여러 판본일 때만 판본마다 보인다 */}
+                        {site.books.length > 1 && (
+                          <span className={`text-label font-semibold shrink-0 ${b.available ? 'text-status-ok' : 'text-ink-600'}`}>
+                            {b.available ? '대출가능' : '대출중'}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+        {elibResult.metadata.failures.length > 0 && (
+          <div className="mt-3 rounded-xl border border-dashed border-ink-300 px-4 py-3">
+            <p className="text-meta font-semibold text-ink-700 mb-1">접속하지 못한 곳</p>
+            {elibResult.metadata.failures.map((f, i) => (
+              <p key={i} className="text-label text-ink-600">
+                {f.libraryName ?? `#${f.libraryId}`} — {f.reason}
+              </p>
+            ))}
+          </div>
+        )}
+      </>
+    )
+  }
 
-            {/* ==================== USED BOOK / NEARBY STORE SECTIONS ==================== */}
-            {usedSection?.reason !== 'NON_STANDARD_ISBN' && (
-              <>
-                <SectionCard title="중고도서" icon={<span aria-hidden="true" className="text-slate-400">↗</span>}>
-                  <div className="flex items-center justify-between gap-3 py-1">
-                    <p className="text-sm text-slate-600">중고 가격과 판매 정보를 확인해보세요</p>
-                    <a href={isSafeUrl(usedBookProductUrl) ? usedBookProductUrl : `https://www.aladin.co.kr/shop/UsedShop/wuseditemall.aspx?ISBN=${encodeURIComponent(searchResult.book.isbn13 ?? isbn13)}`}
-                      target="_blank" rel="noopener noreferrer"
-                      aria-label="알라딘에서 확인 (중고 목록, 새 창)"
-                      className="shrink-0 px-3 py-2 rounded-lg bg-brand-aladin/10 text-xs text-brand-aladin-dark font-medium">
-                      알라딘에서 확인
-                    </a>
-                  </div>
-                </SectionCard>
-                <SectionCard title="가까운 알라딘 매장" icon={<span aria-hidden="true" className="text-slate-400">⌖</span>}>
-                  {/* ISBN·위치가 바뀌면 다시 마운트 — 이전 목록이 새 조건에서 한 프레임이라도 보이지 않게 */}
-                  <OffStoreList
-                    key={`${searchResult.book.isbn13 ?? isbn13}:${userLatRef.current}:${userLonRef.current}`}
-                    isbn13={searchResult.book.isbn13 ?? isbn13}
-                    lat={userLatRef.current}
-                    lon={userLonRef.current}
-                    onRequestLocation={handleGetLocation}
-                    locationLoading={locLoading}
-                    locationError={locError}
-                  />
-                </SectionCard>
-              </>
-            )}
+  function subscriptionBody() {
+    if (!result) return <SectionNotice>구독 정보를 불러오지 못했어요</SectionNotice>
+    if (subSection?.status === 'SKIPPED' && subSection.reason === 'NO_METADATA') {
+      return <SectionNotice>책 정보를 확인하지 못해 구독 여부를 확인할 수 없어요</SectionNotice>
+    }
+    if (subSection?.status === 'SKIPPED' && subSection.reason === 'DAILY_LIMIT') {
+      return <SectionNotice>오늘은 조회가 많아 구독 여부를 확인할 수 없어요. 내일 다시 시도해주세요</SectionNotice>
+    }
+    if (subSection?.status === 'FAILED') {
+      return <SectionNotice>구독 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요</SectionNotice>
+    }
+    if (subSection?.status !== 'SUCCESS') return <SectionNotice>구독 여부를 확인할 수 없어요</SectionNotice>
 
-            {/* ==================== NEW BOOK SECTION ==================== */}
-            {newBookNotice ? (
-              <SectionCard
-                icon={
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
-                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-                    <line x1="3" y1="6" x2="21" y2="6" />
-                    <path d="M16 10a4 4 0 0 1-8 0" />
-                  </svg>
-                }
-                title="새책"
-              >
-                <p className="text-sm text-slate-600 text-center py-2">{newBookNotice}</p>
-              </SectionCard>
-            ) : searchResult.newBook && (
-              <SectionCard
-                icon={
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
-                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-                    <line x1="3" y1="6" x2="21" y2="6" />
-                    <path d="M16 10a4 4 0 0 1-8 0" />
-                  </svg>
-                }
-                title="새책"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-600">YES24</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-slate-800 text-sm">{searchResult.newBook.price.toLocaleString()}원</span>
-                    {isSafeUrl(searchResult.newBook.productUrl) && (
-                    <a
-                      href={searchResult.newBook.productUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-brand-yes24/10
-                        text-xs text-brand-yes24-dark font-medium hover:bg-brand-yes24/20 transition"
-                    >
-                      YES24
-                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3" />
-                      </svg>
-                    </a>
-                    )}
-                  </div>
-                </div>
-                {/* YES24 운영 안내: 데이터를 노출하는 화면에 출처 표기 */}
-                <p className="mt-2 text-[11px] text-slate-500 text-right">가격 정보 제공: YES24</p>
-              </SectionCard>
+    const millie = result.subscription.millie
+    if (!millie.available) return <SectionNotice>밀리의서재에는 없어요</SectionNotice>
+    return (
+      <div className="flex flex-wrap items-center gap-3">
+        <StatusChip tone="ok">{formatLabel(millie.format)} 있음</StatusChip>
+        {isSafeUrl(millie.detailUrl) && (
+          <ExternalButton href={millie.detailUrl} label="밀리에서 보기 (새 창)" className="sm:ml-auto">
+            밀리에서 보기
+          </ExternalButton>
+        )}
+      </div>
+    )
+  }
+
+  const usedUrl = isSafeUrl(usedBookProductUrl)
+    ? usedBookProductUrl
+    : `https://www.aladin.co.kr/shop/UsedShop/wuseditemall.aspx?ISBN=${encodeURIComponent(searchResult?.book.isbn13 ?? isbn13)}`
+
+  function buyBody() {
+    const newBook = result?.newBook
+    return (
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="rounded-xl border border-ink-100 p-4 flex flex-col gap-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-meta font-semibold text-ink-700">새 책 · YES24</span>
+            {newBook && !newBookNotice && (
+              <span className="text-heading font-bold text-ink-900 tabular-nums">{newBook.price.toLocaleString()}원</span>
             )}
-          </>
+          </div>
+          {!result ? (
+            <p className="text-meta text-ink-600">가격 정보를 불러오지 못했어요</p>
+          ) : newBookNotice ? (
+            <p className="text-meta text-ink-600">{newBookNotice}</p>
+          ) : newBook ? (
+            <>
+              {isSafeUrl(newBook.productUrl) && (
+                <ExternalButton primary href={newBook.productUrl} label="YES24에서 보기 (새 창)">
+                  YES24에서 보기
+                </ExternalButton>
+              )}
+              {/* YES24 운영 안내: 데이터를 노출하는 화면에 출처 표기 */}
+              <p className="text-caption text-ink-600 text-right">가격 정보 제공: YES24</p>
+            </>
+          ) : (
+            <p className="text-meta text-ink-600">YES24에 판매 정보가 없어요</p>
+          )}
+        </div>
+        {usedSection?.reason !== 'NON_STANDARD_ISBN' && (
+          <div className="rounded-xl border border-ink-100 p-4 flex flex-col gap-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-meta font-semibold text-ink-700">중고 · 알라딘</span>
+              <span className="text-label text-ink-600">가격은 알라딘에서 확인</span>
+            </div>
+            <ExternalButton href={usedUrl} label="알라딘에서 보기 (새 창, 중고 목록)">
+              알라딘에서 보기
+            </ExternalButton>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="mx-auto max-w-content md:px-6 md:py-8 lg:grid lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-10 lg:items-start">
+      <BookPanel
+        isbn13={isbn13}
+        book={displayBook}
+        bookNotice={bookInfoNotice}
+        summary={summary}
+        location={{
+          granted: useLocation,
+          loading: locLoading,
+          error: locError,
+          needed: locationNeeded,
+          onRequest: handleGetLocation,
+        }}
+        onReset={onReset}
+        onNavigate={handleSummaryNavigate}
+      />
+
+      <div className="mt-2 md:mt-6 lg:mt-0 pb-10 flex flex-col gap-2 md:gap-4">
+        {searchError && (
+          <div role="alert" className="mx-4 md:mx-0 flex items-center justify-between gap-3 rounded-2xl bg-status-danger-soft px-4 py-3">
+            <p className="text-meta text-status-danger">{searchError}</p>
+            <button
+              type="button"
+              onClick={() => runSearch(userLatRef.current ?? undefined, userLonRef.current ?? undefined)}
+              className="inline-flex items-center gap-1.5 min-h-10 px-2 text-meta font-semibold text-primary-dark hover:underline cursor-pointer shrink-0"
+            >
+              <RefreshIcon size={14} strokeWidth={2} />
+              다시 시도
+            </button>
+          </div>
         )}
 
-        {/* ==================== E-LIBRARY SECTION (independent from search) ==================== */}
-        {elibLoading ? (
-          <ElibLoadingSkeleton />
-        ) : elibError ? (
-          <SectionCard
-            icon={
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-              </svg>
+        {/* ==================== 빌리기 ==================== */}
+        <GroupHeading title="빌리기" desc="무료로 빌릴 수 있는 곳" />
+        {searchLoading ? (
+          <SectionSkeleton id="library" rows={4} />
+        ) : (
+          <DetailSection
+            id="library"
+            icon={<LibraryIcon size={20} />}
+            title="근처 공공도서관"
+            aside={
+              showLibraryList ? (
+                <span className="inline-flex items-center gap-1 text-label text-ink-600">
+                  <ClockIcon size={14} />
+                  전날 자료 기준
+                </span>
+              ) : undefined
             }
-            title="전자도서관"
           >
-            <p className="text-sm text-red-500 text-center py-2">{elibError}</p>
-            <button
-              onClick={() => setSheetOpen(true)}
-              className="w-full mt-2 py-2 text-xs text-primary hover:underline cursor-pointer"
-            >
-              도서관 다시 설정하기
-            </button>
-          </SectionCard>
-        ) : elibResult ? (
-          <SectionCard
-            icon={
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-              </svg>
+            {libraryBody()}
+          </DetailSection>
+        )}
+
+        {elibLoading || (!displayBook && !bookInfoNotice) ? (
+          <SectionSkeleton id="elibrary" rows={2} />
+        ) : (
+          <DetailSection
+            id="elibrary"
+            icon={<TabletIcon size={20} />}
+            title="전자도서관"
+            aside={
+              displayBook && hasSavedElibs ? (
+                <button
+                  type="button"
+                  onClick={() => setSheetOpen(true)}
+                  className="inline-flex items-center gap-1 min-h-10 px-2 -mr-2 text-meta font-semibold text-ink-700 hover:text-ink-900 cursor-pointer"
+                >
+                  <SettingsIcon size={16} />
+                  내 전자도서관
+                </button>
+              ) : undefined
             }
-            title="전자도서관"
           >
-            <div className="flex items-center justify-end mb-2">
-              <button
-                onClick={() => setSheetOpen(true)}
-                className="px-2 py-1 -mr-1 text-xs text-slate-500 hover:text-primary cursor-pointer"
-              >
-                설정 변경
-              </button>
-            </div>
+            {elibBody()}
+          </DetailSection>
+        )}
 
-            <div className="space-y-2 max-h-72 overflow-y-auto scrollbar-thin pr-0.5">
-              {[...elibResult.results].sort((a, b) => a.libraryName.localeCompare(b.libraryName, 'ko')).map(result => (
-                <div key={result.libraryId} className="bg-slate-50/50 border border-slate-100 rounded-xl p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-semibold text-slate-800 text-sm">{result.libraryName}</span>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs font-medium ${elibStatusColor[result.status] ?? 'text-slate-600'}`}>
-                        {elibStatusLabel[result.status] ?? result.status}
-                      </span>
-                    </div>
-                  </div>
+        {/* ==================== 읽기 ==================== */}
+        <GroupHeading title="읽기" desc="구독으로 바로 읽기" />
+        {searchLoading ? (
+          <SectionSkeleton id="subscription" rows={1} />
+        ) : (
+          <DetailSection id="subscription" icon={<HeadphonesIcon size={20} />} title="밀리의서재">
+            {subscriptionBody()}
+          </DetailSection>
+        )}
 
-                  {result.status === 'SUCCESS' && result.books.length === 0 && (
-                    <p className="text-xs text-slate-500">소장 도서 없음</p>
-                  )}
+        {/* ==================== 사기 ==================== */}
+        <GroupHeading title="사기" desc="새 책 · 중고 · 가까운 매장" />
+        {searchLoading ? (
+          <SectionSkeleton id="buy" rows={2} />
+        ) : (
+          <DetailSection id="buy" icon={<BookIcon size={20} />} title="새 책 · 중고">
+            {buyBody()}
+          </DetailSection>
+        )}
 
-                  {result.books.map((b, i) => (
-                    <div key={i} className="flex items-center gap-3 py-2 border-t border-slate-100 first:border-0">
-                      {b.coverUrl && (
-                        <img src={b.coverUrl} alt={b.title} className="w-8 h-11 object-cover rounded-lg shadow-sm shrink-0" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        {isSafeUrl(b.detailUrl) ? (
-                          <a
-                            href={b.detailUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm font-medium text-slate-700 hover:text-primary hover:underline truncate block"
-                          >
-                            {b.title}
-                          </a>
-                        ) : (
-                          <span className="text-sm font-medium text-slate-700 truncate block">{b.title}</span>
-                        )}
-                        <p className="text-xs text-slate-500 truncate">{b.author}</p>
-                      </div>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${b.available ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-600'}`}>
-                        {b.available ? '대출가능' : '대출중'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
+        {/* 검색 중에도 둔다 — 위치를 허용하면 매장 요청이 다시 검색을 기다리지 않고 바로 나간다 */}
+        {usedSection?.reason !== 'NON_STANDARD_ISBN' && (
+          <DetailSection id="stores" icon={<StoreIcon size={20} />} title="가까운 알라딘 중고매장">
+            {/* ISBN·위치가 바뀌면 다시 마운트 — 이전 목록이 새 조건에서 한 프레임이라도 보이지 않게 */}
+            <OffStoreList
+              key={`${isbn13}:${userLatRef.current}:${userLonRef.current}`}
+              isbn13={searchResult?.book.isbn13 ?? isbn13}
+              lat={userLatRef.current}
+              lon={userLonRef.current}
+            />
+          </DetailSection>
+        )}
 
-            {elibResult.metadata.failures.length > 0 && (
-              <div className="mt-2 p-3 bg-slate-50 rounded-xl">
-                <p className="text-xs font-medium text-slate-600 mb-1">접속 실패</p>
-                {elibResult.metadata.failures.map((f, i) => (
-                  <p key={i} className="text-xs text-slate-500">{f.libraryName ?? `#${f.libraryId}`} — {f.reason}</p>
-                ))}
-              </div>
-            )}
-          </SectionCard>
-        ) : !displayBook ? (
-          // 전자도서관 검색은 제목·저자로 한다. 책 정보가 없으면 설정해도 검색할 수 없으므로 설정 버튼을 띄우지 않는다.
-          // 아직 불러오는 중이면 비워 두고, 끝났는데도 없으면 이유를 보여 준다
-          bookInfoNotice && <SectionCard
-            icon={
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-              </svg>
-            }
-            title="전자도서관"
-          >
-            <p className="text-sm text-slate-600 text-center py-2">
-              책 정보를 확인하지 못해 전자도서관을 검색할 수 없어요
-            </p>
-          </SectionCard>
-        ) : !hasSavedElibs ? (
-          // No saved libraries — empty state
-          <SectionCard
-            icon={
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round">
-                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-              </svg>
-            }
-            title="전자도서관"
-          >
-            <div className="text-center py-4">
-              <p className="text-sm text-slate-600 mb-3">
-                자주 이용하는 전자도서관을 설정하면<br />대출 가능 여부를 자동 확인해드려요
-              </p>
-              <button
-                onClick={() => setSheetOpen(true)}
-                className="px-5 py-2.5 bg-primary text-white rounded-2xl text-sm font-semibold
-                  hover:bg-primary-dark active:scale-[0.98] transition cursor-pointer
-                  shadow-sm shadow-orange-200"
-              >
-                전자도서관 설정하기
-              </button>
-            </div>
-          </SectionCard>
-        ) : null}
-
-        {/* ==================== RESET BUTTON ==================== */}
-        <button
-          onClick={onReset}
-          className="w-full py-3 border border-orange-100 rounded-2xl text-sm text-slate-600
-            hover:border-primary hover:text-primary transition cursor-pointer bg-white"
-        >
-          처음부터 다시 검색
-        </button>
+        <p className="px-4 md:px-0 pt-2 text-caption text-ink-600">
+          정보 제공: 도서관 정보나루 · YES24 · 밀리의서재 · 각 전자도서관
+        </p>
       </div>
 
       {/* ==================== BOTTOM SHEET ==================== */}
