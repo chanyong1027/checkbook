@@ -74,12 +74,4 @@ public class LibraryAvailabilitySnapshot {
         this.lastFetchedAt = lastFetchedAt;
         this.expiresAt = expiresAt;
     }
-
-    public void update(boolean hasBook, boolean loanAvailable, Instant lastFetchedAt, Instant expiresAt) {
-        this.hasBook = hasBook;
-        this.loanAvailable = loanAvailable;
-        this.sourceStatus = SnapshotSourceStatus.SUCCESS;
-        this.lastFetchedAt = lastFetchedAt;
-        this.expiresAt = expiresAt;
-    }
 }

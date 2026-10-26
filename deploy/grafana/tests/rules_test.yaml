@@ -257,6 +257,24 @@ tests:
         exp_alerts:
           - exp_labels: {tier: info, type: LOAN}
 
+  # ---------- 스냅샷 저장 ----------
+  - name: 스냅샷 저장 실패가 한 건이라도 나면 울리고, 성공은 무시하며, 10분 뒤 풀린다
+    interval: 1m
+    input_series:
+      # 6분에 실패 1건(기동 때 0으로 만든 덕에 첫 실패도 셀 수 있음)
+      - series: 'library_snapshot_persist_total{job="checkbook-app", slot="blue", result="failure"}'
+        values: '0x5 1x25'
+      - series: 'library_snapshot_persist_total{job="checkbook-app", slot="blue", result="success"}'
+        values: '0+10x30'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: cb-snapshot-persist-failed
+        exp_alerts:
+          - exp_labels: {tier: info}
+      - eval_time: 20m
+        alertname: cb-snapshot-persist-failed
+        exp_alerts: []
+
   # ---------- 전자도서관 ----------
   - name: 업체 수집의 절반 넘게 구조 변경이면 울리고, 우리 쪽 거절은 분모에서 뺀다
     interval: 1m
@@ -312,6 +330,8 @@ tests:
       - series: 'featured_snapshot_age_seconds{job="checkbook-app", slot="blue", type="NEW"}'
         values: '0x30'
       # featured_snapshot_expiry_seconds만 없다(예: 이름을 바꾼 배포)
+      - series: 'library_snapshot_persist_total{job="checkbook-app", slot="blue", result="failure"}'
+        values: '0x30'
       - series: 'resilience4j_circuitbreaker_not_permitted_calls_total{job="checkbook-app", slot="blue", name="datanaru", kind="not_permitted"}'
         values: '0x30'
       - series: 'search_section_total{job="checkbook-app", slot="blue", section="NEW_BOOK", status="FAILED", reason="TIMEOUT"}'

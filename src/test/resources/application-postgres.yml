@@ -1,0 +1,20 @@
+# 실제 PostgreSQL 시험(PostgresIntegrationTest) 전용. application-test.yml 위에 덮어 쓴다(@ActiveProfiles({"test", "postgres"}))
+# URL·계정은 @ServiceConnection이 컨테이너 값으로 넣으므로 적지 않는다
+spring:
+  datasource:
+    # test 프로필의 H2 드라이버를 되돌린다
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      data-source-properties:
+        # 잠금 대기 상한. 시험이 실패하며 트랜잭션을 쥔 스레드를 남기면 다음 시험의 TRUNCATE가 그 뒤에서 영원히 기다려
+        # CI 제한 시간까지 간다 — 10초 뒤 오류로 끝나게. 시험 안의 의도한 기다림(최대 수 초)보다 넉넉히 길다
+        options: "-c lock_timeout=10s"
+  flyway:
+    # H2 시험은 Flyway를 끄고 Hibernate가 표를 만든다 — 여기서는 운영과 같은 마이그레이션(V1~V8)으로 만든다
+    enabled: true
+  jpa:
+    hibernate:
+      # 표는 Flyway가 만들고, Hibernate는 엔티티와 표가 맞는지만 본다(안 맞으면 기동 실패)
+      ddl-auto: validate
+
+# 공급자 주소(닫힌 곳)는 test 프로필이 정한다 — Flyway 시드 행 때문에 앱 시작 워밍업이 실제로 공급자를 부르므로 꼭 필요하다

@@ -286,6 +286,19 @@ def build_rules():
             summary="featured {{ $labels.type }} 갱신이 실패했습니다 — 다음 cron까지 지난 목록이 나갑니다",
             runbook=["로그: " + APP_LOGS.replace("-1 hour", "-2 hour") + " | grep -A10 'featured'"]),
         Rule(
+            uid="cb-snapshot-persist-failed", tier=INFO, title="도서관 스냅샷 저장 실패",
+            # 저장이 실패해도 사용자는 정보나루에서 받은 결과를 본다(빠지는 건 다음 조회의 캐시뿐)라 낮 등급.
+            # 같은 책 동시 첫 조회는 ON CONFLICT로 없앴으니 평소엔 0이어야 한다 — 한 건이라도 나면 DB 쪽 문제다
+            expr=increase("library_snapshot_persist_total", f'{APP}, result="failure"', "10m") + " > 0",
+            summary="도서관 스냅샷 저장이 10분 동안 " + COUNT + "번 실패했습니다 — 결과는 나갔지만 캐시가 쌓이지 않아 정보나루를 더 부릅니다",
+            runbook=[
+                "로그: " + APP_LOGS + " | grep -A20 '스냅샷 저장 실패'",
+                "DB 연결·커넥션 풀 대기: Explore `max (hikaricp_connections_pending)`",
+                # 저장 실패는 서킷을 열지 않는다(서킷은 정보나루 건강만 잰다) — 막아 주는 건 하루 예산 차단선뿐
+                "계속되면 캐시가 안 쌓여 같은 책도 매번 정보나루를 부른다 → 예산: Explore "
+                "`max by (provider) (external_budget_used{provider=\"datanaru\"})`",
+            ]),
+        Rule(
             uid="cb-featured-expired", tier=INFO, title="featured 만료 1시간 넘음",
             # 갱신이 안 돌았거나(배포·다운으로 04:00을 놓침) 계속 실패하면 만료 시각이 지나간다
             expr=f"time() - max by (type) (featured_snapshot_expiry_seconds{{{APP}}}) > 3600",
