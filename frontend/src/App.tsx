@@ -110,7 +110,11 @@ export default function App() {
   }
 
   function handleReset() {
-    sessionStorage.removeItem(SEARCH_CACHE_KEY)
+    try {
+      sessionStorage.removeItem(SEARCH_CACHE_KEY)
+    } catch {
+      // 저장소를 막은 브라우저 — 지울 캐시도 없다
+    }
     setResetKey(k => k + 1)
     window.history.pushState({ seeded: true }, '', '/')
     setDirection('back')

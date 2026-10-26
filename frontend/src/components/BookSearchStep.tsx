@@ -31,9 +31,14 @@ function getHistory(): string[] {
   }
 }
 
+// 저장소를 막은 브라우저에서는 최근 검색을 남기지 못할 뿐, 검색은 그대로 된다
 function saveHistory(query: string) {
-  const prev = getHistory().filter(q => q !== query)
-  localStorage.setItem(HISTORY_KEY, JSON.stringify([query, ...prev].slice(0, MAX_HISTORY)))
+  try {
+    const prev = getHistory().filter(q => q !== query)
+    localStorage.setItem(HISTORY_KEY, JSON.stringify([query, ...prev].slice(0, MAX_HISTORY)))
+  } catch {
+    /* 최근 검색 없이 진행 */
+  }
 }
 
 // 출판 연도만(판본 구분용). 형식이 낯설면 표시하지 않는다
@@ -91,27 +96,45 @@ interface SearchCache {
   isEnd: boolean
 }
 
-// 상세에서 뒤로 왔을 때의 검색 결과. 첫 렌더 전에 읽어야 큰 소개가 한 번 그려졌다가 접히는 깜빡임이 없다
-function readSearchCache(): SearchCache | null {
+const CANDIDATE_STRING_FIELDS = ['title', 'author', 'publisher', 'isbn13', 'coverUrl', 'publishedAt'] as const
+
+// 화면이 쓰는 필드가 모두 문자열인 항목만(손상되거나 예전 형식의 캐시가 화면을 깨뜨리지 않게)
+function isCachedCandidate(v: unknown): v is BookCandidate {
+  if (!v || typeof v !== 'object') return false
+  const b = v as Record<string, unknown>
+  return CANDIDATE_STRING_FIELDS.every(key => typeof b[key] === 'string')
+}
+
+// 저장소를 막은 브라우저(사파리 사생활 보호 등)는 접근 자체가 예외를 던진다 — 지우기 실패도 삼킨다
+function dropSearchCache() {
   try {
-    const raw = sessionStorage.getItem(SEARCH_CACHE_KEY)
-    if (!raw) return null
+    sessionStorage.removeItem(SEARCH_CACHE_KEY)
+  } catch {
+    /* 캐시 없이 진행 */
+  }
+}
+
+// 상세에서 뒤로 왔을 때의 검색 결과. 첫 렌더 전에 읽어야 큰 소개가 한 번 그려졌다가 접히는 깜빡임이 없다.
+// 렌더 중에 불리므로 어떤 경우에도 예외를 밖으로 내보내지 않는다(내보내면 검색 화면 전체가 깨진다)
+function readSearchCache(): SearchCache | null {
+  let raw: string | null
+  try {
+    raw = sessionStorage.getItem(SEARCH_CACHE_KEY)
+  } catch {
+    return null
+  }
+  if (!raw) return null
+  try {
     const cache = JSON.parse(raw)
     if (!cache || typeof cache.query !== 'string' || !Array.isArray(cache.results)) {
-      sessionStorage.removeItem(SEARCH_CACHE_KEY)
+      dropSearchCache()
       return null
     }
-    const safeResults = (cache.results as unknown[])
-      .filter((v): v is BookCandidate => {
-        if (!v || typeof v !== 'object') return false
-        const b = v as Record<string, unknown>
-        return typeof b.title === 'string' && typeof b.isbn13 === 'string'
-      })
-      .slice(0, SEARCH_CACHE_MAX_ITEMS)
+    const safeResults = (cache.results as unknown[]).filter(isCachedCandidate).slice(0, SEARCH_CACHE_MAX_ITEMS)
     const safePage = Number.isInteger(cache.page) && cache.page >= 1 ? cache.page : 1
     return { query: cache.query, results: safeResults, page: safePage, isEnd: cache.isEnd === true }
   } catch {
-    sessionStorage.removeItem(SEARCH_CACHE_KEY)
+    dropSearchCache()
     return null
   }
 }
@@ -155,7 +178,7 @@ export function BookSearchStep({ onSelect }: Props) {
 
   async function doSearch(q: string) {
     if (!q.trim()) return
-    sessionStorage.removeItem(SEARCH_CACHE_KEY)
+    dropSearchCache()
     currentQueryRef.current = q.trim()
     setLoading(true)
     setError(null)
@@ -225,7 +248,11 @@ export function BookSearchStep({ onSelect }: Props) {
   }
 
   function clearHistory() {
-    localStorage.removeItem(HISTORY_KEY)
+    try {
+      localStorage.removeItem(HISTORY_KEY)
+    } catch {
+      /* 지우지 못해도 화면에서는 비운다 */
+    }
     setHistory([])
   }
 
