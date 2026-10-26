@@ -85,6 +85,8 @@ tasks.register('postgresTest', Test) {
 	classpath = sourceSets.test.runtimeClasspath
 	useJUnitPlatform {
 		includeTags 'postgres'
+		// PostgreSQL 위에서 도는 출력 전용 벤치마크(동시 첫 조회 전후 수치)는 PR마다 돌리지 않는다 — benchmarkTest로
+		excludeTags 'benchmark'
 	}
 	shouldRunAfter 'test'
 	testLogging {
