@@ -1,4 +1,6 @@
 import { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { useBodyScrollLock } from './useBodyScrollLock'
 
 interface ConfirmDialogProps {
   open: boolean
@@ -23,17 +25,14 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const cancelBtnRef = useRef<HTMLButtonElement>(null)
 
-  // Body scroll lock + 초기 포커스(취소 — 안전한 기본값)
+  useBodyScrollLock(open)
+
+  // 초기 포커스(취소 — 안전한 기본값)
   useEffect(() => {
     if (!open) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
     // 다음 tick 에 포커스 (sheet 위에 떠 있는 다이얼로그라서)
     const t = setTimeout(() => cancelBtnRef.current?.focus(), 0)
-    return () => {
-      document.body.style.overflow = prev
-      clearTimeout(t)
-    }
+    return () => clearTimeout(t)
   }, [open])
 
   // Escape 로 닫기 (계속 편집 == 취소 동작)
@@ -45,13 +44,15 @@ export function ConfirmDialog({
         onCancel()
       }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    // 캡처 단계로 받아 아래 깔린 시트보다 먼저 처리한다(시트는 preventDefault된 Escape를 무시)
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [open, onCancel])
 
   if (!open) return null
 
-  return (
+  // body에 바로 그린다 — 조상에 transform이 있으면 fixed가 화면이 아니라 그 조상 기준으로 놓인다
+  return createPortal(
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center px-6"
       role="dialog"
@@ -95,14 +96,15 @@ export function ConfirmDialog({
             className={
               'flex-1 py-2.5 rounded-2xl text-sm font-semibold text-white active:scale-[0.98] transition cursor-pointer shadow-sm ' +
               (destructive
-                ? 'bg-red-500 hover:bg-red-600 shadow-red-200'
-                : 'bg-primary hover:bg-primary-dark shadow-orange-200')
+                ? 'bg-status-danger hover:bg-[#912018] shadow-none'
+                : 'bg-primary hover:bg-primary-dark shadow-none')
             }
           >
             {confirmLabel}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }

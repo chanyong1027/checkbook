@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { BookCandidate } from './types'
 import { BookSearchStep } from './components/BookSearchStep'
 import { BookDetailPage } from './components/BookDetailPage'
@@ -53,6 +53,8 @@ export default function App() {
     initialRoute.step === 'detail' ? loadBookFromState(initialRoute.isbn) : null,
   )
   const [resetKey, setResetKey] = useState(0)
+  // 마지막으로 그린 경로. 같은 문서 안의 해시 이동(#library 등)도 popstate를 내므로 경로가 같으면 무시한다
+  const pathRef = useRef(window.location.pathname)
 
   // Seed back stack on cold detail entry so the browser back button returns to search
   useEffect(() => {
@@ -69,6 +71,8 @@ export default function App() {
   // popstate: URL 변경 시 React state 재동기화
   useEffect(() => {
     function onPop() {
+      if (window.location.pathname === pathRef.current) return
+      pathRef.current = window.location.pathname
       const next = parseRoute(window.location.pathname)
       const stateBook = (window.history.state as { book?: unknown } | null)?.book
       const restored =
@@ -104,6 +108,7 @@ export default function App() {
       '',
       `/book/${encodeURIComponent(book.isbn13)}`,
     )
+    pathRef.current = window.location.pathname
     setDirection('forward')
     setSelectedBook(book)
     setRoute({ step: 'detail', isbn: book.isbn13 })
@@ -117,6 +122,7 @@ export default function App() {
     }
     setResetKey(k => k + 1)
     window.history.pushState({ seeded: true }, '', '/')
+    pathRef.current = '/'
     setDirection('back')
     setSelectedBook(null)
     setRoute({ step: 'search', isbn: null })
@@ -152,7 +158,9 @@ export default function App() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-x-hidden">
+      {/* overflow-x-hidden은 스크롤 컨테이너를 만들어 상세 책 패널의 sticky가 안 먹는다 — clip은 넘침만 자른다.
+          clip을 모르는 브라우저(Safari 16 미만)는 hidden으로(그때는 패널이 고정되지 않을 뿐) */}
+      <main className="flex-1 overflow-x-hidden supports-[overflow:clip]:overflow-x-clip">
         <div
           key={route.step}
           className={direction === 'forward' ? 'slide-in-right' : 'slide-in-left'}
@@ -164,18 +172,14 @@ export default function App() {
             />
           )}
 
-          {/* 상세 화면은 재디자인 2단계(PR ②)에서 넓힌다 — 그때까지 지금 폭 그대로 */}
+          {/* 폭·여백은 상세 화면이 정한다(모바일은 섹션을 화면 끝까지, PC는 책 패널 + 본문 2단) */}
           {route.step === 'detail' && (
-            <div className="px-4 py-5">
-              <div className="mx-auto w-full max-w-sm">
-                <BookDetailPage
-                  key={route.isbn}
-                  isbn13={route.isbn}
-                  initialBook={selectedBook}
-                  onReset={handleReset}
-                />
-              </div>
-            </div>
+            <BookDetailPage
+              key={route.isbn}
+              isbn13={route.isbn}
+              initialBook={selectedBook}
+              onReset={handleReset}
+            />
           )}
         </div>
       </main>
