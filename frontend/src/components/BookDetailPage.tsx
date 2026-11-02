@@ -617,10 +617,20 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   }
 
   const summary: SummaryItem[] = [
-    { href: '#library', label: '근처 도서관', ...librarySummary() },
-    { href: '#elibrary', label: '전자도서관', ...elibSummary() },
-    { href: '#subscription', label: '밀리의서재', ...subscriptionSummary() },
-    { href: '#buy', label: '새 책', ...newBookSummary() },
+    { href: '#library', label: '근처 도서관', ...librarySummary(),
+      action: !useLocation && locationNeeded ? '주변 도서관 찾기' : '도서관 목록 보기',
+      note: !useLocation && locationNeeded ? '위치 허용 후 가까운 순으로' : '대출 상태는 전날 자료 기준' },
+    { href: '#elibrary', label: '전자도서관', ...elibSummary(),
+      action: hasSavedElibs ? '대출 목록 보기' : '전자도서관 고르기',
+      note: hasSavedElibs ? `내가 고른 ${savedElibIds.length}곳에서 확인` : '이용 중인 도서관을 선택하세요' },
+    { href: '#subscription', label: '밀리의서재', ...subscriptionSummary(),
+      action: !searchLoading && !searchError && subSection?.status === 'SUCCESS' && searchResult?.subscription.millie.available ? '밀리에서 읽기' : '구독 정보 보기',
+      note: '밀리의서재 구독 회원 이용',
+      externalUrl: !searchLoading && !searchError && subSection?.status === 'SUCCESS' && searchResult?.subscription.millie.available && isSafeUrl(searchResult.subscription.millie.detailUrl) ? searchResult.subscription.millie.detailUrl! : undefined },
+    { href: '#buy', label: '새 책 · 중고', ...newBookSummary(),
+      action: !searchLoading && !searchError && !newBookNotice && searchResult?.newBook && isSafeUrl(searchResult.newBook.productUrl) ? 'YES24에서 보기' : '구매 정보 보기',
+      note: '새 책 가격 · 중고는 별도 확인',
+      externalUrl: !searchLoading && !searchError && !newBookNotice && searchResult?.newBook && isSafeUrl(searchResult.newBook.productUrl) ? searchResult.newBook.productUrl : undefined },
   ]
 
   function handleSummaryNavigate(href: string) {
@@ -738,7 +748,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
             </>
           )}
         </p>
-        <ul role="list" className="grid gap-3 md:grid-cols-2">
+        <ul role="list" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
           {sites.map(site => {
             const status = elibSiteStatus(site)
             return (
@@ -831,7 +841,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   function buyBody() {
     const newBook = result?.newBook
     return (
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
         <div className="rounded-xl border border-ink-100 p-4 flex flex-col gap-3">
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-meta font-semibold text-ink-700">새 책 · YES24</span>
@@ -873,7 +883,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   }
 
   return (
-    <div className="mx-auto max-w-content md:px-6 md:py-8 lg:grid lg:grid-cols-[320px_minmax(0,1fr)] lg:gap-10 lg:items-start">
+    <div className="mx-auto max-w-content px-4 py-6 md:px-6 md:py-8">
       <BookPanel
         isbn13={isbn13}
         book={displayBook}
@@ -890,9 +900,9 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
         onNavigate={handleSummaryNavigate}
       />
 
-      <div className="mt-2 md:mt-6 lg:mt-0 pb-10 flex flex-col gap-2 md:gap-4">
+      <div className="mt-7 md:mt-9 pb-10">
         {searchError && (
-          <div role="alert" className="mx-4 md:mx-0 flex items-center justify-between gap-3 rounded-2xl bg-status-danger-soft px-4 py-3">
+          <div role="alert" className="mb-4 flex items-center justify-between gap-3 rounded-2xl bg-status-danger-soft px-4 py-3">
             <p className="text-meta text-status-danger">{searchError}</p>
             <button
               type="button"
@@ -905,6 +915,8 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
           </div>
         )}
 
+        <div className="grid gap-6 lg:grid-cols-2 lg:gap-6 lg:items-start">
+        <div className="space-y-4">
         {/* ==================== 빌리기 ==================== */}
         <GroupHeading title="빌리기" desc="무료로 빌릴 수 있는 곳" />
         {searchLoading ? (
@@ -951,6 +963,8 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
           </DetailSection>
         )}
 
+        </div>
+        <div className="space-y-4">
         {/* ==================== 읽기 ==================== */}
         <GroupHeading title="읽기" desc="구독으로 바로 읽기" />
         {searchLoading ? (
@@ -984,7 +998,9 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
           </DetailSection>
         )}
 
-        <p className="px-4 md:px-0 pt-2 text-caption text-ink-600">
+        </div>
+        </div>
+        <p className="pt-6 text-caption text-ink-600">
           정보 제공: 도서관 정보나루 · YES24 · 밀리의서재 · 각 전자도서관
         </p>
       </div>

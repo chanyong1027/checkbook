@@ -1,5 +1,5 @@
 // 상세 화면 조각: 섹션 틀, 묶음 제목, 상태 칩, 바깥 링크 버튼(재디자인 결정 카드 2026-10-26).
-// 모바일은 섹션을 화면 끝까지 펴고(사이 8px 회색 띠), md 이상은 둥근 흰 카드로 띄운다
+// 모든 화면에서 같은 섹션 틀을 쓰고, 작은 화면에서는 내부 여백을 줄인다.
 import type { ReactNode } from 'react'
 import { AlertIcon, CheckIcon, CloseIcon, ExternalIcon, MinusIcon } from '../shared/icons'
 
@@ -20,7 +20,7 @@ export function DetailSection({
     <section
       id={id}
       aria-labelledby={id ? `${id}-title` : undefined}
-      className="scroll-mt-20 bg-white px-4 py-5 md:p-6 md:rounded-2xl md:border md:border-ink-100"
+      className="scroll-mt-20 bg-white p-4 md:p-5 rounded-xl border border-ink-100"
     >
       <div className="flex items-center gap-2 mb-4">
         <span className="text-ink-600 shrink-0">{icon}</span>
@@ -38,7 +38,7 @@ export function DetailSection({
 // 빌리기·읽기·사기 묶음 제목. 모바일은 섹션이 화면 끝까지라 제목에만 좌우 여백
 export function GroupHeading({ title, desc }: { title: string; desc: string }) {
   return (
-    <div className="flex items-baseline gap-2 px-4 md:px-0 pt-5 pb-1 md:pt-4 md:pb-0">
+    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 pt-1">
       <h2 className="text-title font-bold text-ink-900">{title}</h2>
       <span className="text-meta text-ink-600">{desc}</span>
     </div>
@@ -110,7 +110,7 @@ export function ExternalButton({
 // id를 칸과 같게 주면 불러오는 중에도 한눈 요약에서 그 자리로 옮겨 갈 수 있다
 export function SectionSkeleton({ id, rows = 3 }: { id?: string; rows?: number }) {
   return (
-    <div id={id} className="scroll-mt-20 bg-white px-4 py-5 md:p-6 md:rounded-2xl md:border md:border-ink-100 animate-pulse" aria-hidden="true">
+    <div id={id} className="scroll-mt-20 bg-white p-4 md:p-5 rounded-xl border border-ink-100 animate-pulse" aria-hidden="true">
       <div className="h-5 w-32 bg-ink-100 rounded mb-5" />
       <div className="space-y-4">
         {Array.from({ length: rows }, (_, i) => (
