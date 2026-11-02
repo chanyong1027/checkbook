@@ -125,6 +125,13 @@ def _elibrary_counts(outcome_selector):
     return counts
 
 
+def _library_item_counts(state_selector):
+    def counts(window, sel):
+        selector = ", ".join(s for s in (APP, state_selector, sel) if s)
+        return increase("library_batch_items_total", selector, window)
+    return counts
+
+
 FS = f'{NODE}, fstype!="", mountpoint!=""'
 
 
@@ -316,6 +323,44 @@ def build_rules():
             for_="30m",
             summary="featured {{ $labels.type }}을 한 번도 받지 못했습니다(빈 섹션)",
             runbook=["시드 행만 있고 첫 갱신이 안 됨 — 로그에서 featured 갱신 기록 확인: " + APP_LOGS.replace("-1 hour", "-1 day")]),
+        # ---------- 공공도서관 배치(D7-1, 결정 notes/decisions/2026-11-03-D7-1-알림규칙-결정.md) ----------
+        # 새 화면은 통합 검색에 좌표를 보내지 않아 PUBLIC_LIBRARY 섹션이 늘 SKIPPED다 — 위 섹션 소진율이 도서관 실패를
+        # 더는 보지 못해 배치 응답(library.batch.items)으로 대신 본다. 서킷·예산·느림은 기존 규칙이 이미 잡는다.
+        # 문턱은 모두 판단값(공개 전이라 기준선 없음) — 공개 뒤 실제 값을 보고 고친다
+        Rule(
+            uid="cb-library-unknown-ratio", tier=INFO, title="공공도서관 확인 못 함 비율",
+            # 20%: 평소 ≈0%, 5곳 중 1곳꼴로 '확인 못 함'이면 사용자가 체감한다. 1시간 20곳 이상: 몇 건뿐일 때의 오탐 방지.
+            # 짧은 창 5분: 지금도 계속되는지(SRE Workbook, 다른 비율 규칙과 같은 모양)
+            expr=ratio_rule_expr(_library_item_counts('state="UNKNOWN"'), _library_item_counts(""),
+                                 "", {"": 20}, 0.2, "1h", "5m"),
+            summary="공공도서관 배치에서 확인 못 한 기관 비율이 높습니다(" + PCT + ") — 지도·목록에 '확인 못 함'이 많이 보입니다",
+            runbook=[
+                "원인별: Explore `sum by (cause) (increase(library_snapshot_refresh_failure_total[1h]))` "
+                "— CIRCUIT_OPEN·DAILY_LIMIT이면 '서킷 열림'·'예산' 알림과 같은 사건",
+                "중단 사유별: Explore `sum by (stop) (increase(library_batch_seconds_count[1h]))` — POOL_BUSY·BATCH_DEADLINE이면 우리 쪽 혼잡",
+                "로그: " + APP_LOGS + " | grep -E '정보나루 조회 실패|공공도서관 배치'",
+            ]),
+        Rule(
+            uid="cb-datanaru-invalid-response", tier=INFO, title="정보나루 응답 형식 오류",
+            # 5건/1시간: 한 도서관의 이상한 응답 1~2건은 넘기고, 형식이 통째로 바뀌면 금방 수십 건이 된다.
+            # 이 실패는 서킷도 열지 않고(응답은 옴) 캐시도 안 해(틀린 값을 저장하지 않음) 다른 알림에 안 잡힌다
+            expr=increase("library_snapshot_refresh_failure_total", f'{APP}, cause="INVALID_RESPONSE"', "1h") + " >= 5",
+            summary="정보나루 소장 응답이 1시간에 " + COUNT + "번 형식이 틀렸습니다(값 비었거나 Y/N 아님) — 그 기관들은 '확인 못 함'으로 보이고 매번 다시 부릅니다",
+            runbook=[
+                "로그: " + APP_LOGS + " | grep '형식 오류' | head — 같은 libCode 반복인지(한 기관) 여러 기관인지(형식 변경)",
+                "여러 기관이면 정보나루 bookExist 응답 필드 변경 의심 — DatanaruClient.bookExist 파싱 확인",
+                "반복 호출로 예산이 줄 수 있다: Explore `max by (provider) (external_budget_used{provider=\"datanaru\"})`",
+            ]),
+        Rule(
+            uid="cb-library-pool-busy", tier=INFO, title="공공도서관 배치 서버 혼잡",
+            # 1건/10분: 공공도서관 풀(40·큐 200)이 거절하는 건 평소 0이어야 한다. 부하 측정 중에는 무음 처리
+            expr=increase("library_batch_seconds_count", f'{APP}, stop="POOL_BUSY"', "10m") + " > 0",
+            summary="공공도서관 배치가 10분 동안 " + COUNT + "번 풀 거절로 멈췄습니다 — 서버가 바빠 '확인 못 함'이 납니다",
+            runbook=[
+                "동시 요청량: Explore `sum (rate(library_batch_seconds_count[5m]))`, 서버 요청: `sum by (uri) (rate(http_server_requests_seconds_count[5m]))`",
+                "풀 상태: Explore `executor_active_threads{name=\"publicLibraryExecutor\"}`·`executor_queued_tasks` (이름은 지표에서 확인)",
+                "부하 측정 중이면 정상 — 측정 단계에서 풀·큐 크기를 다시 정한다(application.yaml public-library.executor-*)",
+            ]),
         Rule(
             uid="cb-elibrary-vendor-changed", tier=INFO, title="전자도서관 업체 구조 변경 의심",
             # 판단값(기준선 없음): 업체 템플릿이 바뀌면 그 업체 사이트가 한꺼번에 깨져 거의 100%가 된다
