@@ -62,3 +62,9 @@ scripts/loadtest/results/
 ### python ###
 __pycache__/
 *.pyc
+
+### design comparison output (공급자 데이터가 든 화면 캡처) ###
+/output
+
+### TypeScript incremental build ###
+*.tsbuildinfo
