@@ -217,7 +217,8 @@ class PublicLibraryBatchServiceTest {
 
     @Test
     void 마감까지_안_끝난_기관은_TIMEOUT이고_배치는_BATCH_DEADLINE으로_멈춘다() throws Exception {
-        PublicLibraryBatchService fast = newService(executor, 150L);
+        // L002는 latch로 붙잡혀 마감 길이와 무관하게 미완료다. 500ms는 막 뜬 JVM에서 L001이 끝날 여유
+        PublicLibraryBatchService fast = newService(executor, 500L);
         CountDownLatch release = new CountDownLatch(1);
         when(repository.findWithinRadius(LAT, LON, 10.0)).thenReturn(libs(7));
         when(snapshotService.getAvailability(eq(ISBN), anyString())).thenAnswer(inv -> {
@@ -297,8 +298,11 @@ class PublicLibraryBatchServiceTest {
             return new LibraryAvailabilityResult(inv.getArgument(1), true, true, SnapshotSourceStatus.SUCCESS);
         });
 
+        // 스레드를 미리 띄워 둔다 — 느린 환경에서 첫 작업조차 마감 전에 시작 못 하면 calls=0이 돼 시험이 흔들린다
+        single.submit(() -> { }).get(5, TimeUnit.SECONDS);
+
         try {
-            PublicLibraryBatchResponse response = newService(single, 100L).nearby(ISBN, LAT, LON, 0);
+            PublicLibraryBatchResponse response = newService(single, 300L).nearby(ISBN, LAT, LON, 0);
             release.countDown();
             single.shutdown();
             assertThat(single.awaitTermination(5, TimeUnit.SECONDS)).isTrue();

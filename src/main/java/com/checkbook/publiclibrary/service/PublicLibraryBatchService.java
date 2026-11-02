@@ -142,6 +142,7 @@ public class PublicLibraryBatchService {
 
         // 아직 큐에서 시작하지 않은 작업은 취소해 정보나루를 부르지 않게 한다(시작 전 결과가 정해지면
         // supplyAsync는 supplier를 실행하지 않는다). 이미 시작한 호출은 멈추지 않는다 — cancel은 인터럽트하지 않음
+        // 취소된 작업도 워커가 꺼낼 때까지 큐 자리는 차지한다(꺼내면 바로 끝난다). 큐에서 직접 빼려면 감싼 Runnable을 알아야 해 두지 않았다
         futures.forEach(future -> future.cancel(false));
 
         List<PublicLibraryBatchItem> items = new ArrayList<>(targets.size());
