@@ -9,6 +9,9 @@ import { summarizeLibraries } from '../detail/summary'
 import { GlobeIcon, MapPinIcon, NavigateIcon, RefreshIcon, SpinnerIcon } from '../shared/icons'
 import { stopMessage } from './nearbyExplorer.ts'
 import { useNearbyExplorer, useSavedLibraries, type LibraryOrigin } from './useLibraryLookups'
+import { LibraryMap } from './LibraryMap'
+import { kakaoMapKey } from './kakaoMaps.ts'
+import { toMapPoints } from './mapPoints.ts'
 
 type Mode = 'saved' | 'nearby'
 type OriginChoice = 'gps' | 'reference'
@@ -65,16 +68,41 @@ function LibraryLinks({ item }: { item: PublicLibraryBatchItem }) {
   )
 }
 
-function LibraryRows({ items, distanceFrom }: { items: PublicLibraryBatchItem[]; distanceFrom: string | null }) {
+interface RowSelection {
+  selectedCode: string | null
+  /** 지도가 열려 있을 때만 준다 — 행에 '지도에서 보기'가 생긴다 */
+  onShowOnMap?: (code: string) => void
+}
+
+function LibraryRows({
+  items,
+  distanceFrom,
+  selection,
+  numbered = false,
+}: {
+  items: PublicLibraryBatchItem[]
+  distanceFrom: string | null
+  selection?: RowSelection
+  /** 지도 마커와 같은 번호를 앞에 붙인다 */
+  numbered?: boolean
+}) {
   return (
     <ul role="list">
-      {items.map(item => {
+      {items.map((item, index) => {
         const s = status(item)
+        const selected = selection?.selectedCode === item.libCode
         return (
-          <li key={item.libCode} className="py-3 border-t border-ink-100 first:border-t-0">
+          <li
+            key={item.libCode}
+            id={`library-row-${item.libCode}`}
+            className={`py-3 border-t border-ink-100 first:border-t-0 transition-colors ${selected ? 'bg-accent-soft -mx-2 px-2 rounded-lg' : ''}`}
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-body font-semibold text-ink-900">{item.name}</p>
+                <p className="text-body font-semibold text-ink-900">
+                  {numbered && <span className="mr-1.5 tabular-nums text-ink-500">{index + 1}.</span>}
+                  {item.name}
+                </p>
                 <p className="text-meta text-ink-600 truncate">
                   {item.distanceKm != null && (
                     <span className="tabular-nums">
@@ -87,8 +115,18 @@ function LibraryRows({ items, distanceFrom }: { items: PublicLibraryBatchItem[];
               </div>
               <StatusChip tone={s.tone}>{s.label}</StatusChip>
             </div>
-            <div className="mt-1">
+            <div className="mt-1 flex flex-wrap items-center gap-x-4">
               <LibraryLinks item={item} />
+              {selection?.onShowOnMap && (
+                <button
+                  type="button"
+                  onClick={() => selection.onShowOnMap?.(item.libCode)}
+                  aria-pressed={selected}
+                  className="inline-flex items-center min-h-9 text-label font-semibold text-primary hover:underline underline-offset-2 cursor-pointer"
+                >
+                  지도에서 보기
+                </button>
+              )}
             </div>
           </li>
         )
@@ -129,6 +167,47 @@ function UnknownList({
         {items.length > 5 ? '가까운 5곳 다시 확인' : '다시 확인'}
       </button>
     </details>
+  )
+}
+
+const DESKTOP_QUERY = '(min-width: 1024px)'
+
+/**
+ * 지도 영역. 넓은 화면은 처음부터 펼치고, 좁은 화면은 목록을 먼저 보이고 '지도 보기'로 펼친다.
+ * 펼쳐야 SDK를 불러온다(홈·첫 검색에서 미리 받지 않음). 키가 없으면 지도 자체를 감춘다.
+ */
+function MapPanel({
+  items,
+  origin,
+  selectedCode,
+  onSelect,
+  onOpenChange,
+}: {
+  items: PublicLibraryBatchItem[]
+  origin: { lat: number; lng: number; label: string } | null
+  selectedCode: string | null
+  onSelect: (code: string) => void
+  onOpenChange: (open: boolean) => void
+}) {
+  const [open, setOpen] = useState(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(DESKTOP_QUERY).matches)
+  const points = toMapPoints(items)
+  const available = kakaoMapKey() != null && (points.length > 0 || origin != null)
+  // 지도가 실제로 보일 때만 목록에 '지도에서 보기'를 단다
+  useEffect(() => onOpenChange(open && available), [open, available, onOpenChange])
+  if (!available) return null
+  return (
+    <div className="mb-3">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        className="mb-2 min-h-10 px-3 -ml-3 text-meta font-semibold text-ink-700 hover:text-ink-900 cursor-pointer"
+      >
+        {open ? '지도 접기' : '지도 보기'}
+      </button>
+      {open && <LibraryMap points={points} origin={origin} selectedCode={selectedCode} onSelect={onSelect} />}
+    </div>
   )
 }
 
@@ -182,6 +261,20 @@ export function LibrarySection({
   const savedLookup = useSavedLibraries(isbn13, saved.map(l => l.libCode), mode === 'saved')
   const nearby = useNearbyExplorer(isbn13, origin, mode === 'nearby')
 
+  // 지도와 목록이 같은 기관을 가리키게 한다. 마커를 누르면 목록 행을, 행에서 누르면 마커를 강조한다
+  const [selectedCode, setSelectedCode] = useState<string | null>(null)
+  const [mapOpen, setMapOpen] = useState(false)
+  useEffect(() => setSelectedCode(null), [mode, isbn13])
+  function selectFromMap(code: string) {
+    setSelectedCode(code)
+    document.getElementById(`library-row-${code}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }
+  const selection: RowSelection = { selectedCode, onShowOnMap: mapOpen ? setSelectedCode : undefined }
+  const mapItems = mode === 'saved' ? savedLookup.items ?? [] : nearby.state.found
+  const mapOrigin = mode === 'nearby' && originIsGps && origin && !('referenceLibCode' in origin)
+    ? { lat: origin.lat, lng: origin.lon, label: '내 위치' }
+    : null
+
   // --- 한눈 요약 ---
   let summary: LibrarySummary
   if (mode === 'saved') {
@@ -224,8 +317,12 @@ export function LibrarySection({
       {/* 정보나루는 전날 자료이고 대출중만 '불가'로 준다(예약·상호대차 중은 가능으로 옴) — D7-0 */}
       <p className="mb-3 text-label text-ink-600">예약·상호대차 중인 책도 '대출가능'으로 보일 수 있어요</p>
 
+      {(mode === 'saved' || origin) && (
+        <MapPanel items={mapItems} origin={mapOrigin} selectedCode={selectedCode} onSelect={selectFromMap} onOpenChange={setMapOpen} />
+      )}
+
       {mode === 'saved' ? (
-        <SavedBody lookup={savedLookup} onEdit={() => openSettings('public')} />
+        <SavedBody lookup={savedLookup} selection={selection} onEdit={() => openSettings('public')} />
       ) : !origin ? (
         <div>
           <p className="text-body text-ink-700">위치를 허용하거나 기준 도서관을 고르면, 이 책을 가진 가까운 도서관을 찾아 드려요</p>
@@ -263,14 +360,22 @@ export function LibrarySection({
               </button>
             )}
           </div>
-          <NearbyBody explorer={nearby} distanceFrom={distanceFrom} />
+          <NearbyBody explorer={nearby} distanceFrom={distanceFrom} selection={selection} />
         </div>
       )}
     </div>
   )
 }
 
-function SavedBody({ lookup, onEdit }: { lookup: ReturnType<typeof useSavedLibraries>; onEdit: () => void }) {
+function SavedBody({
+  lookup,
+  selection,
+  onEdit,
+}: {
+  lookup: ReturnType<typeof useSavedLibraries>
+  selection: RowSelection
+  onEdit: () => void
+}) {
   if (lookup.error) {
     return (
       <div className="flex items-center justify-between gap-3">
@@ -292,7 +397,7 @@ function SavedBody({ lookup, onEdit }: { lookup: ReturnType<typeof useSavedLibra
   const unknown = lookup.items.filter(i => i.state === 'UNKNOWN').length
   return (
     <div>
-      <LibraryRows items={lookup.items} distanceFrom={null} />
+      <LibraryRows items={lookup.items} distanceFrom={null} selection={selection} numbered />
       <div className="mt-2 flex flex-wrap gap-x-4">
         {unknown > 0 && (
           <button type="button" onClick={lookup.reload} className="inline-flex items-center gap-1.5 min-h-10 text-meta font-semibold text-primary cursor-pointer">
@@ -311,9 +416,11 @@ function SavedBody({ lookup, onEdit }: { lookup: ReturnType<typeof useSavedLibra
 function NearbyBody({
   explorer,
   distanceFrom,
+  selection,
 }: {
   explorer: ReturnType<typeof useNearbyExplorer>
   distanceFrom: string | null
+  selection: RowSelection
 }) {
   const { state, running, stop, error, fatal, retrying } = explorer
   const checked = state.seen.length
@@ -345,7 +452,7 @@ function NearbyBody({
         {message && <p className={`mt-1 ${error ? 'text-status-danger' : 'text-ink-700'}`}>{message}</p>}
       </div>
 
-      {state.found.length > 0 && <LibraryRows items={state.found} distanceFrom={distanceFrom} />}
+      {state.found.length > 0 && <LibraryRows items={state.found} distanceFrom={distanceFrom} selection={selection} numbered />}
 
       {!running && checked > 0 && state.found.length === 0 && (
         <p className="text-body text-ink-600 py-1">

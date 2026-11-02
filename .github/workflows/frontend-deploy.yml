@@ -63,8 +63,13 @@ jobs:
         run: npm test
 
       # API는 같은 도메인의 /api라 VITE_API_BASE_URL을 두지 않는다
+      # 카카오 지도 JavaScript 키는 번들에 그대로 들어가는 공개 키라 시크릿이 아니라 저장소 변수(vars)로 둔다 —
+      # 보호는 카카오 콘솔의 도메인 제한이 한다. 이 잡엔 environment가 없어 production 환경 변수는 읽지 못한다.
+      # 비어 있으면 화면이 지도를 감추고 목록만 보인다
       - name: 타입 검사 + 빌드
         working-directory: frontend
+        env:
+          VITE_KAKAO_MAP_JAVASCRIPT_KEY: ${{ vars.VITE_KAKAO_MAP_JAVASCRIPT_KEY }}
         run: npm run build
 
       - name: Docker Buildx 설정
