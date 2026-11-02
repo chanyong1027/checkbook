@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
@@ -121,14 +122,27 @@ public class PublicLibraryBatchService {
     }
 
     private PublicLibraryBatchResponse check(String isbn13, List<Target> targets, Integer nextOffset, long startNanos) {
+        // 마감은 서비스 진입부터 잰다 — 후보 선정·큐 대기도 사용자가 기다리는 시간이다
+        long deadlineNanos = startNanos + TimeUnit.MILLISECONDS.toNanos(fanoutTimeoutMs);
+        // 마감을 두 번 확인한다: 제출 전(후보 조회가 시간을 다 썼으면 넣지 않음)과 워커 실행 직전
+        // (늦게 시작한 워커는 cancel(false)로 못 멈추므로 스스로 포기). 둘 다 정보나루를 부르지 않고 TIMEOUT이 된다
         List<CompletableFuture<LibraryAvailabilityResult>> futures = targets.stream()
-                .map(target -> AsyncSubmit.submitSafely(
-                        () -> snapshotService.getAvailability(isbn13, target.library().getLibCode()),
-                        publicLibraryExecutor))
+                .map(target -> {
+                    if (System.nanoTime() - deadlineNanos >= 0) {
+                        CompletableFuture<LibraryAvailabilityResult> expired = new CompletableFuture<>();
+                        expired.cancel(false);
+                        return expired;
+                    }
+                    return AsyncSubmit.submitSafely(() -> {
+                        if (System.nanoTime() - deadlineNanos >= 0) {
+                            throw new CancellationException("배치 마감 뒤 시작");
+                        }
+                        return snapshotService.getAvailability(isbn13, target.library().getLibCode());
+                    }, publicLibraryExecutor);
+                })
                 .toList();
 
-        // 마감은 서비스 진입부터 잰다 — 후보 선정·큐 대기도 사용자가 기다리는 시간이다
-        long remainingNanos = TimeUnit.MILLISECONDS.toNanos(fanoutTimeoutMs) - (System.nanoTime() - startNanos);
+        long remainingNanos = deadlineNanos - System.nanoTime();
         try {
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
                     .get(Math.max(remainingNanos, 0), TimeUnit.NANOSECONDS);
@@ -153,8 +167,9 @@ public class PublicLibraryBatchService {
             CompletableFuture<LibraryAvailabilityResult> future = futures.get(i);
             LibraryState state;
             LibraryCheckFailure reason = null;
-            if (future.isCancelled()) {
-                // 마감까지 못 끝난 작업(시작 전이면 호출도 안 했고, 시작했으면 결과만 버린다)
+            if (future.isCancelled() || unwrap(future) instanceof CancellationException) {
+                // 마감까지 못 끝난 작업(시작 전이면 호출도 안 했고, 시작했으면 결과만 버린다).
+                // 워커가 마감 뒤라 스스로 포기한 경우는 CompletionException에 싸여 와서 원인으로 본다
                 anyUnfinished = true;
                 state = LibraryState.UNKNOWN;
                 reason = LibraryCheckFailure.TIMEOUT;

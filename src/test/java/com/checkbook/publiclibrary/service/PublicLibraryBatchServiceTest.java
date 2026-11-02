@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.SynchronousQueue;
@@ -318,23 +319,66 @@ class PublicLibraryBatchServiceTest {
     }
 
     @Test
-    void 남은_시간이_없으면_기다리지_않고_끝나지_않은_기관은_TIMEOUT이다() throws Exception {
-        CountDownLatch release = new CountDownLatch(1);
-        when(repository.findWithinRadius(LAT, LON, 10.0)).thenReturn(libs(2));
-        when(snapshotService.getAvailability(eq(ISBN), anyString())).thenAnswer(inv -> {
-            release.await(5, TimeUnit.SECONDS);
-            return new LibraryAvailabilityResult(inv.getArgument(1), true, true, SnapshotSourceStatus.SUCCESS);
+    void 후보_조회가_마감을_다_쓰면_작업을_제출하지_않고_전부_TIMEOUT이다() {
+        // 리뷰 재현: 마감 10ms, 후보 DB 조회 50ms → 제출 전에 이미 마감이 지났다
+        when(repository.findWithinRadius(LAT, LON, 10.0)).thenAnswer(inv -> {
+            Thread.sleep(50);
+            return libs(5);
         });
 
-        try {
-            PublicLibraryBatchResponse response = newService(executor, 0L).nearby(ISBN, LAT, LON, 0);
+        PublicLibraryBatchResponse response = newService(executor, 10L).nearby(ISBN, LAT, LON, 0);
 
-            assertThat(response.items()).extracting(PublicLibraryBatchItem::reason)
-                    .containsOnly(LibraryCheckFailure.TIMEOUT);
-            assertThat(response.stopReason()).isEqualTo(BatchStopReason.BATCH_DEADLINE);
-        } finally {
-            release.countDown();
-        }
+        assertThat(response.items()).extracting(PublicLibraryBatchItem::reason)
+                .containsOnly(LibraryCheckFailure.TIMEOUT);
+        assertThat(response.stopReason()).isEqualTo(BatchStopReason.BATCH_DEADLINE);
+        assertThat(response.nextOffset()).isNull();
+        verifyNoInteractions(snapshotService);
+    }
+
+    @Test
+    void 워커가_마감_뒤에_시작하면_정보나루를_부르지_않는다() {
+        // 제출할 때 마감 전이었지만, 실행기가 늦게 돌려 워커 시작 시점엔 마감이 지난 경우.
+        // 실행기가 제출 스레드에서 100ms 뒤 바로 돌리므로 cancel(false)가 끼어들 틈이 없다 — 워커 쪽 확인만 막을 수 있다
+        Executor lateRunner = task -> {
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            task.run();
+        };
+        ExecutorService late = new java.util.concurrent.AbstractExecutorService() {
+            @Override public void execute(Runnable command) { lateRunner.execute(command); }
+            @Override public void shutdown() { }
+            @Override public List<Runnable> shutdownNow() { return List.of(); }
+            @Override public boolean isShutdown() { return false; }
+            @Override public boolean isTerminated() { return false; }
+            @Override public boolean awaitTermination(long timeout, TimeUnit unit) { return true; }
+        };
+        when(repository.findWithinRadius(LAT, LON, 10.0)).thenReturn(libs(2));
+
+        PublicLibraryBatchResponse response = newService(late, 30L).nearby(ISBN, LAT, LON, 0);
+
+        assertThat(response.items()).extracting(PublicLibraryBatchItem::reason)
+                .containsOnly(LibraryCheckFailure.TIMEOUT);
+        assertThat(response.stopReason()).isEqualTo(BatchStopReason.BATCH_DEADLINE);
+        verifyNoInteractions(snapshotService);
+    }
+
+    @Test
+    void 후보_조회가_마감을_다_쓰면_정보나루를_부르지_않고_전부_TIMEOUT이다() {
+        // 리뷰 재현: 마감 10ms, 후보 DB 조회 50ms
+        when(repository.findWithinRadius(LAT, LON, 10.0)).thenAnswer(inv -> {
+            Thread.sleep(50);
+            return libs(5);
+        });
+
+        PublicLibraryBatchResponse response = newService(executor, 10L).nearby(ISBN, LAT, LON, 0);
+
+        assertThat(response.items()).extracting(PublicLibraryBatchItem::reason)
+                .containsOnly(LibraryCheckFailure.TIMEOUT);
+        assertThat(response.stopReason()).isEqualTo(BatchStopReason.BATCH_DEADLINE);
+        verifyNoInteractions(snapshotService);
     }
 
     // --- SAVED ---
