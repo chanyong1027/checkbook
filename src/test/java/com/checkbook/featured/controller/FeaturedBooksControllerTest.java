@@ -29,7 +29,7 @@ class FeaturedBooksControllerTest {
         when(service.getSection(FeaturedSectionType.BESTSELLER)).thenReturn(
                 new FeaturedBooksResponse(
                         FeaturedSectionType.BESTSELLER,
-                        FeaturedSource.ALADIN,
+                        FeaturedSource.YES24,
                         List.of(new FeaturedBooksResponse.Item(
                                 "소년이 온다", "한강", "창비",
                                 "9788936434120", "https://cover/1.jpg", "2014-05-19")),
@@ -41,7 +41,7 @@ class FeaturedBooksControllerTest {
         mvc.perform(get("/api/featured").param("type", "bestseller"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.type").value("BESTSELLER"))
-                .andExpect(jsonPath("$.source").value("ALADIN"))
+                .andExpect(jsonPath("$.source").value("YES24"))
                 .andExpect(jsonPath("$.items[0].isbn13").value("9788936434120"))
                 .andExpect(jsonPath("$.stale").value(false));
     }

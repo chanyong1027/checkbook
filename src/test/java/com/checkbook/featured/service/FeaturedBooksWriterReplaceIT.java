@@ -45,19 +45,19 @@ class FeaturedBooksWriterReplaceIT {
         // 운영에서는 Flyway 시드가 담당하는 행 (테스트 프로파일은 flyway off)
         snapshotRepository.save(FeaturedSectionSnapshot.builder()
                 .sectionType(FeaturedSectionType.BESTSELLER)
-                .source(FeaturedSource.ALADIN)
+                .source(FeaturedSource.YES24)
                 .status(SnapshotStatus.NEVER_FETCHED)
                 .build());
     }
 
     @Test
     void replaceSection_calledTwice_replacesBooksWithoutUniqueViolation() {
-        writer.replaceSection(FeaturedSectionType.BESTSELLER, FeaturedSource.ALADIN,
+        writer.replaceSection(FeaturedSectionType.BESTSELLER, FeaturedSource.YES24,
                 books("first"), Duration.ofDays(7));
 
         // 같은 (section_type, rank) 조합으로 교체 — 운영의 매주 cron 갱신과 동일한 경로
         assertThatCode(() ->
-                writer.replaceSection(FeaturedSectionType.BESTSELLER, FeaturedSource.ALADIN,
+                writer.replaceSection(FeaturedSectionType.BESTSELLER, FeaturedSource.YES24,
                         books("second"), Duration.ofDays(7))
         ).doesNotThrowAnyException();
 
@@ -77,10 +77,10 @@ class FeaturedBooksWriterReplaceIT {
 
     @Test
     void replaceSection_newSource_replacesBooksAndPersistsSource() {
-        writer.replaceSection(FeaturedSectionType.BESTSELLER, FeaturedSource.ALADIN,
-                books("aladin"), Duration.ofDays(7));
+        writer.replaceSection(FeaturedSectionType.BESTSELLER, FeaturedSource.DATANARU,
+                books("before"), Duration.ofDays(7));
 
-        // 공급자 전환 후 첫 교체 — 시드·기존 행의 source(ALADIN)와 달라도 교체가 커밋돼야 한다
+        // 공급자 전환 후 첫 교체 — 기존 행의 source(DATANARU)와 달라도 교체가 커밋돼야 한다
         writer.replaceSection(FeaturedSectionType.BESTSELLER, FeaturedSource.YES24,
                 books("yes24"), Duration.ofDays(7));
         // 테스트 전체가 한 트랜잭션이라 1차 캐시가 같은 객체를 돌려준다 — DB에 쓴 값을 다시 읽어 확인

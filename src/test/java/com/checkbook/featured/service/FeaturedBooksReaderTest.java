@@ -31,7 +31,7 @@ class FeaturedBooksReaderTest {
     private FeaturedSectionSnapshot snapshot(SnapshotStatus status, Instant expiresAt) {
         return FeaturedSectionSnapshot.builder()
                 .sectionType(FeaturedSectionType.BESTSELLER)
-                .source(FeaturedSource.ALADIN)
+                .source(FeaturedSource.YES24)
                 .status(status)
                 .lastFetchedAt(status == SnapshotStatus.NEVER_FETCHED ? null : Instant.now())
                 .expiresAt(expiresAt)
@@ -58,7 +58,7 @@ class FeaturedBooksReaderTest {
         FeaturedBooksResponse res = reader.read(FeaturedSectionType.BESTSELLER);
 
         assertThat(res.type()).isEqualTo(FeaturedSectionType.BESTSELLER);
-        assertThat(res.source()).isEqualTo(FeaturedSource.ALADIN);
+        assertThat(res.source()).isEqualTo(FeaturedSource.YES24);
         assertThat(res.items()).hasSize(2);
         assertThat(res.items().get(0).isbn13()).isEqualTo("9780000000001");
         assertThat(res.stale()).isFalse();

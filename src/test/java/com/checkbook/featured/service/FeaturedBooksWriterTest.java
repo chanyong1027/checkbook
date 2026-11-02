@@ -43,7 +43,7 @@ class FeaturedBooksWriterTest {
     void replaceSection_deletesOldBooks_savesNew_marksSnapshotSuccess() {
         FeaturedSectionSnapshot snapshot = FeaturedSectionSnapshot.builder()
                 .sectionType(FeaturedSectionType.BESTSELLER)
-                .source(FeaturedSource.ALADIN)
+                .source(FeaturedSource.YES24)
                 .status(SnapshotStatus.NEVER_FETCHED)
                 .build();
         when(snapshotRepository.findByIdForUpdate(FeaturedSectionType.BESTSELLER))
@@ -51,7 +51,7 @@ class FeaturedBooksWriterTest {
 
         List<FeaturedBook> books = List.of(book(1), book(2));
 
-        writer.replaceSection(FeaturedSectionType.BESTSELLER, FeaturedSource.ALADIN,
+        writer.replaceSection(FeaturedSectionType.BESTSELLER, FeaturedSource.YES24,
                 books, Duration.ofDays(7));
 
         verify(bookRepository).deleteBySectionType(FeaturedSectionType.BESTSELLER);
@@ -60,7 +60,7 @@ class FeaturedBooksWriterTest {
         assertThat(captor.getValue()).hasSize(2);
 
         assertThat(snapshot.getStatus()).isEqualTo(SnapshotStatus.SUCCESS);
-        assertThat(snapshot.getSource()).isEqualTo(FeaturedSource.ALADIN);
+        assertThat(snapshot.getSource()).isEqualTo(FeaturedSource.YES24);
         assertThat(snapshot.getLastFetchedAt()).isNotNull();
         assertThat(snapshot.getExpiresAt()).isAfter(snapshot.getLastFetchedAt());
         assertThat(snapshot.getFailureReason()).isNull();
@@ -68,10 +68,10 @@ class FeaturedBooksWriterTest {
 
     @Test
     void replaceSection_sourceChanged_updatesSnapshotSource() {
-        // V5 시드는 BESTSELLER·NEW가 ALADIN — 공급자를 바꾼 뒤 첫 갱신이 실패하면 섹션이 영영 갱신되지 않는다
+        // 공급자를 바꾼 뒤 첫 갱신이 기존 source와 달라 실패하면 섹션이 영영 갱신되지 않는다(예전 ALADIN → YES24 전환)
         FeaturedSectionSnapshot snapshot = FeaturedSectionSnapshot.builder()
                 .sectionType(FeaturedSectionType.BESTSELLER)
-                .source(FeaturedSource.ALADIN)
+                .source(FeaturedSource.DATANARU)
                 .status(SnapshotStatus.SUCCESS)
                 .build();
         when(snapshotRepository.findByIdForUpdate(FeaturedSectionType.BESTSELLER))
@@ -109,7 +109,7 @@ class FeaturedBooksWriterTest {
                 .thenReturn(Optional.empty());
 
         org.assertj.core.api.Assertions.assertThatThrownBy(() ->
-                writer.replaceSection(FeaturedSectionType.BESTSELLER, FeaturedSource.ALADIN,
+                writer.replaceSection(FeaturedSectionType.BESTSELLER, FeaturedSource.YES24,
                         List.of(), Duration.ofDays(7))
         ).isInstanceOf(IllegalStateException.class);
     }
