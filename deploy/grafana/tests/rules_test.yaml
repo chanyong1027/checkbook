@@ -275,6 +275,85 @@ tests:
         alertname: cb-snapshot-persist-failed
         exp_alerts: []
 
+  # ---------- 공공도서관 배치(D7-1) ----------
+  - name: 확인 못 함이 20% 넘고 1시간 20곳 이상이면 울린다(블루·그린 칸을 더한다)
+    interval: 1m
+    input_series:
+      - series: 'library_batch_items_total{job="checkbook-app", slot="blue", state="UNKNOWN"}'
+        values: '0x10 0+1x60'
+      - series: 'library_batch_items_total{job="checkbook-app", slot="green", state="AVAILABLE"}'
+        values: '0x10 0+2x60'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: cb-library-unknown-ratio
+        exp_alerts:
+          - exp_labels: {tier: info}
+
+  - name: 확인 못 함 비율이 높아도 건수가 적으면 울리지 않는다
+    interval: 1m
+    input_series:
+      # 1시간에 확인 못 함 6곳·정상 6곳(50%)이지만 모두 12곳 < 20곳
+      - series: 'library_batch_items_total{job="checkbook-app", slot="blue", state="UNKNOWN"}'
+        values: '0x10 0+0.1x60'
+      - series: 'library_batch_items_total{job="checkbook-app", slot="blue", state="NOT_HELD"}'
+        values: '0x10 0+0.1x60'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: cb-library-unknown-ratio
+        exp_alerts: []
+
+  - name: 확인 못 함이 20% 이하이면 울리지 않는다
+    interval: 1m
+    input_series:
+      - series: 'library_batch_items_total{job="checkbook-app", slot="blue", state="UNKNOWN"}'
+        values: '0x10 0+1x60'
+      - series: 'library_batch_items_total{job="checkbook-app", slot="blue", state="ON_LOAN"}'
+        values: '0x10 0+5x60'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: cb-library-unknown-ratio
+        exp_alerts: []
+
+  - name: 정보나루 형식 오류가 1시간 5건 이상이면 울리고, 4건이면 울리지 않는다
+    interval: 1m
+    input_series:
+      - series: 'library_snapshot_refresh_failure_total{job="checkbook-app", slot="blue", cause="INVALID_RESPONSE"}'
+        values: '0x10 1 2 3 4 4x60'
+      # 다른 원인은 세지 않는다
+      - series: 'library_snapshot_refresh_failure_total{job="checkbook-app", slot="blue", cause="UPSTREAM_ERROR"}'
+        values: '0x10 0+5x60'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: cb-datanaru-invalid-response
+        exp_alerts: []
+
+  - name: 정보나루 형식 오류가 쌓이면 울린다
+    interval: 1m
+    input_series:
+      - series: 'library_snapshot_refresh_failure_total{job="checkbook-app", slot="blue", cause="INVALID_RESPONSE"}'
+        values: '0x10 0+1x60'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: cb-datanaru-invalid-response
+        exp_alerts:
+          - exp_labels: {tier: info}
+
+  - name: 풀 거절로 멈춘 배치가 있으면 울리고 10분 지나면 풀린다
+    interval: 1m
+    input_series:
+      - series: 'library_batch_seconds_count{job="checkbook-app", slot="blue", mode="NEARBY", stop="POOL_BUSY"}'
+        values: '0x10 1 2 2x30'
+      - series: 'library_batch_seconds_count{job="checkbook-app", slot="blue", mode="NEARBY", stop="NONE"}'
+        values: '0+10x40'
+    alert_rule_test:
+      - eval_time: 13m
+        alertname: cb-library-pool-busy
+        exp_alerts:
+          - exp_labels: {tier: info}
+      - eval_time: 30m
+        alertname: cb-library-pool-busy
+        exp_alerts: []
+
   # ---------- 전자도서관 ----------
   - name: 업체 수집의 절반 넘게 구조 변경이면 울리고, 우리 쪽 거절은 분모에서 뺀다
     interval: 1m
@@ -331,6 +410,12 @@ tests:
         values: '0x30'
       # featured_snapshot_expiry_seconds만 없다(예: 이름을 바꾼 배포)
       - series: 'library_snapshot_persist_total{job="checkbook-app", slot="blue", result="failure"}'
+        values: '0x30'
+      - series: 'library_batch_items_total{job="checkbook-app", slot="blue", state="UNKNOWN"}'
+        values: '0x30'
+      - series: 'library_batch_seconds_count{job="checkbook-app", slot="blue", mode="NEARBY", stop="POOL_BUSY"}'
+        values: '0x30'
+      - series: 'library_snapshot_refresh_failure_total{job="checkbook-app", slot="blue", cause="INVALID_RESPONSE"}'
         values: '0x30'
       - series: 'resilience4j_circuitbreaker_not_permitted_calls_total{job="checkbook-app", slot="blue", name="datanaru", kind="not_permitted"}'
         values: '0x30'
