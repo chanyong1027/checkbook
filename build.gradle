@@ -43,7 +43,7 @@ dependencies {
 	// TestRestTemplate도 이 모듈을 쓰지만 testImplementation으로 따로 두지 않는다 — 테스트에서만 Bean이 생기면
 	// 운영 기동 실패를 CI가 잡지 못한다
 	implementation 'org.springframework.boot:spring-boot-starter-restclient'
-	implementation 'org.jsoup:jsoup:1.17.2'
+	implementation 'org.jsoup:jsoup:1.23.2'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 	implementation 'io.micrometer:micrometer-registry-prometheus'
 	compileOnly 'org.projectlombok:lombok'
@@ -66,6 +66,8 @@ dependencies {
 
 tasks.withType(Test).configureEach {
 	jvmArgs("-javaagent:${configurations.mockitoAgent.asPath}")
+	// 운영(CheckbookApplication.main)과 같은 Jsoup 전송(HttpURLConnection)으로 시험한다 — JsoupTransport 주석
+	systemProperty 'jsoup.useHttpClient', 'false'
 }
 
 tasks.named('test') {
