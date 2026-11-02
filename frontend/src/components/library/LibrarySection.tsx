@@ -72,6 +72,7 @@ interface RowSelection {
   selectedCode: string | null
   /** 지도가 열려 있을 때만 준다 — 행에 '지도에서 보기'가 생긴다 */
   onShowOnMap?: (code: string) => void
+  mappedCodes?: string[] | null
 }
 
 function LibraryRows({
@@ -117,7 +118,7 @@ function LibraryRows({
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-4">
               <LibraryLinks item={item} />
-              {selection?.onShowOnMap && (
+              {selection?.onShowOnMap && selection.mappedCodes?.includes(item.libCode) && (
                 <button
                   type="button"
                   onClick={() => selection.onShowOnMap?.(item.libCode)}
@@ -187,14 +188,19 @@ function MapPanel({
   origin: { lat: number; lng: number; label: string } | null
   selectedCode: string | null
   onSelect: (code: string) => void
-  onOpenChange: (open: boolean) => void
+  /** 지도가 보이면 지도에 찍힌 기관 코드, 안 보이면 null */
+  onOpenChange: (mappedCodes: string[] | null) => void
 }) {
   const [open, setOpen] = useState(() =>
     typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(DESKTOP_QUERY).matches)
   const points = toMapPoints(items)
   const available = kakaoMapKey() != null && (points.length > 0 || origin != null)
   // 지도가 실제로 보일 때만 목록에 '지도에서 보기'를 단다
-  useEffect(() => onOpenChange(open && available), [open, available, onOpenChange])
+  const mappedKey = points.map(p => p.code).join(',')
+  useEffect(() => onOpenChange(open && available ? mappedKey.split(',').filter(Boolean) : null),
+    [open, available, mappedKey, onOpenChange])
+  // 패널이 사라지면(기준점이 없어지는 등) 지도도 닫힌 것으로 알린다
+  useEffect(() => () => onOpenChange(null), [onOpenChange])
   if (!available) return null
   return (
     <div className="mb-3">
@@ -263,13 +269,14 @@ export function LibrarySection({
 
   // 지도와 목록이 같은 기관을 가리키게 한다. 마커를 누르면 목록 행을, 행에서 누르면 마커를 강조한다
   const [selectedCode, setSelectedCode] = useState<string | null>(null)
-  const [mapOpen, setMapOpen] = useState(false)
+  // 지도가 보일 때 거기 찍힌 기관 코드(좌표가 이상해 지도에서 뺀 곳엔 '지도에서 보기'를 달지 않는다)
+  const [mappedCodes, setMappedCodes] = useState<string[] | null>(null)
   useEffect(() => setSelectedCode(null), [mode, isbn13])
   function selectFromMap(code: string) {
     setSelectedCode(code)
     document.getElementById(`library-row-${code}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }
-  const selection: RowSelection = { selectedCode, onShowOnMap: mapOpen ? setSelectedCode : undefined }
+  const selection: RowSelection = { selectedCode, onShowOnMap: mappedCodes ? setSelectedCode : undefined, mappedCodes }
   const mapItems = mode === 'saved' ? savedLookup.items ?? [] : nearby.state.found
   const mapOrigin = mode === 'nearby' && originIsGps && origin && !('referenceLibCode' in origin)
     ? { lat: origin.lat, lng: origin.lon, label: '내 위치' }
@@ -318,7 +325,7 @@ export function LibrarySection({
       <p className="mb-3 text-label text-ink-600">예약·상호대차 중인 책도 '대출가능'으로 보일 수 있어요</p>
 
       {(mode === 'saved' || origin) && (
-        <MapPanel items={mapItems} origin={mapOrigin} selectedCode={selectedCode} onSelect={selectFromMap} onOpenChange={setMapOpen} />
+        <MapPanel items={mapItems} origin={mapOrigin} selectedCode={selectedCode} onSelect={selectFromMap} onOpenChange={setMappedCodes} />
       )}
 
       {mode === 'saved' ? (

@@ -44,13 +44,19 @@ export function loadKakaoMaps(): Promise<KakaoMapsApi> {
   if (!key) return Promise.reject(new Error('카카오 지도 키 없음'))
 
   pending = new Promise<KakaoMapsApi>((resolve, reject) => {
+    // 시간 제한은 maps.load가 끝날 때까지 건다 — sdk.js는 받았어도 뒤이어 받는 본문이 막히면 콜백이 오지 않는다
+    const timer = setTimeout(() => reject(new Error('카카오 지도 SDK 시간 초과')), LOAD_TIMEOUT_MS)
     const ready = () => {
       const maps = window.kakao?.maps
       if (!maps) {
+        clearTimeout(timer)
         reject(new Error('카카오 지도 SDK를 찾지 못함'))
         return
       }
-      maps.load(() => resolve(maps))
+      maps.load(() => {
+        clearTimeout(timer)
+        resolve(maps)
+      })
     }
     if (window.kakao?.maps) {
       ready()
@@ -62,11 +68,7 @@ export function loadKakaoMaps(): Promise<KakaoMapsApi> {
     script.id = SCRIPT_ID
     script.async = true
     script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(key)}&autoload=false`
-    const timer = setTimeout(() => reject(new Error('카카오 지도 SDK 시간 초과')), LOAD_TIMEOUT_MS)
-    script.onload = () => {
-      clearTimeout(timer)
-      ready()
-    }
+    script.onload = ready
     script.onerror = () => {
       clearTimeout(timer)
       reject(new Error('카카오 지도 SDK를 불러오지 못함'))
