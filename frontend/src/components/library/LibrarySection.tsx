@@ -375,6 +375,7 @@ export function LibrarySection({
               기준 도서관 고르기
             </button>
           </div>
+          <p className="mt-2 text-label text-ink-600">위치는 근처 도서관·매장을 찾는 데만 쓰고 저장하지 않아요.</p>
         </div>
       ) : (
         <div>
