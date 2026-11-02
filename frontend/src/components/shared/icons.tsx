@@ -103,3 +103,71 @@ export const HistoryIcon = (p: IconProps) => (
     <path d="M3 3v5h5M12 7v5l3 2" />
   </Svg>
 )
+
+export const CheckIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="m5 12 5 5L20 7" />
+  </Svg>
+)
+
+export const MinusIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M6 12h12" />
+  </Svg>
+)
+
+export const MapPinIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z" />
+    <circle cx="12" cy="10" r="2.5" />
+  </Svg>
+)
+
+export const ClockIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </Svg>
+)
+
+// 바깥 사이트로 나가는 링크
+export const ExternalIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M7 17 17 7M8 7h9v9" />
+  </Svg>
+)
+
+export const NavigateIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M3 11 21 3l-8 18-2-8z" />
+  </Svg>
+)
+
+export const GlobeIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+  </Svg>
+)
+
+export const RefreshIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M20 11a8 8 0 1 0-2.3 5.7" />
+    <path d="M20 4v7h-7" />
+  </Svg>
+)
+
+export const AlertIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 8v5M12 16.5v.01" />
+  </Svg>
+)
+
+export const SettingsIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+    <circle cx="16" cy="7" r="2" />
+    <circle cx="10" cy="17" r="2" />
+  </Svg>
+)

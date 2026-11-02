@@ -94,6 +94,7 @@ interface SearchCache {
   results: BookCandidate[]
   page: number
   isEnd: boolean
+  totalCount: number | null
 }
 
 const CANDIDATE_STRING_FIELDS = ['title', 'author', 'publisher', 'isbn13', 'coverUrl', 'publishedAt'] as const
@@ -132,7 +133,8 @@ function readSearchCache(): SearchCache | null {
     }
     const safeResults = (cache.results as unknown[]).filter(isCachedCandidate).slice(0, SEARCH_CACHE_MAX_ITEMS)
     const safePage = Number.isInteger(cache.page) && cache.page >= 1 ? cache.page : 1
-    return { query: cache.query, results: safeResults, page: safePage, isEnd: cache.isEnd === true }
+    const totalCount = Number.isInteger(cache.totalCount) && cache.totalCount >= safeResults.length ? cache.totalCount : null
+    return { query: cache.query, results: safeResults, page: safePage, isEnd: cache.isEnd === true, totalCount }
   } catch {
     dropSearchCache()
     return null
@@ -148,11 +150,16 @@ export function BookSearchStep({ onSelect }: Props) {
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
+  const [emptyHint, setEmptyHint] = useState(false)
+  const [totalCount, setTotalCount] = useState<number | null>(cached?.totalCount ?? null)
+  const [submittedQuery, setSubmittedQuery] = useState(cached?.query ?? '')
   const [searched, setSearched] = useState(cached !== null)
   const [history, setHistory] = useState<string[]>(getHistory)
   const currentQueryRef = useRef(cached?.query ?? '')
   const sentinelRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const searchRequestRef = useRef(0)
 
   // 처음 열 때만 검색칸에 포커스(autoFocus는 폼이 다시 그려질 때마다 포커스를 옮겨 모바일 키보드를 다시 띄운다).
   // 상세에서 뒤로 와 결과를 복원할 때는 옮기지 않는다
@@ -166,20 +173,27 @@ export function BookSearchStep({ onSelect }: Props) {
     if (!searched) return
     try {
       sessionStorage.setItem(SEARCH_CACHE_KEY, JSON.stringify({
-        query,
+        query: currentQueryRef.current,
         results: results.slice(0, SEARCH_CACHE_MAX_ITEMS),
         page: Math.min(page, Math.ceil(SEARCH_CACHE_MAX_ITEMS / PAGE_SIZE) + 1),
         isEnd: results.length <= SEARCH_CACHE_MAX_ITEMS ? isEnd : false,
+        totalCount,
       }))
     } catch {
       // quota exceeded — ignore
     }
-  }, [results, query, page, isEnd, searched])
+  }, [results, query, page, isEnd, searched, totalCount])
 
   async function doSearch(q: string) {
     if (!q.trim()) return
+    setEmptyHint(false)
     dropSearchCache()
     currentQueryRef.current = q.trim()
+    const requestId = ++searchRequestRef.current
+    setSubmittedQuery(q.trim())
+    setLoadMoreError(null)
+    setTotalCount(null)
+    setLoadingMore(false)
     setLoading(true)
     setError(null)
     setSearched(false)
@@ -188,41 +202,45 @@ export function BookSearchStep({ onSelect }: Props) {
     setIsEnd(false)
     try {
       const res = await searchBooks(q.trim(), 1, PAGE_SIZE)
-      if (currentQueryRef.current !== q.trim()) return
+      if (searchRequestRef.current !== requestId) return
       setResults(res.items)
+      setTotalCount(res.pagination.totalCount)
       setIsEnd(res.pagination.isEnd)
       setPage(2)
       setSearched(true)
       saveHistory(q.trim())
       setHistory(getHistory())
     } catch (err) {
-      setError(toUserMessage(err, '도서 검색 중 오류가 발생했습니다.'))
+      if (searchRequestRef.current === requestId) setError(toUserMessage(err, '도서 검색 중 오류가 발생했습니다.'))
     } finally {
-      setLoading(false)
+      if (searchRequestRef.current === requestId) setLoading(false)
     }
   }
 
   const loadMore = useCallback(async () => {
     const q = currentQueryRef.current
     if (!q || loadingMore || isEnd) return
+    const requestId = searchRequestRef.current
+    setLoadMoreError(null)
     setLoadingMore(true)
     try {
       const res = await searchBooks(q, page, PAGE_SIZE)
-      if (currentQueryRef.current !== q) return
+      if (searchRequestRef.current !== requestId) return
       setResults(prev => [...prev, ...res.items])
+      setTotalCount(res.pagination.totalCount)
       setIsEnd(res.pagination.isEnd)
       setPage(prev => prev + 1)
-    } catch {
-      // 추가 로드 실패는 조용히 무시
+    } catch (err) {
+      if (searchRequestRef.current === requestId) setLoadMoreError(toUserMessage(err, '책을 더 불러오지 못했어요. 다시 시도해주세요.'))
     } finally {
-      setLoadingMore(false)
+      if (searchRequestRef.current === requestId) setLoadingMore(false)
     }
   }, [page, isEnd, loadingMore])
 
   // IntersectionObserver: sentinel이 보이면 다음 페이지 로드
   useEffect(() => {
     const sentinel = sentinelRef.current
-    if (!sentinel) return
+    if (!sentinel || loadMoreError || loading) return
 
     const observer = new IntersectionObserver(
       entries => {
@@ -235,10 +253,16 @@ export function BookSearchStep({ onSelect }: Props) {
 
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [loadMore])
+  }, [loadMore, loadMoreError, loading])
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault()
+    // 빈 칸이어도 버튼은 살려 둔다(흐린 버튼은 고장 난 것처럼 보인다) — 누르면 무엇을 넣을지 알려 준다
+    if (!query.trim()) {
+      setEmptyHint(true)
+      inputRef.current?.focus()
+      return
+    }
     doSearch(query)
   }
 
@@ -260,7 +284,7 @@ export function BookSearchStep({ onSelect }: Props) {
   const compact = searched || loading || results.length > 0 || error !== null
 
   const searchForm = (
-    <form onSubmit={handleSearch} role="search" className="flex gap-2">
+    <form onSubmit={handleSearch} role="search" className="flex gap-2" aria-busy={loading}>
       <div className="flex-1 relative">
         <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink-500">
           <SearchIcon size={20} />
@@ -269,9 +293,13 @@ export function BookSearchStep({ onSelect }: Props) {
           ref={inputRef}
           type="text"
           value={query}
-          onChange={e => setQuery(e.target.value)}
+          onChange={e => {
+            setQuery(e.target.value)
+            setEmptyHint(false)
+          }}
           placeholder="책 제목, 저자, ISBN"
           aria-label="책 검색"
+          aria-describedby={emptyHint ? 'search-empty-hint' : undefined}
           className="w-full h-12 md:h-14 pl-11 pr-11 rounded-2xl border-[1.5px] border-ink-900 bg-white text-ink-900
             text-body md:text-body-lg placeholder:text-ink-500
             focus:outline-none focus:border-primary focus:ring-4 focus:ring-accent/30 transition"
@@ -291,7 +319,7 @@ export function BookSearchStep({ onSelect }: Props) {
       </div>
       <button
         type="submit"
-        disabled={loading || !query.trim()}
+        disabled={loading}
         aria-label="검색"
         className="h-12 md:h-14 min-w-12 md:min-w-0 md:px-7 bg-primary text-white rounded-2xl font-bold text-body-lg
           hover:bg-primary-dark transition disabled:opacity-40 disabled:cursor-not-allowed
@@ -301,6 +329,12 @@ export function BookSearchStep({ onSelect }: Props) {
         <span className="hidden md:inline">검색</span>
       </button>
     </form>
+  )
+
+  const emptyHintText = emptyHint && (
+    <p id="search-empty-hint" role="alert" className="mt-2 text-meta text-status-danger">
+      책 제목, 저자 또는 ISBN을 입력해 주세요
+    </p>
   )
 
   const historyChips = !searched && history.length > 0 && (
@@ -334,34 +368,25 @@ export function BookSearchStep({ onSelect }: Props) {
       {/* 검색 폼은 늘 같은 자리에 둔다 — 큰 소개를 접고 펼 때 폼이 새로 만들어지면 입력 상태·포커스가 흔들린다 */}
       <section className="bg-white border-b border-ink-100">
         <div className="mx-auto max-w-content px-4 md:px-6">
-          <div
-            className={
-              compact
-                ? 'py-4 md:py-6'
-                : 'py-7 md:py-12 lg:py-16 lg:grid lg:grid-cols-[minmax(0,1fr)_360px] lg:gap-14 lg:items-center'
-            }
-          >
+          <div className={compact ? 'py-4 md:py-5' : 'max-w-[800px] mx-auto py-8 md:py-12'}>
             <div>
-              {compact ? (
-                <h1 className="sr-only">책 검색 결과</h1>
-              ) : (
+              {!compact && (
                 <>
-                  <p className="text-label md:text-meta font-bold text-accent-strong">
-                    도서관 · 전자도서관 · 구독 · 서점을 한 번에
-                  </p>
-                  <h1 className="mt-2 text-display lg:text-display-lg font-bold text-ink-900">책, 어디 있을까?</h1>
-                  <p className="mt-3 text-body md:text-body-lg text-ink-600 max-w-xl">
-                    읽고 싶은 책 한 권을 검색하면 근처 도서관 대출부터 전자도서관, 밀리의서재, 새 책 가격까지
-                    한 화면에 모아 보여 드려요.
+                  <h1 className="max-w-[660px] text-display md:text-[2.75rem] md:leading-[1.25] font-bold tracking-tight text-ink-900">읽고 싶은 책, 어디서 읽을까요?</h1>
+                  <p className="mt-3 text-body md:text-body-lg text-ink-600">
+                    도서관에서 빌릴지, 구독으로 읽을지, 구매할지 한 번에 찾아보세요.
                   </p>
                 </>
               )}
-              <div className={compact ? 'max-w-2xl' : 'mt-6 max-w-2xl'}>{searchForm}</div>
+              <div className={compact ? 'max-w-2xl' : 'mt-6'}>
+                {searchForm}
+                {emptyHintText}
+              </div>
               {!compact && (
                 <>
-                  <ul role="list" className="mt-4 flex flex-wrap gap-2 lg:hidden" aria-label="한 번에 확인하는 곳">
+                  <ul role="list" className="mt-4 flex flex-wrap gap-x-5 gap-y-2" aria-label="한 번에 확인하는 곳">
                     {SOURCES.map(({ short, Icon }) => (
-                      <li key={short} className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-ink-50 text-label text-ink-700">
+                      <li key={short} className="inline-flex items-center gap-1.5 text-label md:text-meta text-ink-600">
                         <Icon size={15} />
                         {short}
                       </li>
@@ -372,24 +397,6 @@ export function BookSearchStep({ onSelect }: Props) {
               )}
             </div>
 
-            {!compact && (
-              <aside className="hidden lg:block rounded-2xl border border-ink-100 bg-surface px-6 py-5">
-                <h2 className="text-meta font-bold text-ink-900 mb-1">한 번에 확인하는 곳</h2>
-                <ul role="list">
-                  {SOURCES.map(({ label, Icon }, i) => (
-                    <li
-                      key={label}
-                      className={'flex items-center gap-3 min-h-[52px] text-body text-ink-700' + (i > 0 ? ' border-t border-ink-100' : '')}
-                    >
-                      <span className="w-9 h-9 rounded-xl bg-white flex items-center justify-center text-ink-700 shrink-0">
-                        <Icon size={18} />
-                      </span>
-                      {label}
-                    </li>
-                  ))}
-                </ul>
-              </aside>
-            )}
           </div>
         </div>
       </section>
@@ -398,11 +405,22 @@ export function BookSearchStep({ onSelect }: Props) {
         {error && (
           <div role="alert" className="p-4 mb-6 bg-status-danger-soft rounded-2xl text-status-danger text-meta">
             {error}
+            <button type="button" onClick={() => doSearch(submittedQuery)} className="mt-2 min-h-11 block font-semibold underline underline-offset-4 cursor-pointer">다시 검색하기</button>
           </div>
         )}
 
         {/* 추천(검색 전에만) */}
         {!searched && !loading && !error && <FeaturedBooksSection onSelect={onSelect} />}
+
+        {compact && (
+          <div className="mb-5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2" aria-live="polite" aria-atomic="true">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-title md:text-heading font-bold text-ink-900 break-words">‘{submittedQuery}’ 검색 결과</h1>
+              <p className="mt-1 text-meta text-ink-600">표지·저자·출판연도를 확인하고 원하는 판본을 선택하세요.</p>
+            </div>
+            <span className="text-meta text-ink-600 tabular-nums">{loading ? '찾고 있어요' : error ? '검색을 완료하지 못했어요' : totalCount != null ? `${totalCount.toLocaleString()}권` : `${results.length}권 불러옴`}</span>
+          </div>
+        )}
 
         {loading && results.length === 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -453,7 +471,7 @@ export function BookSearchStep({ onSelect }: Props) {
             })}
 
             {/* Sentinel + 로딩 표시 */}
-            {!isEnd && (
+            {!isEnd && !loadMoreError && (
               <div ref={sentinelRef} className="col-span-full py-2">
                 {loadingMore ? (
                   <div className="flex justify-center py-2 text-ink-400">
@@ -468,8 +486,20 @@ export function BookSearchStep({ onSelect }: Props) {
               </div>
             )}
 
+            {loadMoreError && (
+              <div className="col-span-full rounded-xl border border-ink-200 bg-white p-4 text-meta">
+                <p role="alert" className="text-ink-700">{loadMoreError}</p>
+                <button type="button" disabled={loadingMore} onClick={loadMore} className="mt-1 min-h-11 font-semibold text-primary underline underline-offset-4 cursor-pointer disabled:opacity-50">{loadingMore ? '불러오는 중' : '다시 불러오기'}</button>
+              </div>
+            )}
+
             {isEnd && results.length > PAGE_SIZE && (
-              <p className="col-span-full text-center text-label text-ink-600 py-3">모든 결과를 불러왔어요</p>
+              <p className="col-span-full text-center text-label text-ink-600 py-3">
+                {/* 카카오는 전체 수(total_count)보다 적게 넘겨 볼 수 있다 — 끝났는데 남았으면 검색어를 좁히라고 안내 */}
+                {totalCount != null && totalCount > results.length
+                  ? '결과가 많아 여기까지 보여 드려요. 검색어를 더 자세히 입력해 보세요'
+                  : '모든 결과를 불러왔어요'}
+              </p>
             )}
           </div>
         )}
