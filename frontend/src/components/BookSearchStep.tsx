@@ -151,6 +151,7 @@ export function BookSearchStep({ onSelect }: Props) {
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null)
+  const [emptyHint, setEmptyHint] = useState(false)
   const [totalCount, setTotalCount] = useState<number | null>(cached?.totalCount ?? null)
   const [submittedQuery, setSubmittedQuery] = useState(cached?.query ?? '')
   const [searched, setSearched] = useState(cached !== null)
@@ -255,6 +256,12 @@ export function BookSearchStep({ onSelect }: Props) {
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault()
+    // 빈 칸이어도 버튼은 살려 둔다(흐린 버튼은 고장 난 것처럼 보인다) — 누르면 무엇을 넣을지 알려 준다
+    if (!query.trim()) {
+      setEmptyHint(true)
+      inputRef.current?.focus()
+      return
+    }
     doSearch(query)
   }
 
@@ -285,9 +292,13 @@ export function BookSearchStep({ onSelect }: Props) {
           ref={inputRef}
           type="text"
           value={query}
-          onChange={e => setQuery(e.target.value)}
+          onChange={e => {
+            setQuery(e.target.value)
+            setEmptyHint(false)
+          }}
           placeholder="책 제목, 저자, ISBN"
           aria-label="책 검색"
+          aria-describedby={emptyHint ? 'search-empty-hint' : undefined}
           className="w-full h-12 md:h-14 pl-11 pr-11 rounded-2xl border-[1.5px] border-ink-900 bg-white text-ink-900
             text-body md:text-body-lg placeholder:text-ink-500
             focus:outline-none focus:border-primary focus:ring-4 focus:ring-accent/30 transition"
@@ -307,7 +318,7 @@ export function BookSearchStep({ onSelect }: Props) {
       </div>
       <button
         type="submit"
-        disabled={loading || !query.trim()}
+        disabled={loading}
         aria-label="검색"
         className="h-12 md:h-14 min-w-12 md:min-w-0 md:px-7 bg-primary text-white rounded-2xl font-bold text-body-lg
           hover:bg-primary-dark transition disabled:opacity-40 disabled:cursor-not-allowed
@@ -317,6 +328,12 @@ export function BookSearchStep({ onSelect }: Props) {
         <span className="hidden md:inline">검색</span>
       </button>
     </form>
+  )
+
+  const emptyHintText = emptyHint && (
+    <p id="search-empty-hint" role="alert" className="mt-2 text-meta text-status-danger">
+      책 제목, 저자 또는 ISBN을 입력해 주세요
+    </p>
   )
 
   const historyChips = !searched && history.length > 0 && (
@@ -360,7 +377,10 @@ export function BookSearchStep({ onSelect }: Props) {
                   </p>
                 </>
               )}
-              <div className={compact ? 'max-w-2xl' : 'mt-6'}>{searchForm}</div>
+              <div className={compact ? 'max-w-2xl' : 'mt-6'}>
+                {searchForm}
+                {emptyHintText}
+              </div>
               {!compact && (
                 <>
                   <ul role="list" className="mt-4 flex flex-wrap gap-x-5 gap-y-2" aria-label="한 번에 확인하는 곳">
