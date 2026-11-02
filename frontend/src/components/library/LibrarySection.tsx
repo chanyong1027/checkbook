@@ -194,11 +194,12 @@ function MapPanel({
   const [open, setOpen] = useState(() =>
     typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(DESKTOP_QUERY).matches)
   const points = toMapPoints(items)
+  const [mapReady, setMapReady] = useState(false)
   const available = kakaoMapKey() != null && (points.length > 0 || origin != null)
   // 지도가 실제로 보일 때만 목록에 '지도에서 보기'를 단다
   const mappedKey = points.map(p => p.code).join(',')
-  useEffect(() => onOpenChange(open && available ? mappedKey.split(',').filter(Boolean) : null),
-    [open, available, mappedKey, onOpenChange])
+  useEffect(() => onOpenChange(open && available && mapReady ? mappedKey.split(',').filter(Boolean) : null),
+    [open, available, mapReady, mappedKey, onOpenChange])
   // 패널이 사라지면(기준점이 없어지는 등) 지도도 닫힌 것으로 알린다
   useEffect(() => () => onOpenChange(null), [onOpenChange])
   if (!available) return null
@@ -212,7 +213,9 @@ function MapPanel({
       >
         {open ? '지도 접기' : '지도 보기'}
       </button>
-      {open && <LibraryMap points={points} origin={origin} selectedCode={selectedCode} onSelect={onSelect} />}
+      {open && (
+        <LibraryMap points={points} origin={origin} selectedCode={selectedCode} onSelect={onSelect} onReadyChange={setMapReady} />
+      )}
     </div>
   )
 }
@@ -325,7 +328,8 @@ export function LibrarySection({
       <p className="mb-3 text-label text-ink-600">예약·상호대차 중인 책도 '대출가능'으로 보일 수 있어요</p>
 
       {(mode === 'saved' || origin) && (
-        <MapPanel items={mapItems} origin={mapOrigin} selectedCode={selectedCode} onSelect={selectFromMap} onOpenChange={setMappedCodes} />
+        // 책·모드가 바뀌면 지도를 새로 그린다(사용자가 옮긴 상태를 넘기지 않게, SDK는 이미 받은 것을 쓴다)
+        <MapPanel key={`${mode}|${isbn13}`} items={mapItems} origin={mapOrigin} selectedCode={selectedCode} onSelect={selectFromMap} onOpenChange={setMappedCodes} />
       )}
 
       {mode === 'saved' ? (
