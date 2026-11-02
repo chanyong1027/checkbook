@@ -8,6 +8,8 @@ package com.checkbook.common.config;
  * robots 확인의 접속 불가 판정이 어긋나고, http 사이트에 h2c 업그레이드 헤더가 붙는다. 사이트당 5초 마감·지연 분포도
  * 옛 전송으로 잰 값이다. jsoup은 이 속성을 요청마다 읽으므로 앱 시작 때 한 번 정하면 된다.
  * HttpClient로 옮길 때는 분류를 고치고 사이트 응답을 다시 잰 뒤 이 설정을 지운다.
+ * 시험은 Gradle이 같은 속성을 준다(build.gradle). IDE에서 Gradle을 거치지 않고 돌리면 HttpClient로 돌아
+ * 시간 초과 시험이 깨질 수 있다 — IDE 실행 설정에 -Djsoup.useHttpClient=false를 넣는다.
  */
 public final class JsoupTransport {
 

@@ -223,10 +223,10 @@ public class KyoboELibClient implements ELibClient {
         }
     }
 
-    // get()(ignoreContentType=false)과 같은 기준: text/*·xml이 아니면 HTML 아님
+    // get()(ignoreContentType=false)과 같은 기준: text/*·xml(+xml 접미 포함, 대소문자 무시)이 아니면 HTML 아님
     private static void requireHtml(Connection.Response response, String url) throws UnsupportedMimeTypeException {
-        String type = response.contentType();
-        if (type != null && !type.startsWith("text/") && !type.matches("(?i)application/(\\w+\\+)?xml.*")) {
+        String type = response.contentType() == null ? null : response.contentType().toLowerCase(java.util.Locale.ROOT);
+        if (type != null && !type.startsWith("text/") && !type.matches("application/([\\w.-]+\\+)?xml.*")) {
             throw new UnsupportedMimeTypeException("HTML이 아닌 응답", type, url);
         }
     }
@@ -284,7 +284,9 @@ public class KyoboELibClient implements ELibClient {
         }
 
         String coverUrl = normalizeUrl(baseUrl, book.select("div.img img").attr("src").trim());
-        boolean available = !book.select("input[name=brwBtn][value=대출]").isEmpty();
+        // jsoup 1.20.1부터 [value=대출]은 값의 앞뒤 공백을 무시하지 않는다 — "대출 "도 대출 가능으로 보려고 Java에서 다듬어 비교
+        boolean available = book.select("input[name=brwBtn]").stream()
+                .anyMatch(button -> "대출".equals(button.attr("value").strip()));
 
         Element titleLink = book.selectFirst("li.tit > a");
         String detailUrl = titleLink == null ? null : buildDetailUrl(baseUrl, titleLink);

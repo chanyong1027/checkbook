@@ -45,6 +45,41 @@ class KyoboELibClientTest {
     }
 
     @Test
+    void 책_항목에서_제목_저자_출판사_대출_가능을_읽는다() throws Exception {
+        // 합성 HTML(교보 템플릿 구조만 흉내). 대출 버튼 value의 앞뒤 공백은 무시한다(jsoup 1.20.1+ 속성 선택자는 공백을 가림)
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse()
+                    .setHeader("Content-Type", "text/html; charset=UTF-8")
+                    .setBody("""
+                            <html><body>
+                              <ul class="book_resultList">
+                                <li>
+                                  <ul>
+                                    <li class="tit"><a href="/detail?id=1">자바의 정석</a></li>
+                                    <li class="writer">남궁성 2016-01-01 <span>도우출판</span></li>
+                                  </ul>
+                                  <input type="button" name="brwBtn" value=" 대출 ">
+                                </li>
+                                <li>
+                                  <ul><li class="tit"><a href="/detail?id=2">이펙티브 자바</a></li></ul>
+                                  <input type="button" name="brwBtn" value="예약">
+                                </li>
+                              </ul>
+                            </body></html>
+                            """));
+            server.start();
+
+            var books = client.search(server.url("/").toString().replaceAll("/$", ""), "자바");
+
+            assertThat(books).extracting(b -> b.title()).containsExactly("자바의 정석", "이펙티브 자바");
+            assertThat(books.get(0).author()).isEqualTo("남궁성");
+            assertThat(books.get(0).publisher()).isEqualTo("도우출판");
+            assertThat(books.get(0).available()).isTrue();
+            assertThat(books.get(1).available()).isFalse();
+        }
+    }
+
+    @Test
     void 주소_끝에_슬래시가_있어도_검색_경로가_겹치지_않는다() throws Exception {
         // 끝 '/'가 남은 주소 12곳이 '//search'를 불렀다(10-20 전수 조사)
         try (MockWebServer server = new MockWebServer()) {
