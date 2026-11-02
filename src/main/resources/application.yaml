@@ -70,6 +70,8 @@ search:
   public-library-page-size: 5    # 최초 조회와 더보기 1회당 fan-out 수
   public-library-max-count: 20   # 더보기로 접근 가능한 최대 후보 수 = findNearest 상한
   public-library-fanout-timeout: 2200
+  # D7-1 주변 탐색 반경(직선 km). 이 안의 후보를 거리순으로 5곳씩 확인한다(결정 2026-11-02 D7-1 기술설계 T3)
+  public-library-radius-km: 10
   # PR-2: 최대 2태스크/요청(publicLibrary부모·millie). 중고는 로컬 링크 생성만 하므로 제출하지 않는다.
   # baseline 실측(2026-07-03, 하네스 v2): 이 풀(구 3)이 1차 병목 —
   # FAILED율 절벽 VU8(0.8%)↔VU12(97.8%), VU15 종료 시점 유령 큐 470 (notes/todo/benchmark-results.md §4)

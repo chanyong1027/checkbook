@@ -20,6 +20,10 @@ public enum ErrorCode {
     LIBRARY_IDS_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "도서관은 최대 20개까지 선택할 수 있습니다."),
     INVALID_LIBRARY_ID(HttpStatus.BAD_REQUEST, "올바른 도서관 ID를 입력해주세요."),
 
+    INVALID_PUBLIC_LIBRARY_QUERY(HttpStatus.BAD_REQUEST, "도서관 조회 조건이 올바르지 않습니다."),
+    PUBLIC_LIBRARY_CODES_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "내 도서관은 최대 5곳까지 조회할 수 있습니다."),
+    UNKNOWN_PUBLIC_LIBRARY(HttpStatus.BAD_REQUEST, "찾을 수 없는 도서관이 있습니다. 도서관을 다시 선택해주세요."),
+
     INVALID_VENDOR_TYPE(HttpStatus.BAD_REQUEST, "올바른 벤더 타입을 입력해주세요. (KYOBO, BOOKCUBE)"),
 
     LIBRARY_NOT_FOUND(HttpStatus.NOT_FOUND, "존재하지 않는 도서관입니다."),

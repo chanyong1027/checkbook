@@ -42,6 +42,8 @@ class RateLimitWiringIT {
     @ValueSource(strings = {
             "/api/search?q=9788936434120",
             "/api/public-libraries/availability?isbn13=9788936434120&lat=37.5&lon=127.0",
+            "/api/public-libraries/availability/batch?isbn13=9788936434120&mode=NEARBY&lat=37.5&lon=127.0",
+            "/api/public-libraries/availability/batch?isbn13=9788936434120&mode=SAVED&libraryCodes=111001",
             "/api/books/search?q=test",
             "/api/elibraries/search?title=test&libraryIds=1"
     })
@@ -52,6 +54,7 @@ class RateLimitWiringIT {
     @ParameterizedTest
     @ValueSource(strings = {
             "/api/elibraries",
+            "/api/public-libraries?keyword=용산",
             "/api/featured?type=BESTSELLER",
             "/api/off-stores?isbn13=9788936434120&lat=37.5&lon=127.0",
             "/actuator/health",

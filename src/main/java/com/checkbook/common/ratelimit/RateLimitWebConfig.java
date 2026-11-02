@@ -12,6 +12,7 @@ public class RateLimitWebConfig implements WebMvcConfigurer {
     static final String[] LIMITED_PATHS = {
             "/api/search",
             "/api/public-libraries/availability",
+            "/api/public-libraries/availability/batch",
             "/api/books/search",
             "/api/elibraries/search"
     };
