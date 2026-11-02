@@ -199,3 +199,18 @@ export interface ELibrarySearchResponse {
   results: ELibraryResult[]
   metadata: ELibrarySearchMetadata
 }
+
+// --- 공공도서관 기관 검색(자체 DB, D7-1) ---
+
+export interface PublicLibraryDirectoryItem {
+  libCode: string
+  name: string
+  address: string | null
+  latitude: number
+  longitude: number
+}
+
+export interface PublicLibraryDirectoryResponse {
+  items: PublicLibraryDirectoryItem[]
+  hasNext: boolean
+}

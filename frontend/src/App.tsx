@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import type { BookCandidate } from './types'
 import { BookSearchStep } from './components/BookSearchStep'
 import { BookDetailPage } from './components/BookDetailPage'
-import { BookIcon, ChevronLeftIcon } from './components/shared/icons'
+import { BookIcon, ChevronLeftIcon, SettingsIcon } from './components/shared/icons'
+import { PreferencesProvider, usePreferences } from './preferences/PreferencesContext'
 
 const SEARCH_CACHE_KEY = 'cb_search_cache'
 const BOOK_FALLBACK_KEY = 'cb_book'
@@ -45,7 +46,30 @@ function loadBookFromState(isbn: string): BookCandidate | null {
   return null
 }
 
+/** 헤더의 '내 도서관' — 홈·상세 어디서나 같은 설정 화면을 연다 */
+function MyLibraryButton() {
+  const { openSettings } = usePreferences()
+  return (
+    <button
+      type="button"
+      onClick={() => openSettings()}
+      className="ml-auto inline-flex items-center gap-1.5 min-h-11 px-3 -mr-3 rounded-xl text-meta font-semibold text-ink-700 hover:bg-ink-50 hover:text-ink-900 transition cursor-pointer"
+    >
+      <SettingsIcon size={18} />
+      내 도서관
+    </button>
+  )
+}
+
 export default function App() {
+  return (
+    <PreferencesProvider>
+      <AppShell />
+    </PreferencesProvider>
+  )
+}
+
+function AppShell() {
   const initialRoute = parseRoute(window.location.pathname)
   const [route, setRoute] = useState<Route>(initialRoute)
   const [direction, setDirection] = useState<'forward' | 'back'>('forward')
@@ -155,6 +179,8 @@ export default function App() {
             </span>
             <span className="font-bold text-ink-900 text-body-lg tracking-tight">CheckBook</span>
           </button>
+
+          <MyLibraryButton />
         </div>
       </header>
 

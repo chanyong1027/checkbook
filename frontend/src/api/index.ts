@@ -7,6 +7,7 @@ import type {
   FeaturedBooksResponse,
   FeaturedSectionType,
   PublicLibraryAvailabilityResponse,
+  PublicLibraryDirectoryResponse,
 } from '../types'
 import { toApiError } from './errors.ts'
 
@@ -117,6 +118,17 @@ export function getPublicLibraryAvailability(
     offset: String(offset),
   })
   return get(`/api/public-libraries/availability?${params}`, signal)
+}
+
+/** 기관 이름·주소 검색(자체 DB만 읽음 — 정보나루를 부르지 않는다). 내 도서관·기준 도서관 고르기용 */
+export function searchPublicLibraries(
+  keyword: string,
+  page = 0,
+  size = 20,
+  signal?: AbortSignal,
+): Promise<PublicLibraryDirectoryResponse> {
+  const params = new URLSearchParams({ keyword, page: String(page), size: String(size) })
+  return get(`/api/public-libraries?${params}`, signal)
 }
 
 export function getFeatured(
