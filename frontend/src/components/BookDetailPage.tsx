@@ -10,7 +10,7 @@ import type {
   ELibrarySearchResponse,
 } from '../types'
 import { OffStoreList } from './OffStoreList'
-import { PublicLibraryList, type LibraryPageState } from './PublicLibraryList'
+import { LibrarySection, type LibrarySummary } from './library/LibrarySection'
 import { usePreferences } from '../preferences/PreferencesContext'
 import {
   BookIcon,
@@ -24,8 +24,9 @@ import {
 } from './shared/icons'
 import { BookPanel, type SummaryItem } from './detail/BookPanel'
 import { DetailSection, ExternalButton, GroupHeading, SectionNotice, SectionSkeleton, StatusChip } from './detail/parts'
-import { elibSiteStatus, summarizeELibraries, summarizeLibraries } from './detail/summary'
+import { elibSiteStatus, summarizeELibraries } from './detail/summary'
 import { isSafeUrl } from '../utils/url'
+import { isValidIsbn13 } from '../utils/isbn'
 
 interface Props {
   isbn13: string
@@ -92,8 +93,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   const [searchLoading, setSearchLoading] = useState(true)
   const [searchError, setSearchError] = useState<string | null>(null)
   // 새 검색 결과마다 증가 — 공공도서관 목록의 누적 페이징 상태를 key 리마운트로 리셋
-  const [searchSeq, setSearchSeq] = useState(0)
-  const [libraryPage, setLibraryPage] = useState<LibraryPageState | null>(null)
+  const [libraryCardSummary, setLibraryCardSummary] = useState<LibrarySummary>({ value: '확인 중', tone: 'loading' })
 
   // E-library state
   const [elibResult, setElibResult] = useState<ELibrarySearchResponse | null>(null)
@@ -118,9 +118,6 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   // Cold-fetch 완료 플래그 — warm 진입은 처음부터 true, cold 진입은 fetch 종료(성공/실패) 후 true
   // e-lib 검색이 서버 응답 메타로 락되는 race condition 방지 + cold 진입 시 통합 검색 시작 시점(힌트 확보 후 1회)
   const [coldFetchDone, setColdFetchDone] = useState<boolean>(Boolean(initialBook))
-
-  // 첫 통합 검색이 나갔는지 — cold 대기 중 위치가 허용되면 별도 요청 없이 첫 요청에 위치를 싣기 위해
-  const searchStartedRef = useRef(false)
 
   // AbortControllers
   const searchAbort = useRef<AbortController | null>(null)
@@ -160,8 +157,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
 
   // --- API calls with race guard ---
 
-  function runSearch(lat?: number, lon?: number) {
-    searchStartedRef.current = true
+  function runSearch() {
     searchAbort.current?.abort()
     const controller = new AbortController()
     searchAbort.current = controller
@@ -172,12 +168,11 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
     const hint = hintBook
       ? { title: hintBook.title, author: hintBook.author, publisher: hintBook.publisher, cover: hintBook.coverUrl }
       : null
-    searchMain(isbn13, lat, lon, controller.signal, hint)
+    // 도서관은 도서관 칸이 배치로 따로 찾는다(D7-1 T1) — 통합 검색엔 좌표를 보내지 않아 도서관 조회가 빠진다
+    searchMain(isbn13, undefined, undefined, controller.signal, hint)
       .then(res => {
         if (searchAbort.current === controller) {
           setSearchResult(res)
-          setLibraryPage(null)
-          setSearchSeq(seq => seq + 1)
         }
       })
       .catch(err => {
@@ -277,7 +272,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
 
   useEffect(() => {
     if (!coldFetchDone) return
-    runSearch(userLatRef.current ?? undefined, userLonRef.current ?? undefined)
+    runSearch()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coldFetchDone])
 
@@ -317,8 +312,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
         userLonRef.current = longitude
         setUseLocation(true)
         setLocLoading(false)
-        // 첫 검색 전(cold 대기 중)이면 좌표만 남긴다 — 대기가 끝나면 위치를 실은 한 번의 요청이 나간다
-        if (searchStartedRef.current) runSearch(latitude, longitude)
+        // 도서관은 통합 검색이 아니라 도서관 칸이 따로 찾는다(D7-1) — 통합 검색을 다시 부르지 않는다
       },
       (err) => {
         setLocLoading(false)
@@ -336,14 +330,11 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   const usedBookProductUrl = searchResult?.usedBook?.productUrl
   const usedSection = searchResult?.metadata.sectionStatuses.find(s => s.section === 'USED_BOOK')
   const libSection = searchResult?.metadata.sectionStatuses.find(s => s.section === 'PUBLIC_LIBRARY')
-  const libSectionStatus = libSection?.status
   const newBookSection = searchResult?.metadata.sectionStatuses.find(s => s.section === 'NEW_BOOK')
   const newBookNotice = newBookSection ? newBookNoticeText(newBookSection.status, newBookSection.reason) : null
   const subSection = searchResult?.metadata.sectionStatuses.find(s => s.section === 'SUBSCRIPTION')
   // 다시 검색이 실패하면 옛 결과를 쓰지 않는다(runSearch는 searchResult를 지우지 않는다) — 본문은 이 값만 본다
   const result = searchError ? null : searchResult
-  const libraries = result?.publicLibraries ?? []
-  const libHasMore = result?.metadata.publicLibraryHasMore === true
 
   const hasSavedElibs = savedElibIds.length > 0
 
@@ -361,19 +352,8 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   const failedItem = { value: '불러오지 못함', tone: 'warn' as const }
 
   function librarySummary(): Pick<SummaryItem, 'value' | 'tone'> {
-    if (searchLoading) return loadingItem
-    if (searchError || !searchResult) return failedItem
-    if (libSectionStatus === 'SKIPPED') {
-      if (libSection?.reason === 'NON_STANDARD_ISBN') return { value: '확인 불가', tone: 'neutral' }
-      if (libSection?.reason === 'DAILY_LIMIT') return { value: '오늘 조회 마감', tone: 'neutral' }
-      return { value: '위치 필요', tone: 'neutral' }
-    }
-    if (libSectionStatus === 'FAILED' && (libraryPage?.libraries ?? libraries).length === 0) return { value: '응답 없음', tone: 'warn' }
-    return summarizeLibraries(libraryPage?.libraries ?? libraries, libraryPage ?? {
-      total: searchResult.metadata.publicLibraryTotal,
-      nextOffset: searchResult.metadata.publicLibraryNextOffset,
-      hasMore: libHasMore,
-    })
+    if (libSection?.reason === 'NON_STANDARD_ISBN' || !isValidIsbn13(isbn13)) return { value: '확인 불가', tone: 'neutral' }
+    return libraryCardSummary
   }
 
   function elibSummary(): Pick<SummaryItem, 'value' | 'tone'> {
@@ -417,9 +397,9 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
     ? searchResult.newBook.productUrl : undefined
 
   const summary: SummaryItem[] = [
-    { href: '#library', label: '근처 도서관', ...librarySummary(),
-      action: !useLocation && locationNeeded ? '주변 도서관 찾기' : '도서관 목록 보기',
-      note: !useLocation && locationNeeded ? '위치 허용 후 가까운 순으로' : '대출 상태는 전날 자료 기준' },
+    { href: '#library', label: '공공도서관', ...librarySummary(),
+      action: '도서관 목록 보기',
+      note: '대출 상태는 전날 자료 기준' },
     { href: '#elibrary', label: '전자도서관', ...elibSummary(),
       // 책 정보가 없으면 전자도서관을 검색할 수 없다 — 고르기 대신 그 이유가 있는 칸으로 안내
       action: bookInfoNotice ? '전자도서관 안내 보기' : pendingELibraryIds ? '5곳 고르기' : hasSavedElibs ? '대출 목록 보기' : '전자도서관 고르기',
@@ -451,50 +431,20 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
 
   // --- 칸 내용 ---
 
-  const showLibraryList =
-    !!result &&
-    libSectionStatus !== 'SKIPPED' &&
-    !(libSectionStatus === 'FAILED' && !libHasMore) &&
-    !(libraries.length === 0 && !libHasMore)
-
   function libraryBody() {
-    if (!result) return <SectionNotice>도서관 정보를 불러오지 못했어요</SectionNotice>
-    if (libSectionStatus === 'SKIPPED' && libSection?.reason === 'NON_STANDARD_ISBN') {
-      // 서점 내부 코드 등 표준 ISBN이 아님 — 조회 자체가 무의미해 '미보유'로 보이지 않게 이유를 말한다 (F1)
+    if (libSection?.reason === 'NON_STANDARD_ISBN' || !isValidIsbn13(isbn13)) {
+      // 서점 내부 코드 등 표준 ISBN이 아님(통합 검색을 기다리지 않게 화면에서도 먼저 본다) — 조회 자체가 무의미해 '미보유'로 보이지 않게 이유를 말한다 (F1)
       return <SectionNotice>표준 ISBN이 없는 상품이라 도서관 소장 여부를 확인할 수 없어요</SectionNotice>
     }
-    if (libSectionStatus === 'SKIPPED' && libSection?.reason === 'DAILY_LIMIT') {
-      // 정보나루 하루 호출 예산 소진 — 위치 안내로 보이면 안 된다(위치는 이미 있음)
-      return <SectionNotice>오늘은 조회가 많아 도서관 소장 여부를 확인할 수 없어요. 내일 다시 시도해주세요</SectionNotice>
-    }
-    if (libSectionStatus === 'SKIPPED') {
-      return <SectionNotice>위치를 허용하면 가까운 도서관의 소장·대출 여부를 보여 드려요</SectionNotice>
-    }
-    if (!showLibraryList) {
-      // 조회한 도서관이 모두 실패하면 서버가 FAILED로 준다(D7-0). 더 볼 도서관이 남았으면 목록(건너뜀 수 + 더 보기)으로 간다
-      return (
-        <SectionNotice>
-          {libSectionStatus === 'FAILED' || (result.metadata.publicLibraryTotal ?? 0) > 0
-            ? '근처 도서관의 응답을 받지 못했어요'
-            : '근처에 조회할 도서관이 없어요'}
-        </SectionNotice>
-      )
-    }
     return (
-      <>
-        {/* 정보나루는 전날 자료이고 대출중만 '불가'로 준다(예약·상호대차 중은 가능으로 옴, 운영처 문의 결과 못 바꿈) — D7-0 */}
-        <p className="mb-3 text-label text-ink-600">예약·상호대차 중인 책도 '대출가능'으로 보일 수 있어요</p>
-        <PublicLibraryList
-          key={searchSeq}
-          isbn13={result.book.isbn13 ?? isbn13}
-          lat={userLatRef.current}
-          lon={userLonRef.current}
-          initialLibraries={result.publicLibraries}
-          initialTotal={result.metadata.publicLibraryTotal}
-          initialNextOffset={result.metadata.publicLibraryNextOffset}
-          onChange={setLibraryPage}
-        />
-      </>
+      <LibrarySection
+        isbn13={isbn13}
+        location={useLocation && userLatRef.current != null && userLonRef.current != null
+          ? { lat: userLatRef.current, lon: userLonRef.current } : null}
+        locationLoading={locLoading}
+        onRequestLocation={handleGetLocation}
+        onSummaryChange={setLibraryCardSummary}
+      />
     )
   }
 
@@ -723,7 +673,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
             <p className="text-meta text-status-danger">{searchError}</p>
             <button
               type="button"
-              onClick={() => runSearch(userLatRef.current ?? undefined, userLonRef.current ?? undefined)}
+              onClick={() => runSearch()}
               className="inline-flex items-center gap-1.5 min-h-10 px-2 text-meta font-semibold text-primary-dark hover:underline cursor-pointer shrink-0"
             >
               <RefreshIcon size={14} strokeWidth={2} />
@@ -736,25 +686,20 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
         <div className="space-y-4">
         {/* ==================== 빌리기 ==================== */}
         <GroupHeading title="빌리기" desc="무료로 빌릴 수 있는 곳" />
-        {searchLoading ? (
-          <SectionSkeleton id="library" rows={4} />
-        ) : (
-          <DetailSection
-            id="library"
-            icon={<LibraryIcon size={20} />}
-            title="근처 공공도서관"
-            aside={
-              showLibraryList ? (
-                <span className="inline-flex items-center gap-1 text-label text-ink-600">
-                  <ClockIcon size={14} />
-                  전날 자료 기준
-                </span>
-              ) : undefined
-            }
-          >
-            {libraryBody()}
-          </DetailSection>
-        )}
+        {/* 통합 검색을 기다리지 않는다 — 도서관 칸이 배치로 따로 찾는다 */}
+        <DetailSection
+          id="library"
+          icon={<LibraryIcon size={20} />}
+          title="공공도서관"
+          aside={
+            <span className="inline-flex items-center gap-1 text-label text-ink-600">
+              <ClockIcon size={14} />
+              전날 자료 기준
+            </span>
+          }
+        >
+          {libraryBody()}
+        </DetailSection>
 
         {elibLoading || (!displayBook && !bookInfoNotice) ? (
           <SectionSkeleton id="elibrary" rows={2} />

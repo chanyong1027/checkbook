@@ -144,16 +144,6 @@ export interface SearchResponse {
   metadata: SearchMetadata
 }
 
-// /api/public-libraries/availability
-export interface PublicLibraryAvailabilityResponse {
-  libraries: PublicLibraryInfo[]
-  offset: number
-  total: number
-  nextOffset: number | null
-  hasMoreLibraries: boolean
-  failedCount: number
-}
-
 // /api/elibraries
 export interface ELibraryInfo {
   libraryId: number
@@ -213,4 +203,35 @@ export interface PublicLibraryDirectoryItem {
 export interface PublicLibraryDirectoryResponse {
   items: PublicLibraryDirectoryItem[]
   hasNext: boolean
+}
+
+// --- 공공도서관 배치 조회(D7-1) ---
+
+export type LibraryState = 'AVAILABLE' | 'ON_LOAN' | 'NOT_HELD' | 'UNKNOWN'
+
+/** 서버가 값을 늘려도 화면이 깨지지 않게 string도 받는다(모르는 이유는 '확인 못 함'으로) */
+export type LibraryCheckFailure =
+  | 'TIMEOUT' | 'UPSTREAM_ERROR' | 'POOL_BUSY' | 'CIRCUIT_OPEN' | 'DAILY_LIMIT' | 'INVALID_RESPONSE' | (string & {})
+
+export type BatchStopReason =
+  | 'NONE' | 'DAILY_LIMIT' | 'CIRCUIT_OPEN' | 'POOL_BUSY' | 'BATCH_DEADLINE' | (string & {})
+
+export interface PublicLibraryBatchItem {
+  libCode: string
+  name: string
+  address: string | null
+  latitude: number
+  longitude: number
+  /** 기준점에서 직선거리(km). 내 도서관(SAVED) 조회는 null */
+  distanceKm: number | null
+  homepage: string | null
+  state: LibraryState
+  reason: LibraryCheckFailure | null
+}
+
+export interface PublicLibraryBatchResponse {
+  items: PublicLibraryBatchItem[]
+  /** 이번에 고른 후보 구간의 끝. null은 후보(반경 10km) 소진 */
+  nextOffset: number | null
+  stopReason: BatchStopReason
 }

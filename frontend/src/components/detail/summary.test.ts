@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import type { ELibraryResult, ELibrarySearchResponse, PublicLibraryInfo } from '../../types'
-import { summarizeELibraries, summarizeLibraries, unansweredLibraryCount } from './summary.ts'
+import type { ELibraryResult, ELibrarySearchResponse, LibraryState, PublicLibraryBatchItem } from '../../types'
+import { summarizeELibraries, summarizeLibraries } from './summary.ts'
 
-function lib(hasBook: boolean, loanAvailable = false): PublicLibraryInfo {
-  return { libraryName: '도서관', hasBook, loanAvailable, address: '', latitude: 0, longitude: 0, distance: 1, homepage: '' }
+function lib(state: LibraryState): PublicLibraryBatchItem {
+  return { libCode: String(Math.random()), name: '도서관', address: null, latitude: 0, longitude: 0, distanceKm: 1, homepage: null, state, reason: null }
 }
 
 function site(status: ELibraryResult['status'], books: { available: boolean }[] = []): ELibraryResult {
@@ -30,31 +30,20 @@ function elib(results: ELibraryResult[], failures = 0): ELibrarySearchResponse {
   }
 }
 
-test('응답 없던 도서관 수는 시도한 후보 수에서 받은 수를 뺀다', () => {
-  assert.equal(unansweredLibraryCount(1, 3, null), 2)
-  assert.equal(unansweredLibraryCount(2, 10, 3), 1)
-  assert.equal(unansweredLibraryCount(3, null, null), 0)
+test('공공도서관: 확인 못 한 곳이 섞이면 없다고 단정하지 않는다', () => {
+  assert.equal(summarizeLibraries([], 2, '가까운 곳엔 없음').value, '소장 없음 · 일부 확인 못 함')
+  assert.equal(summarizeLibraries([], 0, '가까운 곳엔 없음').value, '가까운 곳엔 없음')
 })
 
-test('공공도서관: 3곳 중 1곳만 미보유로 답하고 2곳이 실패하면 없다고 단정하지 않는다', () => {
-  const s = summarizeLibraries([lib(false)], { total: 3, nextOffset: null, hasMore: false })
-  assert.equal(s.value, '소장 없음 · 일부 확인 못 함')
-})
-
-test('공공도서관: 대출중인 곳이 있어도 실패가 섞이면 모두 대출중이라 하지 않는다', () => {
-  const s = summarizeLibraries([lib(true)], { total: 3, nextOffset: null, hasMore: false })
-  assert.equal(s.value, '1곳 대출중 · 일부 확인 못 함')
-})
-
-test('공공도서관: 실패가 없으면 기존 결론을 그대로 쓴다', () => {
-  assert.equal(summarizeLibraries([lib(false)], { total: 1, nextOffset: null, hasMore: false }).value, '가까운 곳엔 없음')
-  assert.equal(summarizeLibraries([lib(true)], { total: 1, nextOffset: null, hasMore: false }).value, '1곳 모두 대출중')
-  assert.equal(summarizeLibraries([lib(true)], { total: 5, nextOffset: 1, hasMore: true }).value, '가까운 1곳 대출중')
+test('공공도서관: 대출중만 있고 확인 못 한 곳이 섞이면 그렇게 말한다', () => {
+  assert.equal(summarizeLibraries([lib('ON_LOAN')], 1, '-').value, '1곳 대출중 · 일부 확인 못 함')
+  assert.equal(summarizeLibraries([lib('ON_LOAN'), lib('ON_LOAN')], 0, '-').value, '2곳 대출중')
 })
 
 test('공공도서관: 대출가능이 하나라도 있으면 실패가 섞여도 대출가능', () => {
-  const s = summarizeLibraries([lib(true, true)], { total: 3, nextOffset: null, hasMore: false })
-  assert.deepEqual(s, { value: '1곳 대출가능', tone: 'ok' })
+  const s = summarizeLibraries([lib('AVAILABLE'), lib('ON_LOAN')], 3, '-')
+  assert.equal(s.value, '1곳 대출가능')
+  assert.equal(s.tone, 'ok')
 })
 
 test('전자도서관: 한 곳 대출중, 한 곳 시간 초과면 모두 대출중이라 하지 않는다', () => {
