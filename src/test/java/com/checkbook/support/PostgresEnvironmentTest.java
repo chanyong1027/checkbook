@@ -39,6 +39,10 @@ class PostgresEnvironmentTest extends PostgresIntegrationTest {
                 "SELECT source FROM featured_section_snapshot WHERE section_type IN ('BESTSELLER', 'NEW')", String.class);
 
         assertThat(sources).containsExactlyInAnyOrder("YES24", "YES24");
+        // ALADIN이 아닌 행(LOAN = 정보나루)은 건드리지 않는다
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT source FROM featured_section_snapshot WHERE section_type = 'LOAN'", String.class))
+                .isEqualTo("DATANARU");
     }
 
     // A 재현의 전제: 같은 (isbn13, lib_code)를 막는 유니크 제약이 실제 표에 있다
