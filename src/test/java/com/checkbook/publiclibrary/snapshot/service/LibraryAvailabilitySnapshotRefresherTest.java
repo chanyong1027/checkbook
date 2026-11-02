@@ -1,7 +1,11 @@
 package com.checkbook.publiclibrary.snapshot.service;
 
 import com.checkbook.client.datanaru.DatanaruClient;
+import com.checkbook.client.datanaru.DatanaruInvalidResponseException;
 import com.checkbook.client.datanaru.dto.DatanaruBookExistResult;
+import com.checkbook.common.ratelimit.DailyBudgetExceededException;
+import com.checkbook.common.ratelimit.ExternalProvider;
+import com.checkbook.publiclibrary.snapshot.domain.SnapshotFailureCause;
 import com.checkbook.publiclibrary.snapshot.domain.SnapshotSourceStatus;
 import com.checkbook.publiclibrary.snapshot.dto.LibraryAvailabilityResult;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
@@ -9,6 +13,8 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
+
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyBoolean;
@@ -89,9 +95,32 @@ class LibraryAvailabilitySnapshotRefresherTest {
 
         LibraryAvailabilityResult result = refresher.refresh(ISBN, LIB_CODE);
 
-        assertThat(result).isEqualTo(LibraryAvailabilityResult.failed(LIB_CODE));
+        assertThat(result).isEqualTo(LibraryAvailabilityResult.failed(LIB_CODE, SnapshotFailureCause.CIRCUIT_OPEN));
         verify(datanaruClient, never()).bookExist(anyString(), anyString());
         verifyNoInteractions(persister);
+    }
+
+    @Test
+    void 하루_예산_소진은_DAILY_LIMIT이고_저장하지_않는다() {
+        when(datanaruClient.bookExist(ISBN, LIB_CODE))
+                .thenThrow(new DailyBudgetExceededException(ExternalProvider.DATANARU, Duration.ofHours(1)));
+
+        LibraryAvailabilityResult result = refresher.refresh(ISBN, LIB_CODE);
+
+        assertThat(result).isEqualTo(LibraryAvailabilityResult.failed(LIB_CODE, SnapshotFailureCause.DAILY_LIMIT));
+        verifyNoInteractions(persister);
+    }
+
+    @Test
+    void 형식이_틀린_응답은_INVALID_RESPONSE이고_저장하지_않는다() {
+        when(datanaruClient.bookExist(ISBN, LIB_CODE)).thenThrow(new DatanaruInvalidResponseException("소장 값 형식 오류"));
+
+        LibraryAvailabilityResult result = refresher.refresh(ISBN, LIB_CODE);
+
+        assertThat(result).isEqualTo(LibraryAvailabilityResult.failed(LIB_CODE, SnapshotFailureCause.INVALID_RESPONSE));
+        verifyNoInteractions(persister);
+        assertThat(meterRegistry.get("library.snapshot.refresh.failure").tag("cause", "INVALID_RESPONSE").counter().count())
+                .isEqualTo(1);
     }
 
     @Test

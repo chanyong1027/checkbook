@@ -75,11 +75,37 @@ public class DatanaruClient {
         }
 
         DatanaruBookExistResponse.Result result = response.response().result();
-        return new DatanaruBookExistResult(
-                libCode,
-                "Y".equalsIgnoreCase(result.hasBook()),
-                "Y".equalsIgnoreCase(result.loanAvailable())
-        );
+        // 값이 비었거나 Y/N이 아니면 미소장(false)으로 바꾸지 않는다 — 실패로 다뤄 스냅샷에 저장하지 않는다.
+        // 소장 N이면 대출 가능 값은 보지 않는다(없는 책은 빌릴 수 없음, D7-1 결정)
+        Boolean hasBook = parseYesNo(result.hasBook());
+        if (hasBook == null) {
+            throw new DatanaruInvalidResponseException(
+                    "소장 값 형식 오류: isbn13=" + isbn13 + ", libCode=" + libCode);
+        }
+        if (!hasBook) {
+            return new DatanaruBookExistResult(libCode, false, false);
+        }
+        Boolean loanAvailable = parseYesNo(result.loanAvailable());
+        if (loanAvailable == null) {
+            throw new DatanaruInvalidResponseException(
+                    "대출 가능 값 형식 오류: isbn13=" + isbn13 + ", libCode=" + libCode);
+        }
+        return new DatanaruBookExistResult(libCode, true, loanAvailable);
+    }
+
+    /** "Y"/"N"(대소문자·앞뒤 공백 무시)만 인정한다. 그 밖의 값과 null은 null. */
+    private static Boolean parseYesNo(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.strip();
+        if ("Y".equalsIgnoreCase(trimmed)) {
+            return true;
+        }
+        if ("N".equalsIgnoreCase(trimmed)) {
+            return false;
+        }
+        return null;
     }
 
     // 도서관 목록·인기 대출 목록은 배치라 예산 차단선을 넘어도 보낸다(세기만)

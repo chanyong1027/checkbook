@@ -11,15 +11,20 @@ import com.checkbook.publiclibrary.dto.LibraryState;
 import com.checkbook.publiclibrary.dto.PublicLibraryBatchItem;
 import com.checkbook.publiclibrary.dto.PublicLibraryBatchResponse;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
+import com.checkbook.publiclibrary.snapshot.domain.SnapshotFailureCause;
 import com.checkbook.publiclibrary.snapshot.domain.SnapshotSourceStatus;
 import com.checkbook.publiclibrary.snapshot.dto.LibraryAvailabilityResult;
 import com.checkbook.publiclibrary.snapshot.service.LibraryAvailabilitySnapshotService;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +54,8 @@ public class PublicLibraryBatchService {
     private final LibraryAvailabilitySnapshotService snapshotService;
     private final PublicLibraryRepository repository;
     private final ExecutorService publicLibraryExecutor;
+    private final Map<Mode, Map<BatchStopReason, Timer>> batchTimers;
+    private final Map<LibraryState, Counter> stateCounters;
 
     @Value("${search.public-library-page-size}")
     private int pageSize;
@@ -62,11 +69,32 @@ public class PublicLibraryBatchService {
     public PublicLibraryBatchService(
             LibraryAvailabilitySnapshotService snapshotService,
             PublicLibraryRepository repository,
-            @Qualifier("publicLibraryExecutor") ExecutorService publicLibraryExecutor
+            @Qualifier("publicLibraryExecutor") ExecutorService publicLibraryExecutor,
+            MeterRegistry meterRegistry
     ) {
         this.snapshotService = snapshotService;
         this.repository = repository;
         this.publicLibraryExecutor = publicLibraryExecutor;
+        // 기동 때 미리 만든다 — 처음 생기는 순간의 값을 increase()가 놓치지 않게(스냅샷 저장 지표와 같은 이유)
+        this.batchTimers = new EnumMap<>(Mode.class);
+        for (Mode mode : Mode.values()) {
+            Map<BatchStopReason, Timer> byStop = new EnumMap<>(BatchStopReason.class);
+            for (BatchStopReason stop : BatchStopReason.values()) {
+                byStop.put(stop, Timer.builder("library.batch")
+                        .description("도서관 배치 조회 지연(서비스 진입~응답 구성)")
+                        .tag("mode", mode.name())
+                        .tag("stop", stop.name())
+                        .register(meterRegistry));
+            }
+            batchTimers.put(mode, byStop);
+        }
+        this.stateCounters = new EnumMap<>(LibraryState.class);
+        for (LibraryState state : LibraryState.values()) {
+            stateCounters.put(state, Counter.builder("library.batch.items")
+                    .description("도서관 배치 응답의 기관 상태별 수")
+                    .tag("state", state.name())
+                    .register(meterRegistry));
+        }
     }
 
     /** 현재 좌표 기준 주변. 한 탐색 동안 화면이 같은 좌표를 보내야 offset이 이어진다. */
@@ -105,7 +133,7 @@ public class PublicLibraryBatchService {
         List<Target> targets = unique.stream()
                 .map(code -> new Target(byCode.get(code), null))
                 .toList();
-        return check(isbn13, targets, null, startNanos);
+        return check(Mode.SAVED, isbn13, targets, null, startNanos);
     }
 
     private PublicLibraryBatchResponse nearbyPage(String isbn13, double lat, double lon, int offset, long startNanos) {
@@ -118,10 +146,11 @@ public class PublicLibraryBatchService {
                         DistanceCalculator.km(lat, lon, library.getLat(), library.getLon())))
                 .toList();
         Integer nextOffset = to < total ? to : null;
-        return check(isbn13, targets, nextOffset, startNanos);
+        return check(Mode.NEARBY, isbn13, targets, nextOffset, startNanos);
     }
 
-    private PublicLibraryBatchResponse check(String isbn13, List<Target> targets, Integer nextOffset, long startNanos) {
+    private PublicLibraryBatchResponse check(Mode mode, String isbn13, List<Target> targets, Integer nextOffset,
+                                             long startNanos) {
         // 마감은 서비스 진입부터 잰다 — 후보 선정·큐 대기도 사용자가 기다리는 시간이다
         long deadlineNanos = startNanos + TimeUnit.MILLISECONDS.toNanos(fanoutTimeoutMs);
         // 마감을 두 번 확인한다: 제출 전(후보 조회가 시간을 다 썼으면 넣지 않음)과 워커 실행 직전
@@ -162,6 +191,8 @@ public class PublicLibraryBatchService {
         List<PublicLibraryBatchItem> items = new ArrayList<>(targets.size());
         boolean anyRejected = false;
         boolean anyUnfinished = false;
+        boolean anyDailyLimit = false;
+        boolean anyCircuitOpen = false;
         for (int i = 0; i < targets.size(); i++) {
             Target target = targets.get(i);
             CompletableFuture<LibraryAvailabilityResult> future = futures.get(i);
@@ -186,7 +217,9 @@ public class PublicLibraryBatchService {
                 LibraryAvailabilityResult result = future.join();
                 if (result.sourceStatus() == SnapshotSourceStatus.FAILED) {
                     state = LibraryState.UNKNOWN;
-                    reason = LibraryCheckFailure.UPSTREAM_ERROR;
+                    reason = toFailure(result.failureCause());
+                    anyDailyLimit |= reason == LibraryCheckFailure.DAILY_LIMIT;
+                    anyCircuitOpen |= reason == LibraryCheckFailure.CIRCUIT_OPEN;
                 } else {
                     state = LibraryState.of(result.hasBook(), result.loanAvailable());
                 }
@@ -194,11 +227,40 @@ public class PublicLibraryBatchService {
             items.add(toItem(target, state, reason));
         }
 
-        BatchStopReason stopReason = anyRejected ? BatchStopReason.POOL_BUSY
+        // 공급자 전체가 막힌 이유(예산·서킷)를 먼저 알린다 — 다음 배치도 같은 결과라 화면 안내가 달라진다
+        BatchStopReason stopReason = anyDailyLimit ? BatchStopReason.DAILY_LIMIT
+                : anyCircuitOpen ? BatchStopReason.CIRCUIT_OPEN
+                : anyRejected ? BatchStopReason.POOL_BUSY
                 : anyUnfinished ? BatchStopReason.BATCH_DEADLINE
                 : BatchStopReason.NONE;
+        record(mode, items, stopReason, startNanos);
         return new PublicLibraryBatchResponse(items, nextOffset, stopReason);
     }
+
+    private static LibraryCheckFailure toFailure(SnapshotFailureCause cause) {
+        if (cause == null) {
+            return LibraryCheckFailure.UPSTREAM_ERROR;
+        }
+        return switch (cause) {
+            case CIRCUIT_OPEN -> LibraryCheckFailure.CIRCUIT_OPEN;
+            case DAILY_LIMIT -> LibraryCheckFailure.DAILY_LIMIT;
+            case INVALID_RESPONSE -> LibraryCheckFailure.INVALID_RESPONSE;
+            case UPSTREAM_ERROR -> LibraryCheckFailure.UPSTREAM_ERROR;
+        };
+    }
+
+    /** 지표: 배치 지연(모드·중단 사유별)과 기관 상태별 수. ISBN·기관 코드·좌표는 태그로 쓰지 않는다(카디널리티). */
+    private void record(Mode mode, List<PublicLibraryBatchItem> items, BatchStopReason stopReason, long startNanos) {
+        if (items.isEmpty()) {
+            return; // 후보를 넘긴 offset 등 빈 구간은 조회가 없어 지연 분포를 흐리지 않게 뺀다
+        }
+        batchTimers.get(mode).get(stopReason).record(System.nanoTime() - startNanos, TimeUnit.NANOSECONDS);
+        for (PublicLibraryBatchItem item : items) {
+            stateCounters.get(item.state()).increment();
+        }
+    }
+
+    private enum Mode { NEARBY, SAVED }
 
     private static Throwable unwrap(CompletableFuture<?> future) {
         try {

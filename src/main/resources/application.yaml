@@ -188,6 +188,8 @@ management:
       slo:
         "[http.server.requests]": 200ms,700ms,1s,2s,2800ms
         "[http.server.requests.active]": ""
+        # 도서관 배치(D7-1): 500ms 정상, 1s 느림, 2.2s 배치 마감(search.public-library-fanout-timeout — 마감을 바꾸면 함께 바꾼다). 경계 3개 × 10계열
+        "[library.batch]": 500ms,1s,2200ms
 
 logging:
   level:

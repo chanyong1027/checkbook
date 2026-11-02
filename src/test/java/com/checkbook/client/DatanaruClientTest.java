@@ -1,6 +1,7 @@
 package com.checkbook.client;
 
 import com.checkbook.client.datanaru.DatanaruClient;
+import com.checkbook.client.datanaru.DatanaruInvalidResponseException;
 import com.checkbook.client.datanaru.DatanaruProperties;
 import com.checkbook.client.datanaru.DatanaruResponseException;
 import com.checkbook.client.datanaru.dto.DatanaruBookExistResult;
@@ -58,6 +59,50 @@ class DatanaruClientTest {
         assertThat(result.libCode()).isEqualTo("111111");
         assertThat(result.hasBook()).isTrue();
         assertThat(result.loanAvailable()).isFalse();
+    }
+
+    private DatanaruClient clientReturning(String resultJson) throws Exception {
+        server = new MockWebServer();
+        server.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"response\":{\"result\":" + resultJson + "}}"));
+        server.start();
+        return new DatanaruClient(
+                RestClient.builder(),
+                new DatanaruProperties(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000),
+                new SimpleMeterRegistry(), ExternalCallBudget.unlimited());
+    }
+
+    @Test
+    void 소장_N이면_대출_값이_없어도_미소장이다() throws Exception {
+        DatanaruBookExistResult result = clientReturning("{\"hasBook\":\"N\"}").bookExist("9788936439743", "111111");
+
+        assertThat(result.hasBook()).isFalse();
+        assertThat(result.loanAvailable()).isFalse();
+    }
+
+    @Test
+    void 값의_대소문자와_앞뒤_공백은_무시한다() throws Exception {
+        DatanaruBookExistResult result = clientReturning("{\"hasBook\":\" y \",\"loanAvailable\":\"n\"}")
+                .bookExist("9788936439743", "111111");
+
+        assertThat(result.hasBook()).isTrue();
+        assertThat(result.loanAvailable()).isFalse();
+    }
+
+    @Test
+    void 소장_값이_없거나_Y_N이_아니면_미소장이_아니라_형식_오류다() throws Exception {
+        assertThatThrownBy(() -> clientReturning("{\"loanAvailable\":\"Y\"}").bookExist("9788936439743", "111111"))
+                .isInstanceOf(DatanaruInvalidResponseException.class);
+        server.shutdown();
+        assertThatThrownBy(() -> clientReturning("{\"hasBook\":\"\",\"loanAvailable\":\"N\"}").bookExist("9788936439743", "111111"))
+                .isInstanceOf(DatanaruInvalidResponseException.class);
+    }
+
+    @Test
+    void 소장_Y인데_대출_값이_없으면_형식_오류다() throws Exception {
+        assertThatThrownBy(() -> clientReturning("{\"hasBook\":\"Y\"}").bookExist("9788936439743", "111111"))
+                .isInstanceOf(DatanaruInvalidResponseException.class);
     }
 
     @Test
