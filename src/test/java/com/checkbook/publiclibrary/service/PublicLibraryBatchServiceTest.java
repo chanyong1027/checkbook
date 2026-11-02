@@ -9,9 +9,11 @@ import com.checkbook.publiclibrary.dto.LibraryState;
 import com.checkbook.publiclibrary.dto.PublicLibraryBatchItem;
 import com.checkbook.publiclibrary.dto.PublicLibraryBatchResponse;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
+import com.checkbook.publiclibrary.snapshot.domain.SnapshotFailureCause;
 import com.checkbook.publiclibrary.snapshot.domain.SnapshotSourceStatus;
 import com.checkbook.publiclibrary.snapshot.dto.LibraryAvailabilityResult;
 import com.checkbook.publiclibrary.snapshot.service.LibraryAvailabilitySnapshotService;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -54,6 +56,7 @@ class PublicLibraryBatchServiceTest {
 
     private ExecutorService executor;
     private PublicLibraryBatchService service;
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
 
     @BeforeEach
     void setUp() {
@@ -67,7 +70,7 @@ class PublicLibraryBatchServiceTest {
     }
 
     private PublicLibraryBatchService newService(ExecutorService pool, long timeoutMs) {
-        PublicLibraryBatchService created = new PublicLibraryBatchService(snapshotService, repository, pool);
+        PublicLibraryBatchService created = new PublicLibraryBatchService(snapshotService, repository, pool, meterRegistry);
         ReflectionTestUtils.setField(created, "pageSize", 5);
         ReflectionTestUtils.setField(created, "radiusKm", 10.0);
         ReflectionTestUtils.setField(created, "fanoutTimeoutMs", timeoutMs);
@@ -379,6 +382,56 @@ class PublicLibraryBatchServiceTest {
                 .containsOnly(LibraryCheckFailure.TIMEOUT);
         assertThat(response.stopReason()).isEqualTo(BatchStopReason.BATCH_DEADLINE);
         verifyNoInteractions(snapshotService);
+    }
+
+    @Test
+    void 실패_원인이_이유로_나가고_예산_소진이_서킷보다_먼저_중단_사유가_된다() {
+        when(repository.findWithinRadius(LAT, LON, 10.0)).thenReturn(libs(4));
+        when(snapshotService.getAvailability(eq(ISBN), anyString())).thenAnswer(inv -> {
+            String code = inv.getArgument(1);
+            return switch (code) {
+                case "L001" -> LibraryAvailabilityResult.failed(code, SnapshotFailureCause.CIRCUIT_OPEN);
+                case "L002" -> LibraryAvailabilityResult.failed(code, SnapshotFailureCause.DAILY_LIMIT);
+                case "L003" -> LibraryAvailabilityResult.failed(code, SnapshotFailureCause.INVALID_RESPONSE);
+                default -> new LibraryAvailabilityResult(code, true, true, SnapshotSourceStatus.SUCCESS);
+            };
+        });
+
+        PublicLibraryBatchResponse response = service.nearby(ISBN, LAT, LON, 0);
+
+        assertThat(response.items()).extracting(PublicLibraryBatchItem::reason).containsExactly(
+                LibraryCheckFailure.CIRCUIT_OPEN, LibraryCheckFailure.DAILY_LIMIT,
+                LibraryCheckFailure.INVALID_RESPONSE, null);
+        assertThat(response.stopReason()).isEqualTo(BatchStopReason.DAILY_LIMIT);
+    }
+
+    @Test
+    void 서킷만_열렸으면_CIRCUIT_OPEN으로_멈추고_형식_오류만이면_계속한다() {
+        when(repository.findWithinRadius(LAT, LON, 10.0)).thenReturn(libs(2));
+        when(snapshotService.getAvailability(eq(ISBN), eq("L001")))
+                .thenReturn(LibraryAvailabilityResult.failed("L001", SnapshotFailureCause.CIRCUIT_OPEN));
+        when(snapshotService.getAvailability(eq(ISBN), eq("L002")))
+                .thenReturn(new LibraryAvailabilityResult("L002", true, true, SnapshotSourceStatus.SUCCESS));
+        assertThat(service.nearby(ISBN, LAT, LON, 0).stopReason()).isEqualTo(BatchStopReason.CIRCUIT_OPEN);
+
+        when(snapshotService.getAvailability(eq(ISBN), eq("L001")))
+                .thenReturn(LibraryAvailabilityResult.failed("L001", SnapshotFailureCause.INVALID_RESPONSE));
+        assertThat(service.nearby(ISBN, LAT, LON, 0).stopReason()).isEqualTo(BatchStopReason.NONE);
+    }
+
+    @Test
+    void 배치_지연과_상태별_수를_센다() {
+        when(repository.findWithinRadius(LAT, LON, 10.0)).thenReturn(libs(2));
+        stubState(false, false);
+
+        service.nearby(ISBN, LAT, LON, 0);
+
+        assertThat(meterRegistry.get("library.batch").tag("mode", "NEARBY").tag("stop", "NONE").timer().count())
+                .isEqualTo(1);
+        assertThat(meterRegistry.get("library.batch.items").tag("state", "NOT_HELD").counter().count()).isEqualTo(2);
+        // 기동 때 미리 만든 계열은 0으로 있다
+        assertThat(meterRegistry.get("library.batch").tag("mode", "SAVED").tag("stop", "DAILY_LIMIT").timer().count())
+                .isZero();
     }
 
     // --- SAVED ---
