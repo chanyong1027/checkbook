@@ -339,6 +339,18 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   const elibAbort = useRef<AbortController | null>(null)
   const coldBookAbort = useRef<AbortController | null>(null)
 
+  // 전자도서관을 고르고 닫으면 칸이 다시 검색하며 시트를 연 버튼이 사라진다(스켈레톤으로 바뀜).
+  // 포커스가 body로 떨어지지 않게, 검색이 끝나 칸이 다시 그려진 뒤 칸 제목으로 옮긴다
+  const focusElibAfterConfirm = useRef(false)
+  useEffect(() => {
+    if (!focusElibAfterConfirm.current || sheetOpen || elibLoading) return
+    focusElibAfterConfirm.current = false
+    // 포커스를 잃었을 때만 되살린다 — 연 버튼이 남아 있거나 사용자가 이미 다른 곳으로 옮겼으면 그대로 둔다
+    const active = document.activeElement
+    if (active && active !== document.body) return
+    document.getElementById('elibrary-title')?.focus({ preventScroll: true })
+  }, [sheetOpen, elibLoading])
+
   // --- API calls with race guard ---
 
   function runSearch(lat?: number, lon?: number) {
@@ -516,6 +528,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   }
 
   function handleElibSheetConfirm(ids: number[]) {
+    focusElibAfterConfirm.current = true
     setSavedElibIds(ids)
     saveIds(ids)
     setSheetDirty(false)
@@ -616,21 +629,29 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
     return { value: '가격 정보 없음', tone: 'neutral' }
   }
 
+  // 카드 버튼 문구와 바깥 링크가 같은 조건을 보게 한 곳에서 정한다(링크가 없는데 '밀리에서 읽기'로 보이지 않게)
+  const resultReady = !searchLoading && !searchError
+  const millieUrl = resultReady && subSection?.status === 'SUCCESS' && searchResult?.subscription.millie.available
+    && isSafeUrl(searchResult.subscription.millie.detailUrl) ? searchResult.subscription.millie.detailUrl! : undefined
+  const yes24Url = resultReady && !newBookNotice && searchResult?.newBook && isSafeUrl(searchResult.newBook.productUrl)
+    ? searchResult.newBook.productUrl : undefined
+
   const summary: SummaryItem[] = [
     { href: '#library', label: '근처 도서관', ...librarySummary(),
       action: !useLocation && locationNeeded ? '주변 도서관 찾기' : '도서관 목록 보기',
       note: !useLocation && locationNeeded ? '위치 허용 후 가까운 순으로' : '대출 상태는 전날 자료 기준' },
     { href: '#elibrary', label: '전자도서관', ...elibSummary(),
-      action: hasSavedElibs ? '대출 목록 보기' : '전자도서관 고르기',
+      // 책 정보가 없으면 전자도서관을 검색할 수 없다 — 고르기 대신 그 이유가 있는 칸으로 안내
+      action: bookInfoNotice ? '전자도서관 안내 보기' : hasSavedElibs ? '대출 목록 보기' : '전자도서관 고르기',
       note: hasSavedElibs ? `내가 고른 ${savedElibIds.length}곳에서 확인` : '이용 중인 도서관을 선택하세요' },
     { href: '#subscription', label: '밀리의서재', ...subscriptionSummary(),
-      action: !searchLoading && !searchError && subSection?.status === 'SUCCESS' && searchResult?.subscription.millie.available ? '밀리에서 읽기' : '구독 정보 보기',
+      action: millieUrl ? '밀리에서 읽기' : '구독 정보 보기',
       note: '밀리의서재 구독 회원 이용',
-      externalUrl: !searchLoading && !searchError && subSection?.status === 'SUCCESS' && searchResult?.subscription.millie.available && isSafeUrl(searchResult.subscription.millie.detailUrl) ? searchResult.subscription.millie.detailUrl! : undefined },
+      externalUrl: millieUrl },
     { href: '#buy', label: '새 책 · 중고', ...newBookSummary(),
-      action: !searchLoading && !searchError && !newBookNotice && searchResult?.newBook && isSafeUrl(searchResult.newBook.productUrl) ? 'YES24에서 보기' : '구매 정보 보기',
+      action: yes24Url ? 'YES24에서 보기' : '구매 정보 보기',
       note: '새 책 가격 · 중고는 별도 확인',
-      externalUrl: !searchLoading && !searchError && !newBookNotice && searchResult?.newBook && isSafeUrl(searchResult.newBook.productUrl) ? searchResult.newBook.productUrl : undefined },
+      externalUrl: yes24Url },
   ]
 
   function handleSummaryNavigate(href: string) {
@@ -754,7 +775,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
             return (
               <li key={site.libraryId} className="rounded-xl border border-ink-100 p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <span className="text-body font-semibold text-ink-900">{site.libraryName}</span>
+                  <span className="min-w-0 text-body font-semibold text-ink-900">{site.libraryName}</span>
                   <StatusChip tone={status.tone}>{status.label}</StatusChip>
                 </div>
                 {site.books.length > 0 && (

@@ -186,6 +186,7 @@ export function BookSearchStep({ onSelect }: Props) {
 
   async function doSearch(q: string) {
     if (!q.trim()) return
+    setEmptyHint(false)
     dropSearchCache()
     currentQueryRef.current = q.trim()
     const requestId = ++searchRequestRef.current
@@ -493,7 +494,12 @@ export function BookSearchStep({ onSelect }: Props) {
             )}
 
             {isEnd && results.length > PAGE_SIZE && (
-              <p className="col-span-full text-center text-label text-ink-600 py-3">모든 결과를 불러왔어요</p>
+              <p className="col-span-full text-center text-label text-ink-600 py-3">
+                {/* 카카오는 전체 수(total_count)보다 적게 넘겨 볼 수 있다 — 끝났는데 남았으면 검색어를 좁히라고 안내 */}
+                {totalCount != null && totalCount > results.length
+                  ? '결과가 많아 여기까지 보여 드려요. 검색어를 더 자세히 입력해 보세요'
+                  : '모든 결과를 불러왔어요'}
+              </p>
             )}
           </div>
         )}

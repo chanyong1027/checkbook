@@ -115,8 +115,11 @@ export function BookPanel({ isbn13, book, bookNotice, summary, location, onReset
               (needsLocation ? 'bg-primary text-white px-3 hover:bg-primary-dark' : 'text-ink-900 hover:text-primary')
             return (
               <li key={item.href} className={`flex min-w-0 flex-col rounded-xl border p-3 md:p-4 ${TILE[item.tone]}`}>
-                <span className="text-label md:text-meta font-semibold text-ink-600">{item.label}</span>
+                {/* 화면 읽기는 값 안의 sr-only 이름으로 읽는다(두 번 읽히지 않게 보이는 이름은 숨김) */}
+                <span aria-hidden="true" className="text-label md:text-meta font-semibold text-ink-600">{item.label}</span>
                 <span aria-live="polite" className={`mt-1 flex items-center gap-1.5 text-body md:text-body-lg font-bold ${VALUE[item.tone]}`}>
+                  {/* 값이 바뀔 때 어느 칸인지 함께 읽히게(이름 없이 '확인 중', '16,650원'만 이어 읽히지 않도록) */}
+                  <span className="sr-only">{item.label}: </span>
                   {item.tone === 'loading' && <SpinnerIcon size={14} strokeWidth={2.2} />}
                   {item.value}
                 </span>
