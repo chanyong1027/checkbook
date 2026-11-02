@@ -14,6 +14,14 @@ import { toApiError } from './errors.ts'
 // import.meta.env는 Vite가 채운다. Vite 없이 도는 단위 테스트(node --test)에서는 없으므로 같은 출처('')로 둔다
 const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
 
+/**
+ * 서버로 보내는 좌표는 소수 셋째 자리(약 100m)로 줄인다. 반경 10km 탐색·가까운 매장에는 충분하고,
+ * 혹시 중간 경로(로그·CDN)에 남아도 집 주소 수준의 정밀 위치가 되지 않게 한다. 화면(지도의 내 위치)은 원래 값을 쓴다
+ */
+export function coarseCoordinate(value: number): number {
+  return Math.round(value * 1000) / 1000
+}
+
 function apiUrl(path: string): string {
   return `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
 }
@@ -98,8 +106,8 @@ export function getOffStores(
 ): Promise<OffStoreResponse> {
   const params = new URLSearchParams({
     isbn13,
-    lat: String(lat),
-    lon: String(lon),
+    lat: String(coarseCoordinate(lat)),
+    lon: String(coarseCoordinate(lon)),
   })
   return get(`/api/off-stores?${params}`, signal)
 }
@@ -126,8 +134,8 @@ export function getNearbyLibraryBatch(
   if ('referenceLibCode' in origin) {
     params.set('referenceLibCode', origin.referenceLibCode)
   } else {
-    params.set('lat', String(origin.lat))
-    params.set('lon', String(origin.lon))
+    params.set('lat', String(coarseCoordinate(origin.lat)))
+    params.set('lon', String(coarseCoordinate(origin.lon)))
   }
   return get(`/api/public-libraries/availability/batch?${params}`, signal)
 }

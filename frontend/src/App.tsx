@@ -209,6 +209,12 @@ function AppShell() {
           )}
         </div>
       </main>
+
+      <footer className="border-t border-ink-100" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <p className="mx-auto max-w-content px-4 md:px-6 py-5 text-caption text-ink-500">
+          © 2026 CheckBook · <a href="mailto:chanyong0257@gmail.com" className="hover:text-ink-700 hover:underline underline-offset-2">chanyong0257@gmail.com</a>
+        </p>
+      </footer>
     </div>
   )
 }
