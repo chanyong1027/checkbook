@@ -1,6 +1,7 @@
 package com.checkbook.publiclibrary.snapshot.service;
 
 import com.checkbook.client.datanaru.DatanaruClient;
+import com.checkbook.client.datanaru.DatanaruInvalidResponseException;
 import com.checkbook.client.datanaru.dto.DatanaruBookExistResult;
 import com.checkbook.common.ratelimit.DailyBudgetExceededException;
 import com.checkbook.common.ratelimit.ExternalProvider;
@@ -117,5 +118,20 @@ class LibraryAvailabilitySnapshotCircuitBreakerIT extends PostgresIntegrationTes
                 .isEqualTo(Duration.ofHours(LibraryAvailabilitySnapshotPersister.TTL_HOURS));
         assertThat(repository.count()).isEqualTo(1);
         verify(datanaruClient, times(1)).bookExist(ISBN, LIB_CODE);
+    }
+
+    @Test
+    void 형식_오류는_연달아_나도_서킷을_열지_않는다() {
+        // 응답은 온 것이라 정보나루 장애가 아니다(DatanaruResponseException 하위 — 무시 목록)
+        when(datanaruClient.bookExist(ISBN, LIB_CODE))
+                .thenThrow(new DatanaruInvalidResponseException("소장 값 형식 오류"));
+
+        for (int i = 0; i < 10; i++) {
+            snapshotService.getAvailability(ISBN, LIB_CODE);
+        }
+
+        assertThat(circuitBreakerRegistry.circuitBreaker("datanaru").getState())
+                .isEqualTo(CircuitBreaker.State.CLOSED);
+        verify(datanaruClient, times(10)).bookExist(ISBN, LIB_CODE);
     }
 }

@@ -15,6 +15,9 @@ import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.EnumMap;
+import java.util.Map;
+
 @Slf4j
 @Component
 public class LibraryAvailabilitySnapshotRefresher {
@@ -27,6 +30,7 @@ public class LibraryAvailabilitySnapshotRefresher {
     private final CircuitBreaker circuitBreaker;
     private final Counter persistSuccess;
     private final Counter persistFailure;
+    private final Map<SnapshotFailureCause, Counter> failureCounters;
 
     public LibraryAvailabilitySnapshotRefresher(DatanaruClient datanaruClient, LibraryAvailabilitySnapshotPersister persister,
                                                 CircuitBreakerRegistry circuitBreakerRegistry, MeterRegistry meterRegistry) {
@@ -36,6 +40,11 @@ public class LibraryAvailabilitySnapshotRefresher {
         // 기동 때 0으로 미리 만든다. 실패 순간에 처음 생기면 첫 값이 1이라 increase()가 그 실패를 못 센다
         this.persistSuccess = meterRegistry.counter("library.snapshot.persist", "result", "success");
         this.persistFailure = meterRegistry.counter("library.snapshot.persist", "result", "failure");
+        // 실패 원인별 수. 형식 오류는 서킷도 열지 않고 캐시도 하지 않아 같은 호출이 반복될 수 있어, 여기서 보이게 한다
+        this.failureCounters = new EnumMap<>(SnapshotFailureCause.class);
+        for (SnapshotFailureCause cause : SnapshotFailureCause.values()) {
+            failureCounters.put(cause, meterRegistry.counter("library.snapshot.refresh.failure", "cause", cause.name()));
+        }
     }
 
     /**
@@ -56,7 +65,9 @@ public class LibraryAvailabilitySnapshotRefresher {
             // YES24·밀리 서킷도 열리면 바로 실패로 보고한다(D7-0 결정 카드 1). 서킷 열림·예산 소진·호출 실패 모두 여기로 온다.
             // fan-out이 예외를 건너뜀으로 받긴 하지만, 서킷이 열렸을 때 도서관마다 스택 트레이스가 찍히지 않게 한 줄로 남긴다
             log.warn("정보나루 조회 실패 — 이 도서관은 건너뜀: isbn13={}, libCode={}, cause={}", isbn13, libCode, e.toString());
-            return LibraryAvailabilityResult.failed(libCode, causeOf(e));
+            SnapshotFailureCause cause = causeOf(e);
+            failureCounters.get(cause).increment();
+            return LibraryAvailabilityResult.failed(libCode, cause);
         }
         save(isbn13, libCode, apiResult);
         return new LibraryAvailabilityResult(
@@ -67,7 +78,11 @@ public class LibraryAvailabilitySnapshotRefresher {
         );
     }
 
-    /** 실패 원인을 나눠 배치 응답이 "확인 못 함"의 이유와 자동 탐색 중단을 정하게 한다. */
+    /**
+     * 실패 원인을 나눠 배치 응답이 "확인 못 함"의 이유와 자동 탐색 중단을 정하게 한다.
+     * 반열림(시험 호출 3건)에서 넘친 호출도 CallNotPermittedException이라 CIRCUIT_OPEN이 된다 — 회복 중 자동 탐색이
+     * 한 번 멈출 수 있지만 사용자가 더보기로 이어 찾을 수 있어 받아들인다
+     */
     private static SnapshotFailureCause causeOf(RuntimeException e) {
         if (e instanceof CallNotPermittedException) {
             return SnapshotFailureCause.CIRCUIT_OPEN;

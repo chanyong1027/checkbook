@@ -101,7 +101,7 @@ class LibraryAvailabilitySnapshotRefresherTest {
     }
 
     @Test
-    void 하루_예산_소진은_DAILY_LIMIT이고_서킷은_실패로_세지_않는다() {
+    void 하루_예산_소진은_DAILY_LIMIT이고_저장하지_않는다() {
         when(datanaruClient.bookExist(ISBN, LIB_CODE))
                 .thenThrow(new DailyBudgetExceededException(ExternalProvider.DATANARU, Duration.ofHours(1)));
 
@@ -119,6 +119,8 @@ class LibraryAvailabilitySnapshotRefresherTest {
 
         assertThat(result).isEqualTo(LibraryAvailabilityResult.failed(LIB_CODE, SnapshotFailureCause.INVALID_RESPONSE));
         verifyNoInteractions(persister);
+        assertThat(meterRegistry.get("library.snapshot.refresh.failure").tag("cause", "INVALID_RESPONSE").counter().count())
+                .isEqualTo(1);
     }
 
     @Test

@@ -251,6 +251,9 @@ public class PublicLibraryBatchService {
 
     /** 지표: 배치 지연(모드·중단 사유별)과 기관 상태별 수. ISBN·기관 코드·좌표는 태그로 쓰지 않는다(카디널리티). */
     private void record(Mode mode, List<PublicLibraryBatchItem> items, BatchStopReason stopReason, long startNanos) {
+        if (items.isEmpty()) {
+            return; // 후보를 넘긴 offset 등 빈 구간은 조회가 없어 지연 분포를 흐리지 않게 뺀다
+        }
         batchTimers.get(mode).get(stopReason).record(System.nanoTime() - startNanos, TimeUnit.NANOSECONDS);
         for (PublicLibraryBatchItem item : items) {
             stateCounters.get(item.state()).increment();
