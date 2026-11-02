@@ -127,6 +127,32 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   const elibAbort = useRef<AbortController | null>(null)
   const coldBookAbort = useRef<AbortController | null>(null)
 
+  // 설정에서 전자도서관을 바꿔 저장하면 칸이 다시 검색하며 시트를 연 버튼이 사라진다(스켈레톤으로 바뀜).
+  // 포커스가 body로 떨어지지 않게, 검색이 끝나 칸이 다시 그려진 뒤 칸 제목으로 옮긴다
+  const prevElibKey = useRef(savedElibKey)
+  // 'waiting': 저장으로 목록이 바뀜 → 'loading': 다시 검색 시작을 봄 → 끝나면 포커스. 바뀐 그 렌더에서는 아직
+  // 로딩 전이라 바로 옮기면 곧 스켈레톤으로 바뀌며 다시 잃는다
+  const elibFocusStage = useRef<'idle' | 'waiting' | 'loading'>('idle')
+  useEffect(() => {
+    if (prevElibKey.current !== savedElibKey) {
+      prevElibKey.current = savedElibKey
+      elibFocusStage.current = 'waiting'
+    }
+    if (elibFocusStage.current === 'idle') return
+    if (elibLoading) {
+      elibFocusStage.current = 'loading'
+      return
+    }
+    // 빈 목록(검색 없음)이면 기다릴 로딩이 없다 — 바로 옮긴다
+    if (elibFocusStage.current === 'waiting' && savedElibIds.length > 0) return
+    elibFocusStage.current = 'idle'
+    // 포커스를 잃었을 때만 되살린다 — 사용자가 이미 다른 곳으로 옮겼으면 그대로 둔다
+    const active = document.activeElement
+    if (active && active !== document.body) return
+    document.getElementById('elibrary-title')?.focus({ preventScroll: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elibLoading, savedElibKey])
+
   // --- API calls with race guard ---
 
   function runSearch(lat?: number, lon?: number) {
@@ -347,6 +373,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
 
   function elibSummary(): Pick<SummaryItem, 'value' | 'tone'> {
     if (!displayBook) return bookInfoNotice ? { value: '확인 불가', tone: 'neutral' } : loadingItem
+    if (pendingELibraryIds) return { value: '다시 고르기', tone: 'neutral' }
     if (!hasSavedElibs) return { value: '설정 필요', tone: 'neutral' }
     if (elibError) return failedItem
     if (elibLoading || !elibResult) return loadingItem
@@ -390,8 +417,9 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
       note: !useLocation && locationNeeded ? '위치 허용 후 가까운 순으로' : '대출 상태는 전날 자료 기준' },
     { href: '#elibrary', label: '전자도서관', ...elibSummary(),
       // 책 정보가 없으면 전자도서관을 검색할 수 없다 — 고르기 대신 그 이유가 있는 칸으로 안내
-      action: bookInfoNotice ? '전자도서관 안내 보기' : hasSavedElibs ? '대출 목록 보기' : '전자도서관 고르기',
-      note: hasSavedElibs ? `내가 고른 ${savedElibIds.length}곳에서 확인` : '이용 중인 도서관을 선택하세요' },
+      action: bookInfoNotice ? '전자도서관 안내 보기' : pendingELibraryIds ? '5곳 고르기' : hasSavedElibs ? '대출 목록 보기' : '전자도서관 고르기',
+      note: pendingELibraryIds ? '이제 5곳까지 — 예전 선택에서 남길 곳을 골라 주세요'
+        : hasSavedElibs ? `내가 고른 ${savedElibIds.length}곳에서 확인` : '이용 중인 도서관을 선택하세요' },
     { href: '#subscription', label: '밀리의서재', ...subscriptionSummary(),
       action: millieUrl ? '밀리에서 읽기' : '구독 정보 보기',
       note: '밀리의서재 구독 회원 이용',

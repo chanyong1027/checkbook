@@ -43,10 +43,11 @@ export function MyLibrarySettingsSheet({
 
   // 원하는 칸으로 스크롤(상세 화면의 '전자도서관 고르기'에서 열 때)
   useEffect(() => {
-    if (!open || section !== 'elibrary') return
+    // 옛 선택을 줄여야 저장되는 상태면 어디서 열었든 전자도서관 칸을 먼저 보여 준다
+    if (!open || (section !== 'elibrary' && !pendingELibraryIds)) return
     const timer = setTimeout(() => document.getElementById('settings-elibrary')?.scrollIntoView({ block: 'start' }), 0)
     return () => clearTimeout(timer)
-  }, [open, section])
+  }, [open, section, pendingELibraryIds])
 
   const baseline = pendingELibraryIds ? { ...preferences, eLibraryIds: pendingELibraryIds } : preferences
   const dirty = !sameJson(draft, baseline)
@@ -81,7 +82,11 @@ export function MyLibrarySettingsSheet({
 
         <p className="text-caption text-ink-600 mb-3">이 브라우저에만 저장돼요. 다른 기기와는 동기화되지 않아요.</p>
 
-        <div className="flex gap-2 sticky bottom-0 bg-white pt-2">
+        {eLibraryOverLimit && (
+          <p className="text-label text-status-danger mb-2">전자도서관을 {MAX_ELIBRARIES}곳 이하로 줄여야 저장할 수 있어요</p>
+        )}
+        {/* 스크롤 중에도 버튼이 보이게. 아래 여백은 iOS 홈 인디케이터를 피한다 */}
+        <div className="flex gap-2 sticky bottom-0 bg-white pt-2" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
           <button
             type="button"
             onClick={requestClose}

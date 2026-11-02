@@ -30,6 +30,8 @@ export function PublicLibraryPicker({
   const [hasNext, setHasNext] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** 지금 결과가 어느 검색어의 것인지. 입력 직후(디바운스 중)에 "없음"을 잘못 보이지 않고, 더 보기가 옛 검색어를 쓰지 않게 */
+  const [searchedQuery, setSearchedQuery] = useState('')
   const abortRef = useRef<AbortController | null>(null)
 
   function load(query: string, nextPage: number) {
@@ -41,7 +43,12 @@ export function PublicLibraryPicker({
     searchPublicLibraries(query, nextPage, PAGE_SIZE, controller.signal)
       .then(res => {
         if (abortRef.current !== controller) return
-        setResults(prev => (nextPage === 0 ? res.items : [...prev, ...res.items]))
+        setResults(prev => {
+          if (nextPage === 0) return res.items
+          const seen = new Set(prev.map(item => item.libCode))
+          return [...prev, ...res.items.filter(item => !seen.has(item.libCode))]
+        })
+        setSearchedQuery(query)
         setPage(nextPage)
         setHasNext(res.hasNext)
       })
@@ -58,6 +65,11 @@ export function PublicLibraryPicker({
   // 입력이 멈추면 검색한다(글자마다 요청하지 않게)
   useEffect(() => {
     const query = keyword.trim()
+    // 검색어가 바뀌면 진행 중인 요청(더 보기 포함)을 끊고 옛 검색어의 더 보기를 감춘다
+    abortRef.current?.abort()
+    setHasNext(false)
+    setLoading(false)
+    setError(null)
     if (!query) {
       abortRef.current?.abort()
       setResults([])
@@ -139,7 +151,7 @@ export function PublicLibraryPicker({
 
       {keyword.trim() && (
         <div className="max-h-64 overflow-y-auto scrollbar-thin bg-white rounded-2xl border border-ink-100 p-1" aria-busy={loading}>
-          {!loading && !error && results.length === 0 && (
+          {!loading && !error && results.length === 0 && searchedQuery === keyword.trim() && (
             <p className="text-meta text-ink-600 text-center py-4">맞는 도서관이 없어요</p>
           )}
           {results.map(item => {
@@ -181,10 +193,10 @@ export function PublicLibraryPicker({
               <SpinnerIcon size={20} strokeWidth={2.2} className="text-ink-400" />
             </div>
           )}
-          {!loading && hasNext && (
+          {!loading && hasNext && searchedQuery === keyword.trim() && (
             <button
               type="button"
-              onClick={() => load(keyword.trim(), page + 1)}
+              onClick={() => load(searchedQuery, page + 1)}
               className="w-full min-h-11 text-meta font-semibold text-primary hover:underline cursor-pointer"
             >
               더 보기
