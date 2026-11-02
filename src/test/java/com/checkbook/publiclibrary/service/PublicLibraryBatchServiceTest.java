@@ -137,6 +137,8 @@ class PublicLibraryBatchServiceTest {
         assertThat(response.items()).isEmpty();
         assertThat(response.nextOffset()).isNull();
         verifyNoInteractions(snapshotService);
+        // 조회가 없는 빈 구간은 지연 분포에 넣지 않는다
+        assertThat(meterRegistry.get("library.batch").tag("mode", "NEARBY").tag("stop", "NONE").timer().count()).isZero();
     }
 
     @Test
