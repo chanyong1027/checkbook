@@ -1,9 +1,13 @@
 package com.checkbook.publiclibrary.snapshot.service;
 
 import com.checkbook.client.datanaru.DatanaruClient;
+import com.checkbook.client.datanaru.DatanaruInvalidResponseException;
 import com.checkbook.client.datanaru.dto.DatanaruBookExistResult;
+import com.checkbook.common.ratelimit.DailyBudgetExceededException;
+import com.checkbook.publiclibrary.snapshot.domain.SnapshotFailureCause;
 import com.checkbook.publiclibrary.snapshot.domain.SnapshotSourceStatus;
 import com.checkbook.publiclibrary.snapshot.dto.LibraryAvailabilityResult;
+import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.micrometer.core.instrument.Counter;
@@ -52,7 +56,7 @@ public class LibraryAvailabilitySnapshotRefresher {
             // YES24·밀리 서킷도 열리면 바로 실패로 보고한다(D7-0 결정 카드 1). 서킷 열림·예산 소진·호출 실패 모두 여기로 온다.
             // fan-out이 예외를 건너뜀으로 받긴 하지만, 서킷이 열렸을 때 도서관마다 스택 트레이스가 찍히지 않게 한 줄로 남긴다
             log.warn("정보나루 조회 실패 — 이 도서관은 건너뜀: isbn13={}, libCode={}, cause={}", isbn13, libCode, e.toString());
-            return LibraryAvailabilityResult.failed(libCode);
+            return LibraryAvailabilityResult.failed(libCode, causeOf(e));
         }
         save(isbn13, libCode, apiResult);
         return new LibraryAvailabilityResult(
@@ -61,6 +65,20 @@ public class LibraryAvailabilitySnapshotRefresher {
                 apiResult.loanAvailable(),
                 SnapshotSourceStatus.SUCCESS
         );
+    }
+
+    /** 실패 원인을 나눠 배치 응답이 "확인 못 함"의 이유와 자동 탐색 중단을 정하게 한다. */
+    private static SnapshotFailureCause causeOf(RuntimeException e) {
+        if (e instanceof CallNotPermittedException) {
+            return SnapshotFailureCause.CIRCUIT_OPEN;
+        }
+        if (e instanceof DailyBudgetExceededException) {
+            return SnapshotFailureCause.DAILY_LIMIT;
+        }
+        if (e instanceof DatanaruInvalidResponseException) {
+            return SnapshotFailureCause.INVALID_RESPONSE;
+        }
+        return SnapshotFailureCause.UPSTREAM_ERROR;
     }
 
     /**
