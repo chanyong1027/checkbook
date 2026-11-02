@@ -72,6 +72,8 @@ export function LibraryMap({
   selectedCode,
   onSelect,
   onReadyChange,
+  panRequest = 0,
+  viewKey = '',
 }: {
   points: MapPoint[]
   origin: { lat: number; lng: number; label: string } | null
@@ -79,6 +81,10 @@ export function LibraryMap({
   onSelect: (code: string) => void
   /** 지도가 실제로 보일 준비가 됐는지(목록의 '지도에서 보기'를 달지 정함) */
   onReadyChange?: (ready: boolean) => void
+  /** '지도에서 보기'를 누를 때마다 올라간다 — 같은 도서관을 다시 눌러도 그리로 옮기게 */
+  panRequest?: number
+  /** 탐색 기준이 바뀌면 달라진다 — 사용자가 옮긴 상태를 지우고 새 결과에 다시 맞춘다 */
+  viewKey?: string
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<KakaoMap | null>(null)
@@ -143,6 +149,14 @@ export function LibraryMap({
     const bounds = new api.LatLngBounds()
     all.forEach(p => bounds.extend(new api.LatLng(p.lat, p.lng)))
     map.setBounds(bounds, 40, 40, 40, 40)
+  }
+
+  // 기준이 바뀌면(내 위치 ↔ 기준 도서관) 사용자가 옮긴 상태를 지운다 — 아래 마커 효과보다 먼저 돌아야 새 결과에 맞춘다
+  const viewKeyRef = useRef(viewKey)
+  if (viewKeyRef.current !== viewKey) {
+    viewKeyRef.current = viewKey
+    userMovedRef.current = false
+    fittedKeyRef.current = null
   }
 
   // 마커를 libCode로 맞춘다: 새로 온 것만 더하고, 빠진 것은 지우고, 선택 표시는 다시 그린다
@@ -213,7 +227,7 @@ export function LibraryMap({
     const point = points.find(p => p.code === selectedCode)
     if (point) map.panTo(new api.LatLng(point.lat, point.lng))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCode, status])
+  }, [selectedCode, status, panRequest])
 
   // 펼침·화면 크기 변경 뒤에는 지도 크기를 다시 계산해야 타일이 비지 않는다
   useEffect(() => {

@@ -183,6 +183,8 @@ function MapPanel({
   selectedCode,
   onSelect,
   onOpenChange,
+  panRequest,
+  viewKey,
 }: {
   items: PublicLibraryBatchItem[]
   origin: { lat: number; lng: number; label: string } | null
@@ -190,6 +192,8 @@ function MapPanel({
   onSelect: (code: string) => void
   /** 지도가 보이면 지도에 찍힌 기관 코드, 안 보이면 null */
   onOpenChange: (mappedCodes: string[] | null) => void
+  panRequest: number
+  viewKey: string
 }) {
   const [open, setOpen] = useState(() =>
     typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(DESKTOP_QUERY).matches)
@@ -214,7 +218,15 @@ function MapPanel({
         {open ? '지도 접기' : '지도 보기'}
       </button>
       {open && (
-        <LibraryMap points={points} origin={origin} selectedCode={selectedCode} onSelect={onSelect} onReadyChange={setMapReady} />
+        <LibraryMap
+          points={points}
+          origin={origin}
+          selectedCode={selectedCode}
+          onSelect={onSelect}
+          onReadyChange={setMapReady}
+          panRequest={panRequest}
+          viewKey={viewKey}
+        />
       )}
     </div>
   )
@@ -279,7 +291,15 @@ export function LibrarySection({
     setSelectedCode(code)
     document.getElementById(`library-row-${code}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }
-  const selection: RowSelection = { selectedCode, onShowOnMap: mappedCodes ? setSelectedCode : undefined, mappedCodes }
+  // 같은 도서관을 다시 눌러도 지도가 그리로 옮기게, 선택과 따로 '옮겨 달라'는 요청 번호를 둔다
+  const [panRequest, setPanRequest] = useState(0)
+  function showOnMap(code: string) {
+    setSelectedCode(code)
+    setPanRequest(n => n + 1)
+  }
+  const selection: RowSelection = { selectedCode, onShowOnMap: mappedCodes ? showOnMap : undefined, mappedCodes }
+  // 주변 탐색 기준(내 위치·기준 도서관). 바뀌면 지도의 사용자 조작 상태를 지워 새 결과에 맞추게 한다
+  const viewKey = !origin ? '' : 'referenceLibCode' in origin ? `ref:${origin.referenceLibCode}` : `gps:${origin.lat},${origin.lon}`
   const mapItems = mode === 'saved' ? savedLookup.items ?? [] : nearby.state.found
   const mapOrigin = mode === 'nearby' && originIsGps && origin && !('referenceLibCode' in origin)
     ? { lat: origin.lat, lng: origin.lon, label: '내 위치' }
@@ -329,7 +349,8 @@ export function LibrarySection({
 
       {(mode === 'saved' || origin) && (
         // 책·모드가 바뀌면 지도를 새로 그린다(사용자가 옮긴 상태를 넘기지 않게, SDK는 이미 받은 것을 쓴다)
-        <MapPanel key={`${mode}|${isbn13}`} items={mapItems} origin={mapOrigin} selectedCode={selectedCode} onSelect={selectFromMap} onOpenChange={setMappedCodes} />
+        <MapPanel key={`${mode}|${isbn13}`} items={mapItems} origin={mapOrigin} selectedCode={selectedCode} onSelect={selectFromMap} onOpenChange={setMappedCodes}
+          panRequest={panRequest} viewKey={viewKey} />
       )}
 
       {mode === 'saved' ? (
