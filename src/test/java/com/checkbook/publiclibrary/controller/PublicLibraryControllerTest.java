@@ -109,7 +109,8 @@ class PublicLibraryControllerTest {
             "mode=SAVED&libraryCodes=,,",
             // 형식 오류
             "mode=NEARBY&lat=37.5&lon=127.0&offset=-1",
-            "mode=WHATEVER&lat=37.5&lon=127.0"
+            "mode=WHATEVER&lat=37.5&lon=127.0",
+            "mode=nearby&lat=37.5&lon=127.0"
     })
     void 조합이_틀리면_400이고_조회하지_않는다(String query) throws Exception {
         mockMvc.perform(get(BATCH + "?isbn13=" + ISBN + "&" + query))

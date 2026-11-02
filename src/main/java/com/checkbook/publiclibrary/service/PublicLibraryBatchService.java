@@ -127,7 +127,7 @@ public class PublicLibraryBatchService {
                         publicLibraryExecutor))
                 .toList();
 
-        // 마감은 요청 진입부터 잰다 — 후보 선정·큐 대기도 사용자가 기다리는 시간이다
+        // 마감은 서비스 진입부터 잰다 — 후보 선정·큐 대기도 사용자가 기다리는 시간이다
         long remainingNanos = TimeUnit.MILLISECONDS.toNanos(fanoutTimeoutMs) - (System.nanoTime() - startNanos);
         try {
             CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
@@ -140,6 +140,10 @@ public class PublicLibraryBatchService {
             // 개별 실패는 아래에서 기관별로 읽는다(allOf는 하나만 실패해도 예외로 끝난다)
         }
 
+        // 아직 큐에서 시작하지 않은 작업은 취소해 정보나루를 부르지 않게 한다(시작 전 결과가 정해지면
+        // supplyAsync는 supplier를 실행하지 않는다). 이미 시작한 호출은 멈추지 않는다 — cancel은 인터럽트하지 않음
+        futures.forEach(future -> future.cancel(false));
+
         List<PublicLibraryBatchItem> items = new ArrayList<>(targets.size());
         boolean anyRejected = false;
         boolean anyUnfinished = false;
@@ -148,8 +152,8 @@ public class PublicLibraryBatchService {
             CompletableFuture<LibraryAvailabilityResult> future = futures.get(i);
             LibraryState state;
             LibraryCheckFailure reason = null;
-            if (!future.isDone()) {
-                // 이미 시작된 호출은 멈추지 않는다(cancel이 인터럽트하지 않음). 결과만 버린다
+            if (future.isCancelled()) {
+                // 마감까지 못 끝난 작업(시작 전이면 호출도 안 했고, 시작했으면 결과만 버린다)
                 anyUnfinished = true;
                 state = LibraryState.UNKNOWN;
                 reason = LibraryCheckFailure.TIMEOUT;

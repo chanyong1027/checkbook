@@ -29,6 +29,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -265,6 +266,73 @@ class PublicLibraryBatchServiceTest {
         }
     }
 
+    @Test
+    void 조회가_예외를_던지면_UPSTREAM_ERROR이고_탐색은_계속한다() {
+        when(repository.findWithinRadius(LAT, LON, 10.0)).thenReturn(libs(6));
+        when(snapshotService.getAvailability(eq(ISBN), anyString())).thenAnswer(inv -> {
+            String code = inv.getArgument(1);
+            if ("L001".equals(code)) {
+                throw new IllegalStateException("스냅샷 읽기 실패");
+            }
+            return new LibraryAvailabilityResult(code, true, true, SnapshotSourceStatus.SUCCESS);
+        });
+
+        PublicLibraryBatchResponse response = service.nearby(ISBN, LAT, LON, 0);
+
+        assertThat(response.items().get(0).state()).isEqualTo(LibraryState.UNKNOWN);
+        assertThat(response.items().get(0).reason()).isEqualTo(LibraryCheckFailure.UPSTREAM_ERROR);
+        assertThat(response.stopReason()).isEqualTo(BatchStopReason.NONE);
+    }
+
+    @Test
+    void 마감_뒤_큐에서_아직_시작하지_않은_작업은_정보나루를_부르지_않는다() throws Exception {
+        // 스레드 1개 + 큐: 첫 작업이 마감을 넘기면 큐의 나머지 4곳은 시작 전에 취소된다
+        ExecutorService single = Executors.newSingleThreadExecutor();
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicInteger calls = new AtomicInteger();
+        when(repository.findWithinRadius(LAT, LON, 10.0)).thenReturn(libs(5));
+        when(snapshotService.getAvailability(eq(ISBN), anyString())).thenAnswer(inv -> {
+            calls.incrementAndGet();
+            release.await(5, TimeUnit.SECONDS);
+            return new LibraryAvailabilityResult(inv.getArgument(1), true, true, SnapshotSourceStatus.SUCCESS);
+        });
+
+        try {
+            PublicLibraryBatchResponse response = newService(single, 100L).nearby(ISBN, LAT, LON, 0);
+            release.countDown();
+            single.shutdown();
+            assertThat(single.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
+
+            assertThat(calls.get()).isEqualTo(1);
+            assertThat(response.items()).allSatisfy(item ->
+                    assertThat(item.reason()).isEqualTo(LibraryCheckFailure.TIMEOUT));
+            assertThat(response.stopReason()).isEqualTo(BatchStopReason.BATCH_DEADLINE);
+        } finally {
+            release.countDown();
+            single.shutdownNow();
+        }
+    }
+
+    @Test
+    void 남은_시간이_없으면_기다리지_않고_끝나지_않은_기관은_TIMEOUT이다() throws Exception {
+        CountDownLatch release = new CountDownLatch(1);
+        when(repository.findWithinRadius(LAT, LON, 10.0)).thenReturn(libs(2));
+        when(snapshotService.getAvailability(eq(ISBN), anyString())).thenAnswer(inv -> {
+            release.await(5, TimeUnit.SECONDS);
+            return new LibraryAvailabilityResult(inv.getArgument(1), true, true, SnapshotSourceStatus.SUCCESS);
+        });
+
+        try {
+            PublicLibraryBatchResponse response = newService(executor, 0L).nearby(ISBN, LAT, LON, 0);
+
+            assertThat(response.items()).extracting(PublicLibraryBatchItem::reason)
+                    .containsOnly(LibraryCheckFailure.TIMEOUT);
+            assertThat(response.stopReason()).isEqualTo(BatchStopReason.BATCH_DEADLINE);
+        } finally {
+            release.countDown();
+        }
+    }
+
     // --- SAVED ---
 
     @Test
@@ -289,6 +357,17 @@ class PublicLibraryBatchServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.PUBLIC_LIBRARY_CODES_LIMIT_EXCEEDED);
         verifyNoInteractions(snapshotService);
+    }
+
+    @Test
+    void 저장_모드는_중복을_뺀_뒤_5곳이면_조회한다() {
+        when(repository.findByLibCodeIn(anyCollection())).thenReturn(libs(5));
+        stubState(true, true);
+
+        PublicLibraryBatchResponse response = service.saved(ISBN,
+                List.of("L001", "L002", "L003", "L004", "L005", "L001"));
+
+        assertThat(response.items()).hasSize(5);
     }
 
     @Test
