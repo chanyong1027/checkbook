@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { PublicLibraryBatchItem } from '../../types'
 import { usePreferences } from '../../preferences/PreferencesContext'
 import { isSafeUrl } from '../../utils/url'
@@ -101,11 +101,14 @@ function UnknownList({
   items,
   distanceFrom,
   retrying,
+  disabled,
   onRetry,
 }: {
   items: PublicLibraryBatchItem[]
   distanceFrom: string | null
   retrying: boolean
+  /** 탐색 중에는 끈다 — 탐색 결과가 다시 확인 결과를 덮어쓰지 않게 */
+  disabled: boolean
   onRetry: () => void
 }) {
   if (items.length === 0) return null
@@ -119,7 +122,7 @@ function UnknownList({
       <button
         type="button"
         onClick={onRetry}
-        disabled={retrying}
+        disabled={retrying || disabled}
         className="mt-1 inline-flex items-center gap-1.5 min-h-10 px-2 -ml-2 text-meta font-semibold text-primary hover:text-primary-dark disabled:opacity-50 cursor-pointer"
       >
         {retrying ? <SpinnerIcon size={14} strokeWidth={2.2} /> : <RefreshIcon size={14} strokeWidth={2} />}
@@ -189,6 +192,11 @@ export function LibrarySection({
           items.filter(i => i.state === 'UNKNOWN').length, '내 도서관엔 없음')
   } else if (!origin) {
     summary = { value: '위치 필요', tone: 'neutral' }
+  } else if (nearby.state.seen.length === 0) {
+    // 아직 하나도 확인하지 못했으면 '없음'으로 단정하지 않는다
+    summary = nearby.error ? { value: '불러오지 못함', tone: 'warn' }
+      : nearby.stop === 'USER' ? { value: '확인 전', tone: 'neutral' }
+      : { value: '찾는 중', tone: 'loading' }
   } else if (nearby.running && nearby.state.found.length === 0) {
     summary = { value: '찾는 중', tone: 'loading' }
   } else {
@@ -306,23 +314,34 @@ function NearbyBody({
   explorer: ReturnType<typeof useNearbyExplorer>
   distanceFrom: string | null
 }) {
-  const { state, running, stop, error, retrying } = explorer
+  const { state, running, stop, error, fatal, retrying } = explorer
   const checked = state.seen.length
   const message = error ?? stopMessage(stop)
-  const canMore = !running && state.nextOffset != null && stop !== 'DAILY_LIMIT'
+  const canMore = !running && state.nextOffset != null && stop !== 'DAILY_LIMIT' && !fatal
+  const statusRef = useRef<HTMLDivElement>(null)
+
+  function stopSearching() {
+    explorer.stopNow()
+    // 누른 버튼이 사라질 수 있어 포커스를 상태 문구로 옮긴다
+    statusRef.current?.focus()
+  }
 
   return (
     <div>
-      <p className="mb-2 text-meta text-ink-600" role="status" aria-live="polite">
-        {running ? (
-          <span className="inline-flex items-center gap-2">
-            <SpinnerIcon size={14} strokeWidth={2.2} />
-            가까운 순으로 {checked}곳 확인 중{state.found.length > 0 ? ` · 소장 ${state.found.length}곳` : ''}
-          </span>
-        ) : checked > 0 ? (
-          <>가까운 {checked}곳 확인 · <span className="font-bold text-ink-900">소장 {state.found.length}곳</span></>
-        ) : null}
-      </p>
+      <div ref={statusRef} tabIndex={-1} role="status" aria-live="polite" className="mb-2 text-meta text-ink-600 focus:outline-none">
+        <p>
+          {running ? (
+            <span className="inline-flex items-center gap-2">
+              <SpinnerIcon size={14} strokeWidth={2.2} />
+              가까운 순으로 {checked}곳 확인 중{state.found.length > 0 ? ` · 소장 ${state.found.length}곳` : ''}
+            </span>
+          ) : checked > 0 ? (
+            <>가까운 {checked}곳 확인 · <span className="font-bold text-ink-900">소장 {state.found.length}곳</span></>
+          ) : null}
+        </p>
+        {/* 멈춘 이유도 같은 알림 영역에 둬 화면 낭독기가 읽게 한다 */}
+        {message && <p className={`mt-1 ${error ? 'text-status-danger' : 'text-ink-700'}`}>{message}</p>}
+      </div>
 
       {state.found.length > 0 && <LibraryRows items={state.found} distanceFrom={distanceFrom} />}
 
@@ -334,14 +353,12 @@ function NearbyBody({
         </p>
       )}
 
-      {message && <p role={error ? 'alert' : undefined} className="mt-2 text-meta text-ink-700">{message}</p>}
-
-      <UnknownList items={state.unknown} distanceFrom={distanceFrom} retrying={retrying} onRetry={explorer.retryUnknown} />
+      <UnknownList items={state.unknown} distanceFrom={distanceFrom} retrying={retrying} disabled={running} onRetry={explorer.retryUnknown} />
 
       {running ? (
         <button
           type="button"
-          onClick={explorer.stopNow}
+          onClick={stopSearching}
           className="mt-3 w-full min-h-11 rounded-xl border border-ink-200 bg-white text-meta font-semibold text-ink-900 hover:border-ink-400 transition cursor-pointer"
         >
           그만 찾기

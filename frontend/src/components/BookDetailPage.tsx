@@ -26,6 +26,7 @@ import { BookPanel, type SummaryItem } from './detail/BookPanel'
 import { DetailSection, ExternalButton, GroupHeading, SectionNotice, SectionSkeleton, StatusChip } from './detail/parts'
 import { elibSiteStatus, summarizeELibraries } from './detail/summary'
 import { isSafeUrl } from '../utils/url'
+import { isValidIsbn13 } from '../utils/isbn'
 
 interface Props {
   isbn13: string
@@ -351,7 +352,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   const failedItem = { value: '불러오지 못함', tone: 'warn' as const }
 
   function librarySummary(): Pick<SummaryItem, 'value' | 'tone'> {
-    if (libSection?.reason === 'NON_STANDARD_ISBN') return { value: '확인 불가', tone: 'neutral' }
+    if (libSection?.reason === 'NON_STANDARD_ISBN' || !isValidIsbn13(isbn13)) return { value: '확인 불가', tone: 'neutral' }
     return libraryCardSummary
   }
 
@@ -431,8 +432,8 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   // --- 칸 내용 ---
 
   function libraryBody() {
-    if (libSection?.reason === 'NON_STANDARD_ISBN') {
-      // 서점 내부 코드 등 표준 ISBN이 아님 — 조회 자체가 무의미해 '미보유'로 보이지 않게 이유를 말한다 (F1)
+    if (libSection?.reason === 'NON_STANDARD_ISBN' || !isValidIsbn13(isbn13)) {
+      // 서점 내부 코드 등 표준 ISBN이 아님(통합 검색을 기다리지 않게 화면에서도 먼저 본다) — 조회 자체가 무의미해 '미보유'로 보이지 않게 이유를 말한다 (F1)
       return <SectionNotice>표준 ISBN이 없는 상품이라 도서관 소장 여부를 확인할 수 없어요</SectionNotice>
     }
     return (

@@ -49,6 +49,8 @@ export function useNearbyExplorer(isbn13: string, origin: LibraryOrigin | null, 
   const [stop, setStop] = useState<ExploreStop | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [retrying, setRetrying] = useState(false)
+  /** 400처럼 다시 해도 같은 결과인 오류 — 더 찾기를 감춘다 */
+  const [fatal, setFatal] = useState(false)
   const generation = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
   const stateRef = useRef(state)
@@ -65,6 +67,7 @@ export function useNearbyExplorer(isbn13: string, origin: LibraryOrigin | null, 
     setRunning(true)
     setStop(null)
     setError(null)
+    setFatal(false)
     const started = performance.now()
     let s = from
     let round: RoundState = NEW_ROUND
@@ -94,6 +97,7 @@ export function useNearbyExplorer(isbn13: string, origin: LibraryOrigin | null, 
         // 응답을 못 받은 구간은 넘어가지 않는다 — 진행 위치를 그대로 두고 더 찾기로 같은 곳부터 다시
         finalStop = 'ERROR'
         setError(lookupErrorMessage(err, '도서관을 더 찾지 못했어요. 잠시 뒤 다시 시도해 주세요'))
+        setFatal(err instanceof ApiError && err.status === 400)
         break
       } finally {
         clearTimeout(timer)
@@ -104,21 +108,41 @@ export function useNearbyExplorer(isbn13: string, origin: LibraryOrigin | null, 
     setStop(finalStop)
   }, [isbn13])
 
-  // 책·기준이 바뀌면 새로 시작(자동 탐색)
+  const runningRef = useRef(running)
+  runningRef.current = running
+  // 마지막으로 탐색을 시작한 책·기준. 모드를 오가도(enabled 꺼짐→켜짐) 같은 기준이면 결과를 지우지 않고 이어 본다
+  const startedFor = useRef<string | null>(null)
+
   useEffect(() => {
+    const target = `${isbn13}|${key}`
+    if (!enabled) {
+      // 다른 모드로 바꾸면 멈추기만 한다(하루 IP 한도를 아끼려고 결과는 남긴다)
+      if (runningRef.current) {
+        generation.current++
+        abortRef.current?.abort()
+        setRunning(false)
+        setStop('USER')
+      }
+      return
+    }
+    if (startedFor.current === target && stateRef.current.seen.length > 0) return
+    startedFor.current = target
     generation.current++
     abortRef.current?.abort()
     setState(INITIAL_STATE)
     setStop(null)
     setError(null)
+    setFatal(false)
+    setRetrying(false)
     setRunning(false)
-    if (enabled && originRef.current) explore(INITIAL_STATE)
+    if (originRef.current) explore(INITIAL_STATE)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isbn13, key, enabled])
 
   useEffect(() => () => {
     generation.current++
     abortRef.current?.abort()
+    startedFor.current = null // Strict Mode의 가짜 언마운트 뒤 다시 붙을 때 새로 시작하게
   }, [])
 
   const stopNow = useCallback(() => {
@@ -145,11 +169,12 @@ export function useNearbyExplorer(isbn13: string, origin: LibraryOrigin | null, 
       if (gen !== generation.current) return
       setError(lookupErrorMessage(err, '다시 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요'))
     } finally {
-      if (gen === generation.current) setRetrying(false)
+      // 그사이 탐색이 새로 시작됐어도 버튼은 풀어 준다(결과만 버림)
+      setRetrying(false)
     }
   }, [isbn13])
 
-  return { state, running, stop, error, retrying, more, stopNow, retryUnknown }
+  return { state, running, stop, error, fatal, retrying, more, stopNow, retryUnknown }
 }
 
 /** 내 도서관(저장한 기관 최대 5곳). 한 배치로 끝나고, 미소장도 그대로 보여 준다 */
@@ -184,11 +209,26 @@ export function useSavedLibraries(isbn13: string, libCodes: string[], enabled: b
       })
   }, [isbn13, codesKey])
 
+  // 모드를 오가도 같은 목록이면 다시 부르지 않는다. 목록이 바뀌었거나 아직 결과가 없을 때만
+  const loadedFor = useRef<string | null>(null)
   useEffect(() => {
+    if (!enabled) {
+      // 불러오던 중에 바꿨으면 결과가 없으니, 돌아올 때 다시 부르게 표시를 지운다
+      if (abortRef.current && !abortRef.current.signal.aborted) loadedFor.current = null
+      abortRef.current?.abort()
+      setLoading(false)
+      return
+    }
+    if (loadedFor.current === `${isbn13}|${codesKey}`) return
+    loadedFor.current = `${isbn13}|${codesKey}`
     setItems(null)
-    if (enabled) load()
-    return () => abortRef.current?.abort()
-  }, [enabled, load])
+    load()
+  }, [enabled, load, isbn13, codesKey])
+
+  useEffect(() => () => {
+    abortRef.current?.abort()
+    loadedFor.current = null
+  }, [])
 
   return { items, loading, error, reload: load }
 }
