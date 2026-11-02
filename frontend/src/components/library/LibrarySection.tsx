@@ -195,8 +195,9 @@ export function LibrarySection({
   } else if (nearby.state.seen.length === 0) {
     // 아직 하나도 확인하지 못했으면 '없음'으로 단정하지 않는다
     summary = nearby.error ? { value: '불러오지 못함', tone: 'warn' }
-      : nearby.stop === 'USER' ? { value: '확인 전', tone: 'neutral' }
-      : { value: '찾는 중', tone: 'loading' }
+      : nearby.running || nearby.stop == null ? { value: '찾는 중', tone: 'loading' }
+      : nearby.stop === 'EXHAUSTED' ? { value: '10km 안 도서관 없음', tone: 'off' }
+      : { value: '확인 전', tone: 'neutral' }
   } else if (nearby.running && nearby.state.found.length === 0) {
     summary = { value: '찾는 중', tone: 'loading' }
   } else {
@@ -317,7 +318,8 @@ function NearbyBody({
   const { state, running, stop, error, fatal, retrying } = explorer
   const checked = state.seen.length
   const message = error ?? stopMessage(stop)
-  const canMore = !running && state.nextOffset != null && stop !== 'DAILY_LIMIT' && !fatal
+  // 다시 확인 중에 더 찾으면 세대가 바뀌어 다시 확인 결과가 버려진다 — 끝날 때까지 기다린다
+  const canMore = !running && !retrying && state.nextOffset != null && stop !== 'DAILY_LIMIT' && !fatal
   const statusRef = useRef<HTMLDivElement>(null)
 
   function stopSearching() {

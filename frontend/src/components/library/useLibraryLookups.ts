@@ -110,6 +110,8 @@ export function useNearbyExplorer(isbn13: string, origin: LibraryOrigin | null, 
 
   const runningRef = useRef(running)
   runningRef.current = running
+  const stopRef = useRef(stop)
+  stopRef.current = stop
   // 마지막으로 탐색을 시작한 책·기준. 모드를 오가도(enabled 꺼짐→켜짐) 같은 기준이면 결과를 지우지 않고 이어 본다
   const startedFor = useRef<string | null>(null)
 
@@ -125,7 +127,10 @@ export function useNearbyExplorer(isbn13: string, origin: LibraryOrigin | null, 
       }
       return
     }
-    if (startedFor.current === target && stateRef.current.seen.length > 0) return
+    // 같은 책·기준이면 다시 시작하지 않는다. 다만 아무것도 확인하기 전에 모드 전환으로 끊겼으면 다시 찾는다
+    // (오류·한도로 멈춘 경우는 모드를 오가도 자동으로 다시 부르지 않음)
+    const interruptedEmpty = stateRef.current.seen.length === 0 && stopRef.current === 'USER'
+    if (startedFor.current === target && !interruptedEmpty) return
     startedFor.current = target
     generation.current++
     abortRef.current?.abort()
@@ -155,10 +160,12 @@ export function useNearbyExplorer(isbn13: string, origin: LibraryOrigin | null, 
   const more = useCallback(() => explore(stateRef.current), [explore])
 
   /** 확인 못 한 곳을 5곳까지 다시 확인한다. 진행 위치·거리는 지킨다 */
+  const retrySeq = useRef(0)
   const retryUnknown = useCallback(async () => {
     const codes = stateRef.current.unknown.slice(0, 5).map(u => u.libCode)
     if (codes.length === 0) return
     const gen = generation.current
+    const seq = ++retrySeq.current
     setRetrying(true)
     setError(null)
     try {
@@ -169,8 +176,8 @@ export function useNearbyExplorer(isbn13: string, origin: LibraryOrigin | null, 
       if (gen !== generation.current) return
       setError(lookupErrorMessage(err, '다시 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요'))
     } finally {
-      // 그사이 탐색이 새로 시작됐어도 버튼은 풀어 준다(결과만 버림)
-      setRetrying(false)
+      // 그사이 탐색이 새로 시작됐어도 버튼은 풀어 준다(결과만 버림). 더 나중 다시 확인이 진행 중이면 그쪽이 푼다
+      if (seq === retrySeq.current) setRetrying(false)
     }
   }, [isbn13])
 
@@ -205,7 +212,10 @@ export function useSavedLibraries(isbn13: string, libCodes: string[], enabled: b
         }
       })
       .finally(() => {
-        if (abortRef.current === controller) setLoading(false)
+        if (abortRef.current === controller) {
+          setLoading(false)
+          abortRef.current = null // 끝난 요청 — 아래에서 '불러오는 중'으로 보지 않게
+        }
       })
   }, [isbn13, codesKey])
 
@@ -214,7 +224,7 @@ export function useSavedLibraries(isbn13: string, libCodes: string[], enabled: b
   useEffect(() => {
     if (!enabled) {
       // 불러오던 중에 바꿨으면 결과가 없으니, 돌아올 때 다시 부르게 표시를 지운다
-      if (abortRef.current && !abortRef.current.signal.aborted) loadedFor.current = null
+      if (abortRef.current) loadedFor.current = null
       abortRef.current?.abort()
       setLoading(false)
       return

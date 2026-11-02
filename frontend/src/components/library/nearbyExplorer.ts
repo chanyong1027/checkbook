@@ -137,8 +137,8 @@ export function stopMessage(stop: ExploreStop | null): string | null {
   switch (stop) {
     case null:
     case 'GOAL':
-    case 'USER':
       return null
+    case 'USER': return '찾기를 멈췄어요'
     case 'EXHAUSTED': return '10km 안 도서관을 모두 확인했어요'
     case 'ROUND_LIMIT': return null
     case 'DAILY_LIMIT': return '오늘은 도서관 조회가 많아 더 찾을 수 없어요. 내일 다시 시도해 주세요'
