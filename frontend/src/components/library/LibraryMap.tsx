@@ -3,10 +3,16 @@ import { RefreshIcon, SpinnerIcon } from '../shared/icons'
 import { loadKakaoMaps, type KakaoCustomOverlay, type KakaoMap, type KakaoMapsApi } from './kakaoMaps.ts'
 import type { MapPoint, PointTone } from './mapPoints.ts'
 
+// 흰 글자 대비 4.5:1 이상인 색만 쓴다. 색만으로 구분하지 않게 테두리 모양도 다르게 한다
 const TONE_COLOR: Record<PointTone, string> = {
   ok: '#146C2E',      // status.ok
   off: '#4E5968',     // status.off
-  unknown: '#8B95A1', // ink.400
+  unknown: '#6B7684', // ink.500(4.6:1)
+}
+const TONE_OUTLINE: Record<PointTone, string> = {
+  ok: 'none',
+  off: '1px dashed rgba(255,255,255,.9)',
+  unknown: '1px dotted rgba(255,255,255,.9)',
 }
 
 /** 마커 DOM. 기관명은 텍스트로만 넣는다(외부 문자열을 HTML로 넣지 않음) */
@@ -16,6 +22,8 @@ function markerElement(point: MapPoint, selected: boolean, onSelect: (code: stri
   button.textContent = point.label
   button.setAttribute('aria-label', `${point.label}. ${point.name} ${point.stateLabel}`)
   button.setAttribute('aria-pressed', String(selected))
+  // 지도는 마우스·터치용이다. 키보드로는 같은 일을 목록에서 한다 — Tab이 마커 수십 개를 지나지 않게 뺀다
+  button.tabIndex = -1
   const size = selected ? 34 : 28
   Object.assign(button.style, {
     width: `${size}px`,
@@ -27,8 +35,7 @@ function markerElement(point: MapPoint, selected: boolean, onSelect: (code: stri
     border: selected ? '3px solid #FF6B00' : '2px solid #fff',
     boxShadow: '0 1px 4px rgba(0,0,0,.35)',
     cursor: 'pointer',
-    // 대출중·미소장은 색만으로 구분하지 않게 점선 테두리를 더한다
-    outline: point.tone === 'ok' ? 'none' : '1px dashed rgba(255,255,255,.9)',
+    outline: TONE_OUTLINE[point.tone],
     outlineOffset: '-5px',
   } satisfies Partial<CSSStyleDeclaration>)
   button.addEventListener('click', event => {
@@ -76,6 +83,7 @@ export function LibraryMap({
   const overlaysRef = useRef(new Map<string, KakaoCustomOverlay>())
   const originOverlayRef = useRef<KakaoCustomOverlay | null>(null)
   const userMovedRef = useRef(false)
+  const fittedKeyRef = useRef<string | null>(null)
   const onSelectRef = useRef(onSelect)
   onSelectRef.current = onSelect
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -92,7 +100,12 @@ export function LibraryMap({
         const first = points[0] ?? (origin ? { lat: origin.lat, lng: origin.lng } : { lat: 37.5665, lng: 126.978 })
         const map = new api.Map(containerRef.current, { center: new api.LatLng(first.lat, first.lng), level: 6 })
         mapRef.current = map
+        fittedKeyRef.current = null
         api.event.addListener(map, 'dragstart', () => { userMovedRef.current = true })
+        // 휠·핀치 확대도 사용자가 맞춘 것이다 — 결과가 늘어도 되돌리지 않는다
+        const markMoved = () => { userMovedRef.current = true }
+        containerRef.current.addEventListener('wheel', markMoved, { passive: true })
+        containerRef.current.addEventListener('touchstart', markMoved, { passive: true })
         setStatus('ready')
       })
       .catch(() => {
@@ -157,7 +170,11 @@ export function LibraryMap({
         overlaysRef.current.set(point.code, overlay)
       }
     })
-    if (!userMovedRef.current) fitAll()
+    // 화면 맞춤은 결과가 바뀔 때만 한다(마커를 고를 때 전체로 줄었다가 옮겨 가며 출렁이지 않게)
+    if (!userMovedRef.current && fittedKeyRef.current !== pointsKey) {
+      fittedKeyRef.current = pointsKey
+      fitAll()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, pointsKey, selectedCode])
 
