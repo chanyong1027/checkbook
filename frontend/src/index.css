@@ -10,6 +10,11 @@
     word-break: keep-all;
     overflow-wrap: break-word;
   }
+
+  :where(button, a, input, select, textarea):focus-visible {
+    outline: 2px solid #B93000;
+    outline-offset: 3px;
+  }
 }
 
 @layer utilities {

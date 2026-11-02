@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useBodyScrollLock } from './useBodyScrollLock'
+import { useDialogFocus } from './useDialogFocus'
 
 interface ConfirmDialogProps {
   open: boolean
@@ -24,16 +25,11 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   const cancelBtnRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
 
   useBodyScrollLock(open)
 
-  // 초기 포커스(취소 — 안전한 기본값)
-  useEffect(() => {
-    if (!open) return
-    // 다음 tick 에 포커스 (sheet 위에 떠 있는 다이얼로그라서)
-    const t = setTimeout(() => cancelBtnRef.current?.focus(), 0)
-    return () => clearTimeout(t)
-  }, [open])
+  useDialogFocus(open, dialogRef, cancelBtnRef)
 
   // Escape 로 닫기 (계속 편집 == 취소 동작)
   useEffect(() => {
@@ -54,6 +50,8 @@ export function ConfirmDialog({
   // body에 바로 그린다 — 조상에 transform이 있으면 fixed가 화면이 아니라 그 조상 기준으로 놓인다
   return createPortal(
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       className="fixed inset-0 z-[60] flex items-center justify-center px-6"
       role="dialog"
       aria-modal="true"
@@ -70,13 +68,13 @@ export function ConfirmDialog({
       <div className="relative w-full max-w-sm bg-white rounded-2xl shadow-xl p-5 sheet-slide-up">
         <h3
           id="confirm-dialog-title"
-          className="text-base font-bold text-slate-900 mb-1.5"
+          className="text-body font-bold text-ink-900 mb-1.5"
         >
           {title}
         </h3>
         <p
           id="confirm-dialog-message"
-          className="text-sm text-slate-600 mb-5 leading-relaxed"
+          className="text-meta text-ink-600 mb-5 leading-relaxed"
         >
           {message}
         </p>
@@ -85,8 +83,8 @@ export function ConfirmDialog({
             type="button"
             ref={cancelBtnRef}
             onClick={onCancel}
-            className="flex-1 py-2.5 rounded-2xl text-sm font-semibold text-slate-700
-              bg-slate-100 hover:bg-slate-200 active:scale-[0.98] transition cursor-pointer"
+            className="flex-1 min-h-11 rounded-xl text-meta font-semibold text-ink-700
+              bg-ink-50 hover:bg-ink-100 transition cursor-pointer"
           >
             {cancelLabel}
           </button>
@@ -94,7 +92,7 @@ export function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             className={
-              'flex-1 py-2.5 rounded-2xl text-sm font-semibold text-white active:scale-[0.98] transition cursor-pointer shadow-sm ' +
+              'flex-1 min-h-11 rounded-xl text-meta font-semibold text-white transition cursor-pointer ' +
               (destructive
                 ? 'bg-status-danger hover:bg-[#912018] shadow-none'
                 : 'bg-primary hover:bg-primary-dark shadow-none')

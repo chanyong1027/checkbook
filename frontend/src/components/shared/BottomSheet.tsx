@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { CloseIcon } from './icons'
 import { useBodyScrollLock } from './useBodyScrollLock'
+import { useDialogFocus } from './useDialogFocus'
 
 interface BottomSheetProps {
   open: boolean
@@ -14,13 +15,7 @@ export function BottomSheet({ open, onClose, title, children }: BottomSheetProps
   const sheetRef = useRef<HTMLDivElement>(null)
   useBodyScrollLock(open)
 
-  // 열리면 시트 안으로 포커스를 옮기고, 닫히면 열기 전 자리로 돌려준다
-  useEffect(() => {
-    if (!open) return
-    const opener = document.activeElement as HTMLElement | null
-    sheetRef.current?.focus()
-    return () => opener?.focus?.()
-  }, [open])
+  useDialogFocus(open, sheetRef)
 
   // Escape로 닫기(닫기 버튼과 같은 동작 — 변경분이 있으면 부모가 확인 대화창으로 막는다)
   useEffect(() => {
