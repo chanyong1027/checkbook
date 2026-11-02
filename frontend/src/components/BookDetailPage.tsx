@@ -1,28 +1,24 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { searchBooks, searchMain, searchELibraries, getELibraries } from '../api'
+import { searchBooks, searchMain, searchELibraries } from '../api'
 import { toUserMessage } from '../api/errors.ts'
 import type {
   BookCandidate,
   MillieAvailability,
   SearchResponse,
   SearchSectionStatus,
-  ELibraryInfo,
   ELibraryResult,
   ELibrarySearchResponse,
 } from '../types'
 import { OffStoreList } from './OffStoreList'
 import { PublicLibraryList, type LibraryPageState } from './PublicLibraryList'
-import { BottomSheet } from './shared/BottomSheet'
-import { ConfirmDialog } from './shared/ConfirmDialog'
+import { usePreferences } from '../preferences/PreferencesContext'
 import {
   BookIcon,
   ClockIcon,
   HeadphonesIcon,
   LibraryIcon,
   RefreshIcon,
-  SearchIcon,
   SettingsIcon,
-  SpinnerIcon,
   StoreIcon,
   TabletIcon,
 } from './shared/icons'
@@ -35,31 +31,6 @@ interface Props {
   isbn13: string
   initialBook?: BookCandidate | null
   onReset: () => void
-}
-
-// --- E-library saved IDs helpers ---
-
-const ELIB_SELECTION_KEY = 'checkbook_elib_ids'
-const MAX_SELECT = 20
-
-function getSavedIds(): number[] {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(ELIB_SELECTION_KEY) ?? '[]')
-    if (!Array.isArray(parsed)) return []
-    return parsed
-      .filter((id): id is number => Number.isInteger(id) && id > 0)
-      .slice(0, MAX_SELECT)
-  } catch {
-    return []
-  }
-}
-
-function saveIds(ids: number[]) {
-  try {
-    localStorage.setItem(ELIB_SELECTION_KEY, JSON.stringify(ids))
-  } catch {
-    // 저장소 접근 불가해도 현재 선택/재검색 흐름은 계속 진행
-  }
 }
 
 // --- Status helpers ---
@@ -99,187 +70,6 @@ function formatLabel(format: MillieAvailability['format']): string {
 
 // --- E-library selector bottom sheet content ---
 
-function setsEqual<T>(a: Set<T>, b: Set<T>): boolean {
-  if (a.size !== b.size) return false
-  for (const v of a) if (!b.has(v)) return false
-  return true
-}
-
-function ELibrarySelector({
-  initialIds,
-  onConfirm,
-  onCancel,
-  onDirtyChange,
-}: {
-  initialIds: Set<number>
-  onConfirm: (ids: number[]) => void
-  onCancel: () => void
-  onDirtyChange?: (dirty: boolean) => void
-}) {
-  const [libraries, setLibraries] = useState<ELibraryInfo[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [draftIds, setDraftIds] = useState<Set<number>>(() => new Set(initialIds))
-  const [keyword, setKeyword] = useState('')
-
-  useEffect(() => {
-    getELibraries()
-      .then(setLibraries)
-      .catch(e => setError(toUserMessage(e, '전자도서관 목록을 불러오지 못했습니다.')))
-      .finally(() => setLoading(false))
-  }, [])
-
-  // 변경 여부 추적 — 백드롭/취소 시 부모에서 확인 다이얼로그 게이트로 사용
-  useEffect(() => {
-    onDirtyChange?.(!setsEqual(draftIds, initialIds))
-  }, [draftIds, initialIds, onDirtyChange])
-
-  function toggle(id: number) {
-    setDraftIds(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else if (next.size < MAX_SELECT) next.add(id)
-      return next
-    })
-  }
-
-  function clearAll() {
-    setDraftIds(new Set())
-  }
-
-  const filteredLibs = [...(keyword
-    ? libraries.filter(l =>
-        l.name.includes(keyword) || l.region?.includes(keyword) || l.vendorType?.includes(keyword)
-      )
-    : libraries
-  )].sort((a, b) => a.name.localeCompare(b.name, 'ko'))
-
-  const overLimit = draftIds.size > MAX_SELECT
-  const selectedLibs = libraries.filter(l => draftIds.has(l.libraryId))
-
-  if (loading) {
-    return (
-      <div className="flex justify-center py-12">
-        <SpinnerIcon size={28} strokeWidth={2.2} className="text-ink-400" />
-      </div>
-    )
-  }
-
-  if (error) {
-    return <div role="alert" className="p-3 bg-status-danger-soft rounded-2xl text-status-danger text-meta">{error}</div>
-  }
-
-  return (
-    <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-meta font-semibold text-ink-700">
-          도서관 선택
-          <span className={`ml-1.5 ${overLimit ? 'text-status-danger' : 'text-ink-500'}`}>
-            {draftIds.size}/{MAX_SELECT}
-          </span>
-        </p>
-        {draftIds.size > 0 && (
-          <button onClick={clearAll} className="min-h-10 px-2 -mr-2 text-label font-semibold text-primary hover:underline cursor-pointer">
-            전체 해제
-          </button>
-        )}
-      </div>
-
-      {/* Selected chips */}
-      {selectedLibs.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-3">
-          {selectedLibs.map(lib => (
-            <span
-              key={lib.libraryId}
-              className="inline-flex items-center gap-1 pl-3 pr-1 py-1 rounded-full
-                bg-accent-soft border border-accent/30 text-label text-accent-strong font-semibold"
-            >
-              {lib.name}
-              <button
-                onClick={() => toggle(lib.libraryId)}
-                className="w-7 h-7 rounded-full hover:bg-accent/20 flex items-center justify-center transition cursor-pointer shrink-0"
-                aria-label={`${lib.name} 선택 해제`}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-
-      {overLimit && (
-        <p className="text-label text-status-danger mb-2">최대 {MAX_SELECT}개까지 선택할 수 있어요</p>
-      )}
-
-      {/* Filter input */}
-      <div className="relative mb-2">
-        <SearchIcon size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-500" />
-        <input
-          type="text"
-          placeholder="이름, 지역으로 필터"
-          aria-label="전자도서관 이름·지역 필터"
-          value={keyword}
-          onChange={e => setKeyword(e.target.value)}
-          className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-ink-200 bg-white text-body
-            focus:outline-none focus:ring-4 focus:ring-accent/30 focus:border-primary transition
-            placeholder:text-ink-500"
-        />
-      </div>
-
-      {/* Library list */}
-      <div className="max-h-56 overflow-y-auto scrollbar-thin space-y-0.5 bg-white rounded-2xl border border-ink-100 p-1 mb-4">
-        {filteredLibs.length === 0 && (
-          <p className="text-meta text-ink-600 text-center py-4">맞는 도서관이 없어요</p>
-        )}
-        {filteredLibs.map(lib => {
-          const checked = draftIds.has(lib.libraryId)
-          const disabled = !checked && draftIds.size >= MAX_SELECT
-          return (
-            <label
-              key={lib.libraryId}
-              className={`flex items-center gap-3 px-3 min-h-11 rounded-xl transition
-                ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-ink-50 cursor-pointer'}`}
-            >
-              <input
-                type="checkbox"
-                checked={checked}
-                disabled={disabled}
-                onChange={() => toggle(lib.libraryId)}
-                className="w-4 h-4 accent-primary shrink-0"
-              />
-              <span className="text-body text-ink-900 flex-1 truncate">{lib.name}</span>
-              <span className="text-label text-ink-500 shrink-0">{lib.region}</span>
-            </label>
-          )
-        })}
-      </div>
-
-      {/* Action buttons */}
-      <div className="flex gap-2">
-        <button
-          onClick={onCancel}
-          className="flex-1 min-h-12 border border-ink-200 rounded-xl text-meta font-semibold text-ink-900
-            hover:border-ink-400 transition cursor-pointer bg-white"
-        >
-          취소
-        </button>
-        <button
-          onClick={() => onConfirm([...draftIds])}
-          disabled={overLimit}
-          className="flex-1 min-h-12 bg-primary text-white rounded-xl font-bold text-meta
-            hover:bg-primary-dark transition disabled:opacity-40
-            disabled:cursor-not-allowed cursor-pointer"
-        >
-          {draftIds.size === 0 ? '설정 해제' : `${draftIds.size}개 선택 완료`}
-        </button>
-      </div>
-    </div>
-  )
-}
-
 /**
  * 책 정보를 못 받았을 때 책 카드 문구. 서버의 YES24 조회 결과(identification.yes24)로 고른다.
  * 검색 요청 자체가 실패했거나 모르는 값이면 일반 문구.
@@ -309,7 +99,10 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   const [elibResult, setElibResult] = useState<ELibrarySearchResponse | null>(null)
   const [elibLoading, setElibLoading] = useState(false)
   const [elibError, setElibError] = useState<string | null>(null)
-  const [savedElibIds, setSavedElibIds] = useState<number[]>(() => getSavedIds())
+  const { preferences, pendingELibraryIds, openSettings } = usePreferences()
+  const savedElibIds = preferences.eLibraryIds
+  // 저장 값이 바뀔 때만 검색을 다시 부르려고 비교용 문자열로 둔다(배열은 저장할 때마다 새 객체)
+  const savedElibKey = savedElibIds.join(',')
 
   // Location state
   const [useLocation, setUseLocation] = useState(false)
@@ -319,11 +112,6 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   const userLonRef = useRef<number | null>(null)
 
   // Bottom sheet
-  const [sheetOpen, setSheetOpen] = useState(false)
-  // 전자도서관 선택 시트의 변경분 추적 (백드롭/취소 시 확인 다이얼로그 게이트)
-  const [sheetDirty, setSheetDirty] = useState(false)
-  // 변경분 폐기 확인 다이얼로그
-  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false)
 
   // Cold-entry book metadata (Kakao) — initialBook이 없을 때 채워짐
   const [coldBook, setColdBook] = useState<BookCandidate | null>(null)
@@ -339,17 +127,36 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   const elibAbort = useRef<AbortController | null>(null)
   const coldBookAbort = useRef<AbortController | null>(null)
 
-  // 전자도서관을 고르고 닫으면 칸이 다시 검색하며 시트를 연 버튼이 사라진다(스켈레톤으로 바뀜).
+  // 설정에서 전자도서관을 바꿔 저장하면 칸이 다시 검색하며 시트를 연 버튼이 사라진다(스켈레톤으로 바뀜).
   // 포커스가 body로 떨어지지 않게, 검색이 끝나 칸이 다시 그려진 뒤 칸 제목으로 옮긴다
-  const focusElibAfterConfirm = useRef(false)
+  const prevElibKey = useRef(savedElibKey)
+  // 'waiting': 저장으로 목록이 바뀜 → 'loading': 다시 검색 시작을 봄 → 끝나면 포커스. 바뀐 그 렌더에서는 아직
+  // 로딩 전이라 바로 옮기면 곧 스켈레톤으로 바뀌며 다시 잃는다
+  const elibFocusStage = useRef<'idle' | 'waiting' | 'loading'>('idle')
   useEffect(() => {
-    if (!focusElibAfterConfirm.current || sheetOpen || elibLoading) return
-    focusElibAfterConfirm.current = false
-    // 포커스를 잃었을 때만 되살린다 — 연 버튼이 남아 있거나 사용자가 이미 다른 곳으로 옮겼으면 그대로 둔다
+    if (prevElibKey.current !== savedElibKey) {
+      prevElibKey.current = savedElibKey
+      elibFocusStage.current = 'waiting'
+    }
+    if (elibFocusStage.current === 'idle') return
+    // 책 정보가 없으면 검색이 돌지 않는다 — 기다리지 않는다(나중에 엉뚱한 때 포커스를 옮기지 않게)
+    if (!displayBook) {
+      elibFocusStage.current = 'idle'
+      return
+    }
+    if (elibLoading) {
+      elibFocusStage.current = 'loading'
+      return
+    }
+    // 빈 목록(검색 없음)이면 기다릴 로딩이 없다 — 바로 옮긴다
+    if (elibFocusStage.current === 'waiting' && savedElibIds.length > 0) return
+    elibFocusStage.current = 'idle'
+    // 포커스를 잃었을 때만 되살린다 — 사용자가 이미 다른 곳으로 옮겼으면 그대로 둔다
     const active = document.activeElement
     if (active && active !== document.body) return
     document.getElementById('elibrary-title')?.focus({ preventScroll: true })
-  }, [sheetOpen, elibLoading])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elibLoading, savedElibKey])
 
   // --- API calls with race guard ---
 
@@ -488,13 +295,11 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
     // cold 진입 시 Kakao(coldBook) 가 settle 될 때까지 대기
     // — 서버 응답이 먼저 와서 displayBook 이 서버 값으로 채워지는 race condition 방지
     if (!coldFetchDone) return
-    if (savedElibIds.length === 0) return
-    // 가드는 일부러 두지 않음:
-    // displayBook(null→truthy)·coldFetchDone(false→true) 가 단방향 전이라 production 에선 1회만 fire,
-    // Strict Mode dev 더블마운트에선 2회 fire 되지만 runElibSearch 내부 abort+재요청으로 안전.
+    // 처음 준비됐을 때 + 내 도서관 설정에서 전자도서관을 바꿔 저장했을 때 다시 부른다(빈 목록이면 결과를 비운다).
+    // 가드는 일부러 두지 않음: Strict Mode 더블마운트의 2회 실행은 runElibSearch 내부 abort+재요청으로 안전
     runElibSearch(savedElibIds, displayBook.title, displayBook.author)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [displayBook, coldFetchDone])
+  }, [displayBook, coldFetchDone, savedElibKey])
 
   // --- Helpers ---
 
@@ -525,32 +330,6 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
         setLocError(msg)
       },
     )
-  }
-
-  function handleElibSheetConfirm(ids: number[]) {
-    focusElibAfterConfirm.current = true
-    setSavedElibIds(ids)
-    saveIds(ids)
-    setSheetDirty(false)
-    setSheetOpen(false)
-    if (displayBook) {
-      runElibSearch(ids, displayBook.title, displayBook.author)
-    }
-  }
-
-  // 시트 닫기 요청 (백드롭·취소·X 공통). dirty 면 확인 다이얼로그로 게이트.
-  function requestSheetClose() {
-    if (sheetDirty) {
-      setDiscardConfirmOpen(true)
-      return
-    }
-    setSheetOpen(false)
-  }
-
-  function discardSheetChanges() {
-    setDiscardConfirmOpen(false)
-    setSheetDirty(false)
-    setSheetOpen(false)
   }
 
   // --- 칸 상태(메타데이터) ---
@@ -599,6 +378,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
 
   function elibSummary(): Pick<SummaryItem, 'value' | 'tone'> {
     if (!displayBook) return bookInfoNotice ? { value: '확인 불가', tone: 'neutral' } : loadingItem
+    if (pendingELibraryIds) return { value: '다시 고르기', tone: 'neutral' }
     if (!hasSavedElibs) return { value: '설정 필요', tone: 'neutral' }
     if (elibError) return failedItem
     if (elibLoading || !elibResult) return loadingItem
@@ -642,8 +422,9 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
       note: !useLocation && locationNeeded ? '위치 허용 후 가까운 순으로' : '대출 상태는 전날 자료 기준' },
     { href: '#elibrary', label: '전자도서관', ...elibSummary(),
       // 책 정보가 없으면 전자도서관을 검색할 수 없다 — 고르기 대신 그 이유가 있는 칸으로 안내
-      action: bookInfoNotice ? '전자도서관 안내 보기' : hasSavedElibs ? '대출 목록 보기' : '전자도서관 고르기',
-      note: hasSavedElibs ? `내가 고른 ${savedElibIds.length}곳에서 확인` : '이용 중인 도서관을 선택하세요' },
+      action: bookInfoNotice ? '전자도서관 안내 보기' : pendingELibraryIds ? '5곳 고르기' : hasSavedElibs ? '대출 목록 보기' : '전자도서관 고르기',
+      note: pendingELibraryIds ? '이제 5곳까지 — 예전 선택에서 남길 곳을 골라 주세요'
+        : hasSavedElibs ? `내가 고른 ${savedElibIds.length}곳에서 확인` : '이용 중인 도서관을 선택하세요' },
     { href: '#subscription', label: '밀리의서재', ...subscriptionSummary(),
       action: millieUrl ? '밀리에서 읽기' : '구독 정보 보기',
       note: '밀리의서재 구독 회원 이용',
@@ -656,7 +437,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
 
   function handleSummaryNavigate(href: string) {
     if (href === '#elibrary' && displayBook && !hasSavedElibs) {
-      setSheetOpen(true)
+      openSettings('elibrary')
       return
     }
     const id = href.slice(1)
@@ -722,13 +503,28 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
       // 전자도서관 검색은 제목·저자로 한다. 책 정보가 없으면 설정해도 검색할 수 없으므로 설정 버튼을 띄우지 않는다
       return <SectionNotice>책 정보를 확인하지 못해 전자도서관을 검색할 수 없어요</SectionNotice>
     }
+    if (pendingELibraryIds) {
+      // 옛 선택이 5곳을 넘어 아직 옮기지 못함 — 몰래 자르지 않고 고르게 한다(그동안 자동 검색 안 함)
+      return (
+        <div>
+          <p className="text-body text-ink-700">전자도서관은 이제 5곳까지 고를 수 있어요. 예전에 고른 {pendingELibraryIds.length}곳 중 5곳을 남겨 주세요</p>
+          <button
+            type="button"
+            onClick={() => openSettings('elibrary')}
+            className="mt-3 min-h-11 px-5 rounded-xl bg-primary text-white text-meta font-bold hover:bg-primary-dark transition cursor-pointer"
+          >
+            5곳 고르기
+          </button>
+        </div>
+      )
+    }
     if (!hasSavedElibs) {
       return (
         <div>
           <p className="text-body text-ink-700">자주 쓰는 전자도서관을 고르면 이 책을 빌릴 수 있는지 바로 확인해 드려요</p>
           <button
             type="button"
-            onClick={() => setSheetOpen(true)}
+            onClick={() => openSettings('elibrary')}
             className="mt-3 min-h-11 px-5 rounded-xl bg-primary text-white text-meta font-bold hover:bg-primary-dark transition cursor-pointer"
           >
             전자도서관 고르기
@@ -971,7 +767,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
               displayBook && hasSavedElibs ? (
                 <button
                   type="button"
-                  onClick={() => setSheetOpen(true)}
+                  onClick={() => openSettings('elibrary')}
                   className="inline-flex items-center gap-1 min-h-10 px-2 -mr-2 text-meta font-semibold text-ink-700 hover:text-ink-900 cursor-pointer"
                 >
                   <SettingsIcon size={16} />
@@ -1026,31 +822,6 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
         </p>
       </div>
 
-      {/* ==================== BOTTOM SHEET ==================== */}
-      <BottomSheet
-        open={sheetOpen}
-        onClose={requestSheetClose}
-        title="전자도서관 선택"
-      >
-        <ELibrarySelector
-          initialIds={new Set(savedElibIds)}
-          onConfirm={handleElibSheetConfirm}
-          onCancel={requestSheetClose}
-          onDirtyChange={setSheetDirty}
-        />
-      </BottomSheet>
-
-      {/* ==================== DISCARD CONFIRM DIALOG ==================== */}
-      <ConfirmDialog
-        open={discardConfirmOpen}
-        title="변경사항을 버리시겠어요?"
-        message="저장하지 않으면 선택한 도서관 변경 내용이 사라집니다."
-        confirmLabel="버리고 닫기"
-        cancelLabel="계속 편집"
-        destructive
-        onConfirm={discardSheetChanges}
-        onCancel={() => setDiscardConfirmOpen(false)}
-      />
     </div>
   )
 }
