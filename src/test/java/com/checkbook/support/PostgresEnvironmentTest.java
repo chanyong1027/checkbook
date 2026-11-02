@@ -32,6 +32,19 @@ class PostgresEnvironmentTest extends PostgresIntegrationTest {
         assertThat(applied).first().isEqualTo("1");
     }
 
+    // V5 시드의 ALADIN을 V9가 YES24로 바꾼다 — 남으면 엔티티가 읽지 못해 홈 추천이 깨진다(enum에서 ALADIN을 지움)
+    @Test
+    void retiresAladinFeaturedSource() {
+        List<String> sources = jdbcTemplate.queryForList(
+                "SELECT source FROM featured_section_snapshot WHERE section_type IN ('BESTSELLER', 'NEW')", String.class);
+
+        assertThat(sources).containsExactlyInAnyOrder("YES24", "YES24");
+        // ALADIN이 아닌 행(LOAN = 정보나루)은 건드리지 않는다
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT source FROM featured_section_snapshot WHERE section_type = 'LOAN'", String.class))
+                .isEqualTo("DATANARU");
+    }
+
     // A 재현의 전제: 같은 (isbn13, lib_code)를 막는 유니크 제약이 실제 표에 있다
     @Test
     void snapshotTableHasTheUniqueConstraint() {

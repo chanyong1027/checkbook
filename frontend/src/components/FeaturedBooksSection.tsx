@@ -17,7 +17,6 @@ interface TabSpec {
 const SOURCE_LABELS: Record<FeaturedSource, string> = {
   YES24: 'YES24',
   DATANARU: '도서관 정보나루',
-  ALADIN: '알라딘',
 }
 
 const TABS: TabSpec[] = [

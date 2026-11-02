@@ -13,7 +13,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * {@code postgresTest}에서만 돈다(Docker 필요).
  * <ul>
  *   <li>프로필 test + postgres: test의 더미 키·작은 풀은 그대로 쓰고, DB 관련만 postgres가 덮는다
- *       (application-postgres.yml — Flyway V1~V8을 운영과 같은 SQL로 적용, Hibernate는 스키마 검사만)</li>
+ *       (application-postgres.yml — Flyway 마이그레이션 전부를 운영과 같은 SQL로 적용, Hibernate는 스키마 검사만)</li>
  *   <li>컨테이너는 시험끼리 함께 쓰므로 남긴 데이터가 다음 시험에 보인다 — 시험마다 {@link #truncate}로 정리한다</li>
  *   <li>트랜잭션을 직접 열고 닫는 시험(두 트랜잭션 순서 고정 등)을 위해 {@link #transactionTemplate}을 열어 둔다</li>
  * </ul>

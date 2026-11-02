@@ -22,8 +22,7 @@ export interface BookCandidateResponse {
 
 // /api/featured
 export type FeaturedSectionType = 'BESTSELLER' | 'NEW' | 'LOAN'
-// ALADIN: 알라딘 API 종료(10-30) 전에 받아 둔 목록. 다음 갱신 때 YES24로 바뀐다
-export type FeaturedSource = 'ALADIN' | 'DATANARU' | 'YES24'
+export type FeaturedSource = 'DATANARU' | 'YES24'
 
 export interface FeaturedBooksResponse {
   type: FeaturedSectionType

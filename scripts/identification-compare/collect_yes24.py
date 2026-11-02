@@ -17,6 +17,7 @@ import argparse
 import csv
 import http.client
 import json
+import math
 import statistics
 import sys
 import time
@@ -27,7 +28,16 @@ from datetime import datetime
 from pathlib import Path
 
 from collect_kakao_seed_isbns import HERE, RAW_DIR, REPO_ROOT, load_env_key
-from collect_aladin import pct
+
+
+# 백분위(nearest-rank). collect_aladin.py(알라딘 API 종료로 삭제)에서 옮겨 왔다
+def pct(values, p):
+    if not values:
+        return None
+    values = sorted(values)
+    idx = min(len(values) - 1, max(0, math.ceil(p / 100 * len(values)) - 1))
+    return values[idx]
+
 
 BASE = "https://apis.yes24.com"
 SUMMARY_PATH = RAW_DIR.parent / "yes24-summary.md"
