@@ -71,11 +71,14 @@ export function LibraryMap({
   origin,
   selectedCode,
   onSelect,
+  onReadyChange,
 }: {
   points: MapPoint[]
   origin: { lat: number; lng: number; label: string } | null
   selectedCode: string | null
   onSelect: (code: string) => void
+  /** 지도가 실제로 보일 준비가 됐는지(목록의 '지도에서 보기'를 달지 정함) */
+  onReadyChange?: (ready: boolean) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<KakaoMap | null>(null)
@@ -88,6 +91,7 @@ export function LibraryMap({
   onSelectRef.current = onSelect
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [attempt, setAttempt] = useState(0)
+  useEffect(() => onReadyChange?.(status === 'ready'), [status, onReadyChange])
 
   // SDK 로드 + 지도 만들기(한 번)
   useEffect(() => {
@@ -103,9 +107,12 @@ export function LibraryMap({
         fittedKeyRef.current = null
         api.event.addListener(map, 'dragstart', () => { userMovedRef.current = true })
         // 휠·핀치 확대도 사용자가 맞춘 것이다 — 결과가 늘어도 되돌리지 않는다
+        // 한 손가락 끌기는 dragstart가 잡는다. 탭(마커 누르기)은 조작으로 치지 않게 두 손가락(핀치)만 본다
         const markMoved = () => { userMovedRef.current = true }
+        const onTouch = (e: TouchEvent) => { if (e.touches.length >= 2) markMoved() }
         containerRef.current.addEventListener('wheel', markMoved, { passive: true })
-        containerRef.current.addEventListener('touchstart', markMoved, { passive: true })
+        containerRef.current.addEventListener('dblclick', markMoved)
+        containerRef.current.addEventListener('touchstart', onTouch, { passive: true })
         setStatus('ready')
       })
       .catch(() => {
@@ -140,6 +147,7 @@ export function LibraryMap({
 
   // 마커를 libCode로 맞춘다: 새로 온 것만 더하고, 빠진 것은 지우고, 선택 표시는 다시 그린다
   const pointsKey = points.map(p => `${p.code}:${p.tone}:${p.label}`).join('|')
+  const originKey = origin ? `${origin.lat},${origin.lng},${origin.label}` : ''
   useEffect(() => {
     const api = apiRef.current
     const map = mapRef.current
@@ -171,15 +179,15 @@ export function LibraryMap({
       }
     })
     // 화면 맞춤은 결과가 바뀔 때만 한다(마커를 고를 때 전체로 줄었다가 옮겨 가며 출렁이지 않게)
-    if (!userMovedRef.current && fittedKeyRef.current !== pointsKey) {
-      fittedKeyRef.current = pointsKey
+    const fitKey = `${pointsKey}#${originKey}`
+    if (!userMovedRef.current && fittedKeyRef.current !== fitKey) {
+      fittedKeyRef.current = fitKey
       fitAll()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, pointsKey, selectedCode])
+  }, [status, pointsKey, originKey, selectedCode])
 
   // 기준점(내 위치·기준 도서관)
-  const originKey = origin ? `${origin.lat},${origin.lng},${origin.label}` : ''
   useEffect(() => {
     const api = apiRef.current
     const map = mapRef.current
