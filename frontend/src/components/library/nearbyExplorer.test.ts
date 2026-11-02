@@ -101,6 +101,17 @@ test('서버 중단 사유가 오면 그대로 멈추고 진행 위치는 지킨
   assert.deepEqual(state.unknown.map(u => u.libCode), ['L1'])
 })
 
+test('목표를 채운 배치에 예산 소진·서킷이 같이 오면 그 사유를 지킨다(더 찾기 헛걸음 방지)', () => {
+  const held = ['L1', 'L2', 'L3', 'L4', 'L5'].map(c => item(c, 'AVAILABLE'))
+  for (const reason of ['DAILY_LIMIT', 'CIRCUIT_OPEN']) {
+    const { stop, state } = run([[0, batch([...held, item('L6', 'UNKNOWN')], 6, reason)]])
+    assert.equal(stop, reason)
+    assert.equal(state.found.length, 5)
+  }
+  // 지연·혼잡은 목표 달성이 우선
+  assert.equal(run([[0, batch(held, 5, 'BATCH_DEADLINE')]]).stop, 'GOAL')
+})
+
 test('배치가 전부 확인 못 함이면 멈춘다(실패를 미소장으로 치지 않음)', () => {
   const { stop, state } = run([[0, batch([item('L1', 'UNKNOWN'), item('L2', 'UNKNOWN')], 5)]])
   assert.equal(stop, 'ALL_UNKNOWN')

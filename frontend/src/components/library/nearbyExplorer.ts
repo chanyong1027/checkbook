@@ -96,8 +96,12 @@ export function applyBatch(
   const nextRound = { found: roundFound, checked: roundChecked }
 
   let stop: ExploreStop | null = null
-  if (overflowAt != null || roundFound >= ROUND_GOAL) stop = 'GOAL'
-  else if (res.stopReason && res.stopReason !== 'NONE') stop = res.stopReason as ExploreStop
+  const serverStop = res.stopReason && res.stopReason !== 'NONE' ? res.stopReason as ExploreStop : null
+  // 예산 소진·서킷 열림은 정보나루 전체가 막힌 것이라 목표를 채웠어도 먼저 알린다 — 더 찾기를 눌러도 헛걸음이라.
+  // 지연·혼잡(BATCH_DEADLINE·POOL_BUSY)은 다음에 풀릴 수 있어 목표 달성이 우선이다
+  if (serverStop === 'DAILY_LIMIT' || serverStop === 'CIRCUIT_OPEN') stop = serverStop
+  else if (overflowAt != null || roundFound >= ROUND_GOAL) stop = 'GOAL'
+  else if (serverStop) stop = serverStop
   else if (res.items.length > 0 && res.items.every(item => item.state === 'UNKNOWN')) stop = 'ALL_UNKNOWN'
   else if (next.nextOffset == null) stop = 'EXHAUSTED'
   else if (roundChecked >= ROUND_CANDIDATE_LIMIT) stop = 'ROUND_LIMIT'
