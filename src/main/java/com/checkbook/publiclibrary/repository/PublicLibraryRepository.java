@@ -2,8 +2,11 @@ package com.checkbook.publiclibrary.repository;
 
 import com.checkbook.common.util.DistanceCalculator;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -44,6 +47,29 @@ public interface PublicLibraryRepository extends JpaRepository<PublicLibrary, Lo
                 .limit(limit)
                 .toList();
     }
+
+    /**
+     * 기준점에서 직선거리 radiusKm 이내 기관을 거리순(동률은 libCode순)으로 돌려준다(D7-1 주변 탐색).
+     * <p>
+     * 반경을 덮는 네모를 한 번 읽고 실제 거리로 거른다. 원이 네모 안에 들어가므로 {@link #findNearest}의
+     * "네모 안 후보가 limit개면 멈춤" 때문에 네모 밖의 더 가까운 기관을 빠뜨리는 일이 없다.
+     * 네모의 1도 = 111.0km 근사는 실제(약 111.19km)보다 작아 네모가 반경보다 조금 넓다 — 안전한 쪽 오차.
+     */
+    default List<PublicLibrary> findWithinRadius(double lat, double lon, double radiusKm) {
+        return findWithinBoundingBox(lat, lon, radiusKm).stream()
+                .filter(library -> DistanceCalculator.km(lat, lon, library.getLat(), library.getLon()) <= radiusKm)
+                .sorted(Comparator
+                        .comparingDouble((PublicLibrary library) ->
+                                DistanceCalculator.km(lat, lon, library.getLat(), library.getLon()))
+                        .thenComparing(PublicLibrary::getLibCode))
+                .toList();
+    }
+
+    List<PublicLibrary> findByLibCodeIn(Collection<String> libCodes);
+
+    /** 기관 선택용 검색(D7-1). 이름 또는 주소에 keyword가 들어간 기관. 정렬은 Pageable이 정한다. */
+    Slice<PublicLibrary> findByNameContainingIgnoreCaseOrAddressContainingIgnoreCase(
+            String nameKeyword, String addressKeyword, Pageable pageable);
 
     private List<PublicLibrary> findWithinBoundingBox(double lat, double lon, double radiusKm) {
         double latDelta = radiusKm / 111.0;
