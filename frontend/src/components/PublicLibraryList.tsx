@@ -5,6 +5,7 @@ import { isSafeUrl } from '../utils/url'
 import { formatDistance } from '../utils/distance'
 import type { PublicLibraryInfo } from '../types'
 import { StatusChip, type Tone } from './detail/parts'
+import { unansweredLibraryCount } from './detail/summary'
 import { GlobeIcon, MapPinIcon, NavigateIcon, RefreshIcon, SpinnerIcon } from './shared/icons'
 
 // 하루 한도(앱 429)·공급자 예산(앱 503)·속도 제한(Nginx 429 JSON)
@@ -17,6 +18,14 @@ interface Props {
   initialLibraries: PublicLibraryInfo[]
   initialTotal: number | null
   initialNextOffset: number | null
+  onChange?: (page: LibraryPageState) => void
+}
+
+export interface LibraryPageState {
+  libraries: PublicLibraryInfo[]
+  total: number | null
+  nextOffset: number | null
+  hasMore: boolean
 }
 
 // 지금 빌릴 수 있는 곳이 먼저, 같은 상태끼리는 가까운 순(서버는 거리순으로 준다)
@@ -85,6 +94,7 @@ export function PublicLibraryList({
   initialLibraries,
   initialTotal,
   initialNextOffset,
+  onChange,
 }: Props) {
   const [libraries, setLibraries] = useState<PublicLibraryInfo[]>(initialLibraries)
   const [total, setTotal] = useState<number | null>(initialTotal)
@@ -95,6 +105,10 @@ export function PublicLibraryList({
   const [busy, setBusy] = useState<'more' | 'retry' | null>(null)
   const [requestError, setRequestError] = useState<string | null>(null)
   const requestAbort = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    onChange?.({ libraries, total, nextOffset, hasMore: nextOffset != null })
+  }, [libraries, total, nextOffset, onChange])
 
   useEffect(() => {
     return () => {
@@ -132,7 +146,7 @@ export function PublicLibraryList({
   const hasMore = nextOffset != null && canRequest
   // 지금까지 조회를 시도한 후보 수 — 응답 없던 도서관은 목록에서 빠지므로 차이가 곧 건너뛴 수
   const coveredCount = nextOffset ?? total ?? libraries.length
-  const skippedCount = Math.max(0, coveredCount - libraries.length)
+  const skippedCount = unansweredLibraryCount(libraries.length, total, nextOffset)
   const remaining = total != null && nextOffset != null ? Math.max(0, total - nextOffset) : null
   const nextBatch = remaining != null && pageSize != null ? Math.min(pageSize, remaining) : null
 

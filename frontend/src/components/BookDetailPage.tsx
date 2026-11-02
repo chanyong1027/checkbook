@@ -11,7 +11,7 @@ import type {
   ELibrarySearchResponse,
 } from '../types'
 import { OffStoreList } from './OffStoreList'
-import { PublicLibraryList } from './PublicLibraryList'
+import { PublicLibraryList, type LibraryPageState } from './PublicLibraryList'
 import { BottomSheet } from './shared/BottomSheet'
 import { ConfirmDialog } from './shared/ConfirmDialog'
 import {
@@ -27,7 +27,8 @@ import {
   TabletIcon,
 } from './shared/icons'
 import { BookPanel, type SummaryItem } from './detail/BookPanel'
-import { DetailSection, ExternalButton, GroupHeading, SectionNotice, SectionSkeleton, StatusChip, type Tone } from './detail/parts'
+import { DetailSection, ExternalButton, GroupHeading, SectionNotice, SectionSkeleton, StatusChip } from './detail/parts'
+import { elibSiteStatus, summarizeELibraries, summarizeLibraries } from './detail/summary'
 import { isSafeUrl } from '../utils/url'
 
 interface Props {
@@ -62,19 +63,6 @@ function saveIds(ids: number[]) {
 }
 
 // --- Status helpers ---
-
-// 전자도서관 사이트 하나의 결과를 상태 칩으로. 사이트가 실패하면 '없음'과 구분해 보인다
-function elibSiteStatus(result: ELibraryResult): { tone: Tone; label: string } {
-  switch (result.status) {
-    case 'FAILED': return { tone: 'danger', label: '접속 실패' }
-    case 'TIMEOUT': return { tone: 'unknown', label: '응답 없음' }
-    // 이 도서관 사이트의 하루 조회 상한(작은 사이트 보호) — 자정에 풀린다
-    case 'DAILY_LIMIT': return { tone: 'unknown', label: '오늘 조회 마감' }
-  }
-  if (result.books.some(b => b.available)) return { tone: 'ok', label: '대출가능' }
-  if (result.books.length > 0) return { tone: 'off', label: '대출중' }
-  return { tone: 'off', label: '소장 없음' }
-}
 
 // 대출가능 → 대출중·소장 없음 → 확인 못 함 순
 function elibRank(result: ELibraryResult): number {
@@ -315,6 +303,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   const [searchError, setSearchError] = useState<string | null>(null)
   // 새 검색 결과마다 증가 — 공공도서관 목록의 누적 페이징 상태를 key 리마운트로 리셋
   const [searchSeq, setSearchSeq] = useState(0)
+  const [libraryPage, setLibraryPage] = useState<LibraryPageState | null>(null)
 
   // E-library state
   const [elibResult, setElibResult] = useState<ELibrarySearchResponse | null>(null)
@@ -368,6 +357,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
       .then(res => {
         if (searchAbort.current === controller) {
           setSearchResult(res)
+          setLibraryPage(null)
           setSearchSeq(seq => seq + 1)
         }
       })
@@ -586,17 +576,12 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
       if (libSection?.reason === 'DAILY_LIMIT') return { value: '오늘 조회 마감', tone: 'neutral' }
       return { value: '위치 필요', tone: 'neutral' }
     }
-    if (libSectionStatus === 'FAILED' && libraries.length === 0) return { value: '응답 없음', tone: 'warn' }
-    if (libraries.length === 0) {
-      return (searchResult.metadata.publicLibraryTotal ?? 0) > 0
-        ? { value: '응답 없음', tone: 'warn' }
-        : { value: '근처에 없음', tone: 'off' }
-    }
-    const available = libraries.filter(l => l.hasBook && l.loanAvailable).length
-    const held = libraries.filter(l => l.hasBook).length
-    if (available > 0) return { value: `${available}곳 대출가능`, tone: 'ok' }
-    if (held > 0) return { value: libHasMore ? `가까운 ${held}곳 대출중` : `${held}곳 모두 대출중`, tone: 'off' }
-    return { value: '가까운 곳엔 없음', tone: 'off' }
+    if (libSectionStatus === 'FAILED' && (libraryPage?.libraries ?? libraries).length === 0) return { value: '응답 없음', tone: 'warn' }
+    return summarizeLibraries(libraryPage?.libraries ?? libraries, libraryPage ?? {
+      total: searchResult.metadata.publicLibraryTotal,
+      nextOffset: searchResult.metadata.publicLibraryNextOffset,
+      hasMore: libHasMore,
+    })
   }
 
   function elibSummary(): Pick<SummaryItem, 'value' | 'tone'> {
@@ -604,12 +589,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
     if (!hasSavedElibs) return { value: '설정 필요', tone: 'neutral' }
     if (elibError) return failedItem
     if (elibLoading || !elibResult) return loadingItem
-    const checked = elibResult.results.filter(r => ['ok', 'off'].includes(elibSiteStatus(r).tone))
-    if (checked.length === 0) return { value: '확인 못 함', tone: 'warn' }
-    const available = checked.filter(r => elibSiteStatus(r).tone === 'ok').length
-    if (available > 0) return { value: `${available}곳 대출가능`, tone: 'ok' }
-    if (elibResult.results.some(r => r.books.length > 0)) return { value: '모두 대출중', tone: 'off' }
-    return { value: '소장 없음', tone: 'off' }
+    return summarizeELibraries(elibResult)
   }
 
   function subscriptionSummary(): Pick<SummaryItem, 'value' | 'tone'> {
@@ -700,6 +680,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
           initialLibraries={result.publicLibraries}
           initialTotal={result.metadata.publicLibraryTotal}
           initialNextOffset={result.metadata.publicLibraryNextOffset}
+          onChange={setLibraryPage}
         />
       </>
     )
