@@ -6,8 +6,8 @@ import type {
   OffStoreResponse,
   FeaturedBooksResponse,
   FeaturedSectionType,
-  PublicLibraryAvailabilityResponse,
   PublicLibraryDirectoryResponse,
+  PublicLibraryBatchResponse,
 } from '../types'
 import { toApiError } from './errors.ts'
 
@@ -104,22 +104,6 @@ export function getOffStores(
   return get(`/api/off-stores?${params}`, signal)
 }
 
-export function getPublicLibraryAvailability(
-  isbn13: string,
-  lat: number,
-  lon: number,
-  offset: number,
-  signal?: AbortSignal,
-): Promise<PublicLibraryAvailabilityResponse> {
-  const params = new URLSearchParams({
-    isbn13,
-    lat: String(lat),
-    lon: String(lon),
-    offset: String(offset),
-  })
-  return get(`/api/public-libraries/availability?${params}`, signal)
-}
-
 /** 기관 이름·주소 검색(자체 DB만 읽음 — 정보나루를 부르지 않는다). 내 도서관·기준 도서관 고르기용 */
 export function searchPublicLibraries(
   keyword: string,
@@ -129,6 +113,33 @@ export function searchPublicLibraries(
 ): Promise<PublicLibraryDirectoryResponse> {
   const params = new URLSearchParams({ keyword, page: String(page), size: String(size) })
   return get(`/api/public-libraries?${params}`, signal)
+}
+
+/** 주변 도서관 5곳 배치. 기준은 좌표 또는 기준 도서관 중 하나. 한 탐색 동안 같은 기준을 보내야 offset이 이어진다 */
+export function getNearbyLibraryBatch(
+  isbn13: string,
+  origin: { lat: number; lon: number } | { referenceLibCode: string },
+  offset: number,
+  signal?: AbortSignal,
+): Promise<PublicLibraryBatchResponse> {
+  const params = new URLSearchParams({ isbn13, mode: 'NEARBY', offset: String(offset) })
+  if ('referenceLibCode' in origin) {
+    params.set('referenceLibCode', origin.referenceLibCode)
+  } else {
+    params.set('lat', String(origin.lat))
+    params.set('lon', String(origin.lon))
+  }
+  return get(`/api/public-libraries/availability/batch?${params}`, signal)
+}
+
+/** 내 도서관(최대 5곳) 또는 확인 못 한 곳 다시 확인. 거리·nextOffset 없음 */
+export function getSavedLibraryBatch(
+  isbn13: string,
+  libCodes: string[],
+  signal?: AbortSignal,
+): Promise<PublicLibraryBatchResponse> {
+  const params = new URLSearchParams({ isbn13, mode: 'SAVED', libraryCodes: libCodes.join(',') })
+  return get(`/api/public-libraries/availability/batch?${params}`, signal)
 }
 
 export function getFeatured(

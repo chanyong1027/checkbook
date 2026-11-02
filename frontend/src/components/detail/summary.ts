@@ -1,6 +1,6 @@
 // 한눈 요약의 결론 계산(도서관·전자도서관). 화면과 떼어 두어 테스트로 묶는다.
 // 응답하지 않은 곳이 섞이면 '모두 대출중'·'없음' 같은 부정적인 결론을 단정하지 않는다
-import type { ELibraryResult, ELibrarySearchResponse, PublicLibraryInfo } from '../../types'
+import type { ELibraryResult, ELibrarySearchResponse, PublicLibraryBatchItem } from '../../types'
 import type { SummaryTone } from './BookPanel'
 import type { Tone } from './parts'
 
@@ -24,30 +24,19 @@ export function elibSiteStatus(result: ELibraryResult): { tone: Tone; label: str
   return { tone: 'off', label: '소장 없음' }
 }
 
-// 조회를 시도했지만 응답이 없어 목록에서 빠진 도서관 수. 검색 응답은 실패 수를 따로 주지 않아
-// '지금까지 시도한 후보 수 - 받은 도서관 수'로 센다
-export function unansweredLibraryCount(received: number, total: number | null, nextOffset: number | null): number {
-  const covered = nextOffset ?? total ?? received
-  return Math.max(0, covered - received)
-}
-
-// 첫 조회·추가 조회·재시도가 공유하는 현재 목록으로 계산한다.
+// 공공도서관 칸의 결론. found = 소장(대출가능·대출중) 기관, unknownCount = 확인 못 한 기관 수.
+// 확인 못 한 곳이 섞이면 '없음'·'모두 대출중'을 단정하지 않는다
 export function summarizeLibraries(
-  libraries: PublicLibraryInfo[],
-  page: { total: number | null; nextOffset: number | null; hasMore: boolean },
+  found: PublicLibraryBatchItem[],
+  unknownCount: number,
+  emptyLabel: string,
 ): SummaryValue {
-  if (libraries.length === 0) {
-    return (page.total ?? 0) > 0 ? { value: '응답 없음', tone: 'warn' } : { value: '근처에 없음', tone: 'off' }
-  }
-  const unanswered = unansweredLibraryCount(libraries.length, page.total, page.nextOffset)
-  const available = libraries.filter(l => l.hasBook && l.loanAvailable).length
-  const held = libraries.filter(l => l.hasBook).length
+  const available = found.filter(l => l.state === 'AVAILABLE').length
   if (available > 0) return { value: `${available}곳 대출가능`, tone: 'ok' }
-  if (held > 0) {
-    if (unanswered > 0) return { value: `${held}곳 대출중 · ${PARTIAL}`, tone: 'off' }
-    return { value: page.hasMore ? `가까운 ${held}곳 대출중` : `${held}곳 모두 대출중`, tone: 'off' }
+  if (found.length > 0) {
+    return { value: unknownCount > 0 ? `${found.length}곳 대출중 · ${PARTIAL}` : `${found.length}곳 대출중`, tone: 'off' }
   }
-  return { value: unanswered > 0 ? `소장 없음 · ${PARTIAL}` : '가까운 곳엔 없음', tone: 'off' }
+  return { value: unknownCount > 0 ? `소장 없음 · ${PARTIAL}` : emptyLabel, tone: 'off' }
 }
 
 // 확인 못 한 곳 = 답이 없던 사이트 + 검색 전에 빠진 곳(로그인 필요·비활성 등, metadata.failures — results와 겹치지 않음)
