@@ -45,6 +45,7 @@ export function FeaturedBooksSection({ onSelect }: Props) {
   const [source, setSource] = useState<FeaturedSource | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [retryKey, setRetryKey] = useState(0)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -65,7 +66,7 @@ export function FeaturedBooksSection({ onSelect }: Props) {
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-  }, [activeTab])
+  }, [activeTab, retryKey])
 
   return (
     <section aria-labelledby="featured-title">
@@ -83,7 +84,7 @@ export function FeaturedBooksSection({ onSelect }: Props) {
                 aria-pressed={selected}
                 onClick={() => setActiveTab(tab.type)}
                 className={
-                  'min-h-10 px-4 rounded-full text-meta font-semibold transition cursor-pointer border ' +
+                  'min-h-11 px-4 rounded-full text-meta font-semibold transition cursor-pointer border ' +
                   (selected
                     ? 'bg-ink-900 border-ink-900 text-white'
                     : 'bg-white border-ink-200 text-ink-700 hover:border-ink-500 hover:text-ink-900')
@@ -96,7 +97,12 @@ export function FeaturedBooksSection({ onSelect }: Props) {
         </div>
       </div>
 
-      {error && <p className="text-meta text-ink-600 py-10 text-center">{error}</p>}
+      {error && (
+        <div className="py-8 text-center text-meta">
+          <p role="alert" className="text-ink-600">{error}</p>
+          <button type="button" onClick={() => setRetryKey(key => key + 1)} className="mt-2 min-h-11 px-4 font-semibold text-primary underline underline-offset-4 cursor-pointer">다시 불러오기</button>
+        </div>
+      )}
 
       {!error && loading && (
         <div className={GRID}>
@@ -117,7 +123,7 @@ export function FeaturedBooksSection({ onSelect }: Props) {
                 className="w-full text-left cursor-pointer group"
               >
                 <div className="relative aspect-[2/3] rounded-md overflow-hidden bg-ink-50 ring-1 ring-black/5
-                  shadow-[0_4px_14px_rgba(25,31,40,0.10)] transition group-hover:-translate-y-0.5 group-hover:shadow-[0_8px_20px_rgba(25,31,40,0.14)]">
+                  transition group-hover:-translate-y-0.5">
                   {book.coverUrl ? (
                     <img src={book.coverUrl} alt="" loading="lazy" className="w-full h-full object-cover" />
                   ) : (
