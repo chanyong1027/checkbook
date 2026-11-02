@@ -85,7 +85,7 @@ export function MyLibrarySettingsSheet({
         {eLibraryOverLimit && (
           <p className="text-label text-status-danger mb-2">전자도서관을 {MAX_ELIBRARIES}곳 이하로 줄여야 저장할 수 있어요</p>
         )}
-        {/* 스크롤 중에도 버튼이 보이게. 아래 여백은 iOS 홈 인디케이터를 피한다 */}
+        {/* 스크롤 중에도 버튼이 보이게. 스크롤 중엔 시트 본문 여백이 안 먹어 홈 인디케이터만큼 띄운다(끝까지 내리면 여백이 조금 겹침) */}
         <div className="flex gap-2 sticky bottom-0 bg-white pt-2" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
           <button
             type="button"

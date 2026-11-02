@@ -139,6 +139,11 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
       elibFocusStage.current = 'waiting'
     }
     if (elibFocusStage.current === 'idle') return
+    // 책 정보가 없으면 검색이 돌지 않는다 — 기다리지 않는다(나중에 엉뚱한 때 포커스를 옮기지 않게)
+    if (!displayBook) {
+      elibFocusStage.current = 'idle'
+      return
+    }
     if (elibLoading) {
       elibFocusStage.current = 'loading'
       return

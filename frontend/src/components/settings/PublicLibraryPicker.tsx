@@ -71,11 +71,8 @@ export function PublicLibraryPicker({
     setLoading(false)
     setError(null)
     if (!query) {
-      abortRef.current?.abort()
       setResults([])
-      setHasNext(false)
-      setLoading(false)
-      setError(null)
+      setSearchedQuery('')
       return
     }
     const timer = setTimeout(() => load(query, 0), SEARCH_DEBOUNCE_MS)
