@@ -1,6 +1,6 @@
 # 도서 식별 공급자 비교 (알라딘 → YES24)
 
-알라딘 OpenAPI가 2026-10-30에 종료되어 도서 식별을 YES24로 옮긴다. 종료 전에 같은 입력으로 두 공급자를 비교해 두려고 만든 스크립트다.
+알라딘 OpenAPI가 2026-10-30에 종료되어 도서 식별을 YES24로 옮겼다. 종료 전에 같은 입력으로 두 공급자를 비교해 두려고 만든 스크립트다. 알라딘 수집 스크립트(`collect_aladin.py`)는 API 종료 뒤 지웠다(비교 결과는 `notes/incidents/aladin-sunset/`에 남아 있다).
 
 ## 실제 서비스 흐름과 맞춘 비교
 
@@ -14,19 +14,16 @@
 |---|---|---|---|
 | 1 | `collect_kakao_seed_isbns.py` | `kakao-seed-keywords.csv`의 검색어로 카카오 후보를 받아 상위 ISBN 추출 → `isbns-from-kakao.csv` | `KAKAO_BOOK_REST_API_KEY` |
 | 2 | `build_isbn_set.py` | 카카오 묶음 + 밀리 PoC 책 + 정보나루 인기 대출 + `tricky-isbns.csv`를 합쳐 `isbns.csv` | 카카오, `DATANARU_AUTH_KEY` |
-| 3 | `collect_aladin.py` | 2026-10-13 당시 앱의 `AladinClient`(지금은 삭제됨)와 같은 요청으로 알라딘 수집 (10/30 이전에만 가능) | `ALADIN_TTB_KEY` |
-| 4 | `collect_yes24.py` | 같은 입력으로 YES24 수집 + 호출 한도·오류 형식 탐침 | `YES24_KEY` |
+| 3 | `collect_yes24.py` | 같은 입력으로 YES24 수집 + 호출 한도·오류 형식 탐침 | `YES24_KEY` |
 
 ```bash
 python3 scripts/identification-compare/collect_kakao_seed_isbns.py
 python3 scripts/identification-compare/build_isbn_set.py
-python3 scripts/identification-compare/collect_aladin.py --dry-run   # 입력 검증만
-python3 scripts/identification-compare/collect_aladin.py
 python3 scripts/identification-compare/collect_yes24.py --probe-only # 한도·형식 확인만
 python3 scripts/identification-compare/collect_yes24.py
 ```
 
-모든 스크립트는 호출 사이에 1초씩 쉰다. 카카오 시드 수집과 YES24 수집은 인증 실패(401/403)나 호출 한도 초과(429)에서 바로 멈추고, 알라딘 수집은 인증 실패나 처음 3건이 모두 오류일 때 멈춘다(알라딘은 키 오류를 HTTP 200 + 오류 코드로 줄 수 있어서). `build_isbn_set.py`는 실패한 질의를 건너뛰고 끝에 결과 수를 출력한다.
+모든 스크립트는 호출 사이에 1초씩 쉰다. 카카오 시드 수집과 YES24 수집은 인증 실패(401/403)나 호출 한도 초과(429)에서 바로 멈춘다. `build_isbn_set.py`는 실패한 질의를 건너뛰고 끝에 결과 수를 출력한다.
 
 ## 데이터 취급
 
@@ -36,11 +33,10 @@ python3 scripts/identification-compare/collect_yes24.py
 
 ## 비교 기준 셋은 고정한다
 
-`isbns.csv`는 알라딘 수집에 쓴 입력이다. 알라딘은 10/30 이후 다시 수집할 수 없고, 정보나루 인기 대출 목록은 날마다 바뀐다. 그래서 `build_isbn_set.py`는 기존 `isbns.csv`가 있으면 덮어쓰지 않는다(`--force`로만 가능). 공급자 간 결과는 `id`가 아니라 `isbn13`으로 맞춰 비교한다.
+`isbns.csv`는 알라딘 수집(2026-10-13)에 쓴 입력이다. 알라딘은 다시 수집할 수 없고, 정보나루 인기 대출 목록은 날마다 바뀐다. 그래서 `build_isbn_set.py`는 기존 `isbns.csv`가 있으면 덮어쓰지 않는다(`--force`로만 가능). 공급자 간 결과는 `id`가 아니라 `isbn13`으로 맞춰 비교한다.
 
 요약 표를 다시 만들 때는 API를 부르지 않고 저장된 원문으로 만든다.
 
 ```bash
-python3 scripts/identification-compare/collect_aladin.py --from-raw notes/incidents/aladin-sunset/raw/aladin-<시각>.jsonl
 python3 scripts/identification-compare/collect_yes24.py  --from-raw notes/incidents/aladin-sunset/raw/yes24-<시각>.jsonl
 ```
