@@ -24,8 +24,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * D7-1 내 도서관·주변 탐색 API. 기존 {@code /api/public-libraries/availability}(구 화면 더보기)는
- * SearchController에 그대로 있다.
+ * D7-1 내 도서관·주변 탐색 API. 옛 화면의 더보기({@code /api/public-libraries/availability})는 11-03에 지웠다.
  */
 @Validated
 @RestController
