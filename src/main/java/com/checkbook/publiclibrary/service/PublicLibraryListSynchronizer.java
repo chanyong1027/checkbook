@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -104,6 +105,11 @@ public class PublicLibraryListSynchronizer {
             DatanaruLibSrchPage page = client.libSrchPage(pageNo, pageSize);
             if (pageNo == 1) {
                 numFound = page.numFound();
+            } else if (!Objects.equals(page.numFound(), numFound)) {
+                // 받는 도중 목록이 바뀌면 쪽 경계가 밀려 한 곳을 건너뛰고도 건수가 맞을 수 있다 — 그 곳이 비활성이 되지 않게 중단
+                log.warn("공공도서관 목록 동기화 중단 — 받는 도중 전체 건수가 바뀜: 1쪽 numFound={}, {}쪽 numFound={}",
+                        numFound, pageNo, page.numFound());
+                return null;
             }
             received += page.receivedCount();
             all.addAll(page.libraries());

@@ -170,6 +170,22 @@ class PublicLibraryListSynchronizerTest {
     }
 
     @Test
+    void 받는_도중_전체_건수가_바뀌면_쪽_경계가_밀렸을_수_있어_아무것도_바꾸지_않는다() {
+        List<PublicLibrary> existing = existing(6);
+        when(repository.findAll()).thenReturn(existing);
+        // 1쪽은 전체 6건이라 했는데, 2쪽을 받을 때는 목록이 바뀌어 7건이 됐다(앞에서 1곳 빠지고 끝에 2곳 추가)
+        when(client.libSrchPage(1, PAGE_SIZE)).thenReturn(page(6,
+                IntStream.range(0, 3).mapToObj(i -> result(code(i), "도서관" + i, 37.5, 127.0)).toList()));
+        when(client.libSrchPage(2, PAGE_SIZE)).thenReturn(page(7,
+                IntStream.range(4, 7).mapToObj(i -> result(code(i), "도서관" + i, 37.5, 127.0)).toList()));
+
+        assertThat(synchronizer.sync()).isEqualTo(Result.INCOMPLETE);
+
+        assertThat(existing).allSatisfy(library -> assertThat(library.isActive()).isTrue());
+        verify(repository, never()).saveAll(anyList());
+    }
+
+    @Test
     void 전체_건수를_모르면_아무것도_바꾸지_않는다() {
         when(client.libSrchPage(1, PAGE_SIZE)).thenReturn(new DatanaruLibSrchPage(null, 0, List.of()));
 
