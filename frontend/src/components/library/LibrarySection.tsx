@@ -116,15 +116,18 @@ function LibraryRows({
                 <p className="text-meta text-ink-600 truncate">
                   {item.distanceKm != null && (
                     <span className="tabular-nums">
-                      {distanceFrom ? `${distanceFrom}에서 ` : ''}직선 {formatDistance(item.distanceKm)}
+                      {distanceFrom ? `${distanceFrom}에서 ` : '거리 '}{formatDistance(item.distanceKm)}
                       {item.address ? ' · ' : ''}
                     </span>
                   )}
                   {item.address}
                 </p>
-                {note && <p className="text-label text-ink-600">{note}</p>}
               </div>
-              <StatusChip tone={s.tone}>{s.label}</StatusChip>
+              {/* 대출 메모는 칩 바로 아래 오른쪽에 둔다 — 주소 줄 아래에 있으면 부가 정보에 섞여 안 보였다. 화면 낭독도 소장 → 대출 순 */}
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <StatusChip tone={s.tone}>{s.label}</StatusChip>
+                {note && <p className="text-label text-ink-700">{note}</p>}
+              </div>
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-4">
               <LibraryLinks item={item} />
