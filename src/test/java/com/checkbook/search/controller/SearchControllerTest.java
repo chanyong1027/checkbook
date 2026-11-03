@@ -3,9 +3,6 @@ package com.checkbook.search.controller;
 import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
 import com.checkbook.common.exception.GlobalExceptionHandler;
-import com.checkbook.publiclibrary.dto.PublicLibraryAvailabilityPage;
-import com.checkbook.publiclibrary.dto.PublicLibraryInfo;
-import com.checkbook.publiclibrary.service.PublicLibraryAvailabilityService;
 import com.checkbook.search.dto.MillieAvailability;
 import com.checkbook.search.dto.OffStoreResponse;
 import com.checkbook.search.dto.SearchResponse;
@@ -31,12 +28,8 @@ import java.util.List;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyDouble;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -55,8 +48,6 @@ class SearchControllerTest {
     @Mock
     private AladinBookService aladinBookService;
 
-    @Mock
-    private PublicLibraryAvailabilityService publicLibraryAvailabilityService;
 
     private SearchController searchController;
 
@@ -64,8 +55,7 @@ class SearchControllerTest {
 
     @BeforeEach
     void setUp() {
-        searchController = new SearchController(
-                searchService, aladinBookService, publicLibraryAvailabilityService);
+        searchController = new SearchController(searchService, aladinBookService);
 
         // 운영에서는 spring-boot-starter-validation의 MethodValidationPostProcessor가
         // @Validated 컨트롤러 빈을 AOP 프록시로 감싸 @RequestParam 제약(@NotBlank/@Pattern/@Min)을
@@ -259,81 +249,6 @@ class SearchControllerTest {
                 .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"));
     }
 
-    @Test
-    void availabilityFirstPageReturns200() throws Exception {
-        when(publicLibraryAvailabilityService.fetch("9788936439743", 37.5665, 126.9780, 0))
-                .thenReturn(new PublicLibraryAvailabilityPage(
-                        List.of(new PublicLibraryInfo(
-                                "종로도서관", true, false, "서울 종로구",
-                                37.57, 126.98, 0.5, "https://lib.example")),
-                        0, 20, 5, true, 0));
-
-        mockMvc.perform(get("/api/public-libraries/availability")
-                        .param("isbn13", "9788936439743")
-                        .param("lat", "37.5665")
-                        .param("lon", "126.9780"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.libraries[0].libraryName").value("종로도서관"))
-                .andExpect(jsonPath("$.total").value(20))
-                .andExpect(jsonPath("$.nextOffset").value(5))
-                .andExpect(jsonPath("$.hasMoreLibraries").value(true))
-                .andExpect(jsonPath("$.failedCount").value(0));
-    }
-
-    @Test
-    void availabilityDefaultsOffsetToZero() throws Exception {
-        when(publicLibraryAvailabilityService.fetch("9788936439743", 37.5665, 126.9780, 0))
-                .thenReturn(new PublicLibraryAvailabilityPage(List.of(), 0, 0, null, false, 0));
-
-        mockMvc.perform(get("/api/public-libraries/availability")
-                        .param("isbn13", "9788936439743")
-                        .param("lat", "37.5665")
-                        .param("lon", "126.9780"))
-                .andExpect(status().isOk());
-    }
-
-    @Test
-    void availabilityNegativeOffsetReturns400() throws Exception {
-        mockMvc.perform(get("/api/public-libraries/availability")
-                        .param("isbn13", "9788936439743")
-                        .param("lat", "37.5665")
-                        .param("lon", "126.9780")
-                        .param("offset", "-1"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void availabilityBlankIsbnReturns400() throws Exception {
-        mockMvc.perform(get("/api/public-libraries/availability")
-                        .param("isbn13", "")
-                        .param("lat", "37.5665")
-                        .param("lon", "126.9780"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void availabilityNon13DigitIsbnReturns400() throws Exception {
-        mockMvc.perform(get("/api/public-libraries/availability")
-                        .param("isbn13", "123")
-                        .param("lat", "37.5665")
-                        .param("lon", "126.9780"))
-                .andExpect(status().isBadRequest());
-    }
-
-    // F1: 숫자 13자리라도 978/979·체크섬이 맞지 않으면 도서관 조회가 무의미하다
-    @Test
-    void availabilityNonStandardIsbnReturns400WithoutFetching() throws Exception {
-        mockMvc.perform(get("/api/public-libraries/availability")
-                        .param("isbn13", "2004566000649")
-                        .param("lat", "37.5665")
-                        .param("lon", "126.9780"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("NON_STANDARD_ISBN"))
-                .andExpect(jsonPath("$.message").value(NON_STANDARD_ISBN_MESSAGE));
-
-        verify(publicLibraryAvailabilityService, never()).fetch(anyString(), anyDouble(), anyDouble(), anyInt());
-    }
-
     // PR-2 F5: 매장 API도 같은 오류 코드를 쓰므로 문구가 '도서관'에 묶이면 안 된다
     @Test
     void offStoresNonStandardIsbnReturns400WithNeutralMessage() throws Exception {
@@ -347,15 +262,6 @@ class SearchControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("NON_STANDARD_ISBN"))
                 .andExpect(jsonPath("$.message").value(NON_STANDARD_ISBN_MESSAGE));
-    }
-
-    @Test
-    void availabilityMissingLatReturns400() throws Exception {
-        mockMvc.perform(get("/api/public-libraries/availability")
-                        .param("isbn13", "9788936439743")
-                        .param("lon", "126.9780"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_LOCATION"));
     }
 
     private static SearchResponse emptyResponse() {

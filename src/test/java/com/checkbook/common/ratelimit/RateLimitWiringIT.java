@@ -41,7 +41,6 @@ class RateLimitWiringIT {
     @ParameterizedTest
     @ValueSource(strings = {
             "/api/search?q=9788936434120",
-            "/api/public-libraries/availability?isbn13=9788936434120&lat=37.5&lon=127.0",
             "/api/public-libraries/availability/batch?isbn13=9788936434120&mode=NEARBY&lat=37.5&lon=127.0",
             "/api/public-libraries/availability/batch?isbn13=9788936434120&mode=SAVED&libraryCodes=111001",
             "/api/books/search?q=test",
@@ -55,6 +54,8 @@ class RateLimitWiringIT {
     @ValueSource(strings = {
             "/api/elibraries",
             "/api/public-libraries?keyword=용산",
+            // 지운 옛 더보기 API(11-03) — 처리기가 없어 404, 한도에 세지 않는다
+            "/api/public-libraries/availability?isbn13=9788936434120&lat=37.5&lon=127.0",
             "/api/featured?type=BESTSELLER",
             "/api/off-stores?isbn13=9788936434120&lat=37.5&lon=127.0",
             "/actuator/health",

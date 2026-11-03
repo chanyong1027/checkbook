@@ -11,7 +11,6 @@ public class RateLimitWebConfig implements WebMvcConfigurer {
     // 외부 호출을 부르는 엔드포인트만 센다. DB만 읽는 목록·추천·매장 링크와 actuator는 세지 않는다
     static final String[] LIMITED_PATHS = {
             "/api/search",
-            "/api/public-libraries/availability",
             "/api/public-libraries/availability/batch",
             "/api/books/search",
             "/api/elibraries/search"
