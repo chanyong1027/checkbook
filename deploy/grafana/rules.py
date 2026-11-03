@@ -417,11 +417,13 @@ def build_rules():
             expr=increase("public_library_sync_total", f'{APP}, result!="success"', "1h", by="result") + " > 0",
             summary="공공도서관 목록 동기화가 {{ $labels.result }}로 끝나 목록을 바꾸지 않았습니다 — "
                     "too_many_removed는 빠질 도서관이 설정 비율(max-removal-ratio)을 넘음, "
-                    "incomplete는 numFound만큼 못 받음, failed는 호출 실패·오류 응답",
+                    "incomplete는 받은 목록이 numFound와 맞지 않음, failed는 호출 실패·오류 응답",
             runbook=[
                 "사유·건수: Explore(로그) `" + LOKI_APP + ' |= "공공도서관 목록 동기화"`',
                 "too_many_removed면 정보나루 참여도서관 목록(사이트의 엑셀)과 건수를 비교한다 — 정말 많이 빠졌으면 "
                 "application.yaml public-library.list-sync.max-removal-ratio를 잠시 올려 배포하고 되돌린다",
+                "incomplete면 로그의 received·고유 코드를 본다: received < numFound면 덜 받음(일시 오류), "
+                "received는 맞는데 고유 코드가 모자라면 정보나루가 중복·코드 없는 항목을 준 것(이어지면 허용치를 코드로 정해야 함)",
                 "incomplete·failed가 한 번이면 다음 실행(배포 또는 월 04:40)을 기다린다. 이어지면 정보나루 공지·상태 확인",
             ]),
         Rule(

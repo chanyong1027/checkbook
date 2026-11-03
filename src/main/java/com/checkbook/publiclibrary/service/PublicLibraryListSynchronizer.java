@@ -116,7 +116,8 @@ public class PublicLibraryListSynchronizer {
                 .collect(Collectors.toMap(DatanaruLibSrchResult::libCode, Function.identity(), (a, b) -> b,
                         LinkedHashMap::new));
         if (numFound == null || received != numFound || byCode.size() != numFound) {
-            log.warn("공공도서관 목록 동기화 중단 — 일부만 받음: numFound={}, received={}, 고유 코드={}",
+            // received < numFound면 덜 받은 것, received는 맞는데 고유 코드가 모자라면 중복·코드 없는 항목이 섞인 것
+            log.warn("공공도서관 목록 동기화 중단 — 받은 목록이 numFound와 맞지 않음: numFound={}, received={}, 고유 코드={}",
                     numFound, received, byCode.size());
             return null;
         }

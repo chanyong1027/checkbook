@@ -8,6 +8,7 @@ import com.checkbook.publiclibrary.domain.PublicLibrary;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
 import com.checkbook.publiclibrary.service.PublicLibraryListSynchronizer.Result;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -41,6 +42,12 @@ class PublicLibraryListSynchronizerIT {
 
     @Autowired PublicLibraryRepository repository;
     @Autowired PlatformTransactionManager transactionManager;
+
+    /** 롤백되지 않는 시험이라 공유 H2(testdb)에 행을 남기지 않게 지운다 */
+    @AfterEach
+    void cleanUp() {
+        repository.deleteAll();
+    }
 
     @Test
     void 추가_갱신_비활성이_커밋된다() {
