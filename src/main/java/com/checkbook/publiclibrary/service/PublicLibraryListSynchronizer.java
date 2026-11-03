@@ -30,7 +30,8 @@ import java.util.stream.Collectors;
  * <p>
  * 정보나루 쪽 오류로 전국 도서관이 한꺼번에 빠지지 않게 두 가지를 먼저 본다. 둘 중 하나라도 걸리면 아무것도 바꾸지 않는다.
  * <ul>
- *   <li>받은 항목 수 합계가 numFound와 다르면 일부만 받은 것(INCOMPLETE)</li>
+ *   <li>받은 고유 도서관 코드 수가 numFound와 다르면 일부만 받은 것(INCOMPLETE) — 코드 없는 항목이나
+ *       쪽 사이 중복이 섞여 개수만 맞는 경우도 여기서 걸린다</li>
  *   <li>빠질 도서관이 지금 활성 도서관의 maxRemovalRatio를 넘으면 의심스러운 축소(TOO_MANY_REMOVED)</li>
  * </ul>
  */
@@ -84,7 +85,7 @@ public class PublicLibraryListSynchronizer {
     public Result sync() {
         Result result;
         try {
-            List<DatanaruLibSrchResult> fetched = fetchAll();
+            Map<String, DatanaruLibSrchResult> fetched = fetchAll();
             result = fetched == null ? Result.INCOMPLETE : apply(fetched);
         } catch (RuntimeException e) {
             log.warn("공공도서관 목록 동기화 실패 — 이번엔 바꾸지 않음", e);
@@ -94,8 +95,8 @@ public class PublicLibraryListSynchronizer {
         return result;
     }
 
-    /** 전부 받았으면 목록, numFound와 맞지 않으면 null. 호출 실패는 예외로 올린다(DB 트랜잭션 밖에서 부른다). */
-    private List<DatanaruLibSrchResult> fetchAll() {
+    /** 전부 받았으면 코드별 목록, numFound와 맞지 않으면 null. 호출 실패는 예외로 올린다(DB 트랜잭션 밖에서 부른다). */
+    private Map<String, DatanaruLibSrchResult> fetchAll() {
         List<DatanaruLibSrchResult> all = new ArrayList<>();
         Integer numFound = null;
         int received = 0;
@@ -110,18 +111,19 @@ public class PublicLibraryListSynchronizer {
                 break;
             }
         }
-        if (numFound == null || received != numFound) {
-            log.warn("공공도서관 목록 동기화 중단 — 일부만 받음: numFound={}, received={}", numFound, received);
-            return null;
-        }
-        return all;
-    }
-
-    private Result apply(List<DatanaruLibSrchResult> fetched) {
         // 같은 코드가 두 번 오면 뒤의 값을 쓴다
-        Map<String, DatanaruLibSrchResult> byCode = fetched.stream()
+        Map<String, DatanaruLibSrchResult> byCode = all.stream()
                 .collect(Collectors.toMap(DatanaruLibSrchResult::libCode, Function.identity(), (a, b) -> b,
                         LinkedHashMap::new));
+        if (numFound == null || received != numFound || byCode.size() != numFound) {
+            log.warn("공공도서관 목록 동기화 중단 — 일부만 받음: numFound={}, received={}, 고유 코드={}",
+                    numFound, received, byCode.size());
+            return null;
+        }
+        return byCode;
+    }
+
+    private Result apply(Map<String, DatanaruLibSrchResult> byCode) {
         return transactionTemplate.execute(status -> {
             List<PublicLibrary> existing = repository.findAll();
             Map<String, PublicLibrary> existingByCode = existing.stream()
@@ -139,7 +141,8 @@ public class PublicLibraryListSynchronizer {
 
             List<PublicLibrary> added = new ArrayList<>();
             List<String> reactivated = new ArrayList<>();
-            for (DatanaruLibSrchResult r : byCode.values()) {
+            for (DatanaruLibSrchResult raw : byCode.values()) {
+                DatanaruLibSrchResult r = fitColumns(raw);
                 PublicLibrary library = existingByCode.get(r.libCode());
                 if (library != null) {
                     if (!library.isActive()) {
@@ -147,7 +150,8 @@ public class PublicLibraryListSynchronizer {
                     }
                     library.refresh(r.name(), r.address(), r.lat(), r.lon(), r.regionName(), r.homepage(),
                             r.phone(), r.fax(), r.operatingHours(), r.closedDays());
-                } else if (r.name() != null && !r.name().isBlank() && r.lat() != null && r.lon() != null) {
+                } else if (r.libCode().length() <= LIB_CODE_MAX && r.name() != null && !r.name().isBlank()
+                        && r.lat() != null && r.lon() != null) {
                     added.add(PublicLibrary.builder()
                             .libCode(r.libCode()).name(r.name()).address(r.address())
                             .lat(r.lat()).lon(r.lon()).regionName(r.regionName()).homepage(r.homepage())
@@ -173,5 +177,19 @@ public class PublicLibraryListSynchronizer {
             }
             return Result.SUCCESS;
         });
+    }
+
+    // public_library 열 길이(V1). 넘치는 값 하나 때문에 트랜잭션 전체가 롤백돼 매주 실패하지 않게 잘라 넣는다.
+    // 코드가 너무 길면 넣을 수 없어 새로 넣지 않는다(받은 목록에는 있으니 비활성 대상도 아니다)
+    private static final int LIB_CODE_MAX = 20;
+
+    private static DatanaruLibSrchResult fitColumns(DatanaruLibSrchResult r) {
+        return new DatanaruLibSrchResult(r.libCode(), fit(r.name(), 200), fit(r.address(), 500), r.lat(), r.lon(),
+                fit(r.regionName(), 100), fit(r.homepage(), 500), fit(r.phone(), 200), fit(r.fax(), 200),
+                fit(r.operatingHours(), 1000), fit(r.closedDays(), 1000));
+    }
+
+    private static String fit(String value, int max) {
+        return value == null || value.length() <= max ? value : value.substring(0, max);
     }
 }

@@ -98,8 +98,9 @@ public class PublicLibrary extends BaseEntity {
     }
 
     /**
-     * 정보나루 목록의 최신 값으로 고치고 되살린다. 이름·좌표가 비어 오면 그 칸만 기존 값을 지킨다
-     * (좌표 없는 도서관도 목록에는 있으니 빠진 것으로 치지 않되, 지도·거리 계산은 옛 좌표로 계속한다).
+     * 정보나루 목록의 최신 값으로 고치고 되살린다. 이름·주소·좌표가 비어 오면 그 칸만 기존 값을 지킨다
+     * (주소가 비면 이름·주소 검색에서 빠진다. 좌표 없는 도서관도 목록에는 있으니 빠진 것으로 치지 않되,
+     * 지도·거리 계산은 옛 좌표로 계속한다).
      */
     public void refresh(String name, String address, Double lat, Double lon, String regionName, String homepage,
                         String phone, String fax, String operatingHours, String closedDays) {
@@ -110,7 +111,9 @@ public class PublicLibrary extends BaseEntity {
             this.lat = lat;
             this.lon = lon;
         }
-        this.address = address;
+        if (address != null && !address.isBlank()) {
+            this.address = address;
+        }
         this.regionName = regionName;
         this.homepage = homepage;
         this.phone = phone;

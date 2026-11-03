@@ -649,7 +649,7 @@ tests:
   - name: 동기화가 중단·실패하면 사유별로 울리고, 성공은 울리지 않는다
     interval: 1m
     input_series:
-      # 기동 때 결과마다 0으로 만들어 둔다 — 10분에 한 번 돌아 too_many_removed가 된다
+      # 기동 때 결과마다 0으로 만들어 둔다. 기동 실행은 150초 뒤라 0이 먼저 수집된다 — 10분에 한 번 돌아 too_many_removed가 된다
       - series: 'public_library_sync_total{job="checkbook-app", slot="blue", result="too_many_removed"}'
         values: '0x9 1x80'
       - series: 'public_library_sync_total{job="checkbook-app", slot="blue", result="success"}'

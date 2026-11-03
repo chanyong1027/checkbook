@@ -409,13 +409,15 @@ def build_rules():
                 "로그: " + APP_LOGS.replace("-1 hour", "-8 day") + " | grep '전자도서관 계약 확인'",
                 "월 09:17에 앱이 떠 있었는지(배포·다운), elibrary.contract-check.enabled가 켜져 있는지",
             ]),
-        # 공공도서관 목록 동기화(2026-11-03): 기동 직후와 월 04:40에 돌고 결과 카운터가 1 오른다.
+        # 공공도서관 목록 동기화(2026-11-03): 기동 150초 뒤와 월 04:40에 돌고 결과 카운터가 1 오른다.
+        # 기동 실행을 늦추는 건 첫 수집(60초 간격)이 0을 먼저 봐야 increase()가 그 실행을 세기 때문이다.
         # 막히면 정보나루에서 빠진 도서관이 주변 후보로 남아 '확인 못 함'이 되고, 새 도서관은 묻지 않는다
         Rule(
             uid="cb-library-list-sync-failed", tier=INFO, title="공공도서관 목록 동기화 중단",
             expr=increase("public_library_sync_total", f'{APP}, result!="success"', "1h", by="result") + " > 0",
             summary="공공도서관 목록 동기화가 {{ $labels.result }}로 끝나 목록을 바꾸지 않았습니다 — "
-                    "too_many_removed는 빠질 도서관이 활성의 10%를 넘음, incomplete는 numFound만큼 못 받음, failed는 호출 실패",
+                    "too_many_removed는 빠질 도서관이 설정 비율(max-removal-ratio)을 넘음, "
+                    "incomplete는 numFound만큼 못 받음, failed는 호출 실패·오류 응답",
             runbook=[
                 "사유·건수: Explore(로그) `" + LOKI_APP + ' |= "공공도서관 목록 동기화"`',
                 "too_many_removed면 정보나루 참여도서관 목록(사이트의 엑셀)과 건수를 비교한다 — 정말 많이 빠졌으면 "
@@ -424,7 +426,7 @@ def build_rules():
             ]),
         Rule(
             uid="cb-library-list-sync-stale", tier=INFO, title="공공도서관 목록 동기화 멈춤",
-            # 계약 확인 멈춤과 같은 식 — 지표가 7~8일 전에도 있었을 때만 본다. 성공만 센다(실패가 이어져도 울린다)
+            # 계약 확인 멈춤과 같은 모양 — 지표가 7~8일 전에도 있었을 때만 본다. 성공만 센다(실패가 이어져도 울린다)
             expr=(f'sum (increase(public_library_sync_total{{{APP}, result="success"}}[8d]))\n'
                   f"and on () count (max_over_time(public_library_sync_total{{{APP}}}[1d] offset 7d)) > 0"),
             op="lt", value=1,

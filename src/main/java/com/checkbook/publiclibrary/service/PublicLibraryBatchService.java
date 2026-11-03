@@ -106,7 +106,10 @@ public class PublicLibraryBatchService {
         return nearbyPage(isbn13, lat, lon, offset, startNanos);
     }
 
-    /** 사용자가 고른 기준 기관 좌표 기준 주변. 기준 기관 자신(거리 0)도 후보다. */
+    /**
+     * 사용자가 고른 기준 기관 좌표 기준 주변. 기준 기관 자신(거리 0)도 후보다.
+     * 기준 기관이 비활성(정보나루에서 빠짐)이어도 좌표는 쓸 수 있어 받는다 — 후보 목록에서는 저장소가 이미 뺀다
+     */
     public PublicLibraryBatchResponse nearbyFromLibrary(String isbn13, String referenceLibCode, int offset) {
         long startNanos = System.nanoTime();
         PublicLibrary reference = repository.findByLibCode(referenceLibCode)

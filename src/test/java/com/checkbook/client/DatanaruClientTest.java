@@ -207,6 +207,22 @@ class DatanaruClientTest {
     }
 
     @Test
+    void libSrchPage는_오류_응답이면_일부만_받은_것이_아니라_호출_실패로_올린다() throws Exception {
+        server = new MockWebServer();
+        server.enqueue(new MockResponse().setHeader("Content-Type", "application/json")
+                .setBody("{\"response\": {\"error\": \"인증키가 유효하지 않습니다\"}}"));
+        server.start();
+        DatanaruClient client = new DatanaruClient(
+                RestClient.builder(),
+                new DatanaruProperties(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000),
+                new SimpleMeterRegistry(), ExternalCallBudget.unlimited());
+
+        assertThatThrownBy(() -> client.libSrchPage(1, 100))
+                .isInstanceOf(DatanaruResponseException.class)
+                .hasMessageContaining("인증키가 유효하지 않습니다");
+    }
+
+    @Test
     void libSrchThrowsOnNetworkFailure() {
         DatanaruClient client = new DatanaruClient(
                 RestClient.builder(),

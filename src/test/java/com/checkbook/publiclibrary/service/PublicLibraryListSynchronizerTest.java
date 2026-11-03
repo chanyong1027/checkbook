@@ -136,6 +136,40 @@ class PublicLibraryListSynchronizerTest {
     }
 
     @Test
+    void 건수는_맞아도_중복_코드가_섞여_고유_코드가_모자라면_아무것도_바꾸지_않는다() {
+        List<PublicLibrary> existing = existing(10);
+        when(repository.findAll()).thenReturn(existing);
+        // 쪽 정렬이 흔들려 L002가 두 번 오고 L009가 빠진 10건
+        List<DatanaruLibSrchResult> fetched = new ArrayList<>(
+                IntStream.range(0, 9).mapToObj(i -> result(code(i), "도서관" + i, 37.5, 127.0)).toList());
+        fetched.add(result("L002", "도서관2", 37.5, 127.0));
+        stubPages(fetched);
+
+        assertThat(synchronizer.sync()).isEqualTo(Result.INCOMPLETE);
+
+        assertThat(existing).allSatisfy(library -> assertThat(library.isActive()).isTrue());
+        verify(repository, never()).saveAll(anyList());
+    }
+
+    @Test
+    void 열_길이를_넘는_값은_잘라_넣고_주소가_비어_오면_기존_주소를_지킨다() {
+        List<PublicLibrary> existing = existing(10);
+        when(repository.findAll()).thenReturn(existing);
+        List<DatanaruLibSrchResult> fetched = new ArrayList<>();
+        fetched.add(new DatanaruLibSrchResult("L000", "도서관0", null, 37.5, 127.0, "11", null, null, null,
+                "가".repeat(1500), null));
+        IntStream.range(1, 10).forEach(i -> fetched.add(result(code(i), "도서관" + i, 37.5, 127.0)));
+        fetched.add(result("NEW", "나".repeat(300), 37.7, 127.2));
+        stubPages(fetched);
+
+        assertThat(synchronizer.sync()).isEqualTo(Result.SUCCESS);
+
+        assertThat(existing.get(0).getOperatingHours()).hasSize(1000);
+        assertThat(existing.get(0).getAddress()).isEqualTo("옛주소");
+        assertThat(savedNew()).singleElement().satisfies(added -> assertThat(added.getName()).hasSize(200));
+    }
+
+    @Test
     void 전체_건수를_모르면_아무것도_바꾸지_않는다() {
         when(client.libSrchPage(1, PAGE_SIZE)).thenReturn(new DatanaruLibSrchPage(null, 0, List.of()));
 
@@ -186,7 +220,8 @@ class PublicLibraryListSynchronizerTest {
 
     private static List<PublicLibrary> existing(int count) {
         return new ArrayList<>(IntStream.range(0, count)
-                .mapToObj(i -> PublicLibrary.builder().libCode(code(i)).name("도서관" + i).lat(37.5).lon(127.0).build())
+                .mapToObj(i -> PublicLibrary.builder().libCode(code(i)).name("도서관" + i).address("옛주소")
+                        .lat(37.5).lon(127.0).build())
                 .toList());
     }
 
