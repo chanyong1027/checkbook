@@ -13,9 +13,10 @@ export interface MapPoint {
   stateLabel: string
 }
 
+// 마커는 소장 여부만 가른다. 대출 상태는 전날 자료라 자주 틀려 목록 행에 작게만 보인다
 const STATE_LABEL: Record<string, string> = {
-  AVAILABLE: '대출가능',
-  ON_LOAN: '대출중',
+  AVAILABLE: '소장',
+  ON_LOAN: '소장',
   NOT_HELD: '미소장',
 }
 
@@ -33,7 +34,7 @@ export function toMapPoints(items: PublicLibraryBatchItem[]): MapPoint[] {
       lat: item.latitude,
       lng: item.longitude,
       label: String(index + 1),
-      tone: item.state === 'AVAILABLE' ? 'ok' : item.state === 'UNKNOWN' ? 'unknown' : 'off',
+      tone: item.state === 'AVAILABLE' || item.state === 'ON_LOAN' ? 'ok' : item.state === 'UNKNOWN' ? 'unknown' : 'off',
       stateLabel: STATE_LABEL[item.state] ?? '확인 못 함',
     }))
 }

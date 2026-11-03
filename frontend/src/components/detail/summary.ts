@@ -25,16 +25,15 @@ export function elibSiteStatus(result: ELibraryResult): { tone: Tone; label: str
 }
 
 // 공공도서관 칸의 결론. found = 소장(대출가능·대출중) 기관, unknownCount = 확인 못 한 기관 수.
-// 확인 못 한 곳이 섞이면 '없음'·'모두 대출중'을 단정하지 않는다
+// 결론은 소장 수로만 낸다 — 정보나루 소장은 홈페이지와 99% 맞지만 '대출가능'은 24%만 맞았다(11-03 실측, 117곳).
+// 확인 못 한 곳이 섞이면 '없음'을 단정하지 않는다
 export function summarizeLibraries(
   found: PublicLibraryBatchItem[],
   unknownCount: number,
   emptyLabel: string,
 ): SummaryValue {
-  const available = found.filter(l => l.state === 'AVAILABLE').length
-  if (available > 0) return { value: `${available}곳 대출가능`, tone: 'ok' }
   if (found.length > 0) {
-    return { value: unknownCount > 0 ? `${found.length}곳 대출중 · ${PARTIAL}` : `${found.length}곳 대출중`, tone: 'off' }
+    return { value: unknownCount > 0 ? `${found.length}곳 소장 · ${PARTIAL}` : `${found.length}곳 소장`, tone: 'ok' }
   }
   return { value: unknownCount > 0 ? `소장 없음 · ${PARTIAL}` : emptyLabel, tone: 'off' }
 }

@@ -35,15 +35,15 @@ test('공공도서관: 확인 못 한 곳이 섞이면 없다고 단정하지 �
   assert.equal(summarizeLibraries([], 0, '가까운 곳엔 없음').value, '가까운 곳엔 없음')
 })
 
-test('공공도서관: 대출중만 있고 확인 못 한 곳이 섞이면 그렇게 말한다', () => {
-  assert.equal(summarizeLibraries([lib('ON_LOAN')], 1, '-').value, '1곳 대출중 · 일부 확인 못 함')
-  assert.equal(summarizeLibraries([lib('ON_LOAN'), lib('ON_LOAN')], 0, '-').value, '2곳 대출중')
+test('공공도서관: 대출 상태와 상관없이 소장한 곳 수를 말한다(대출 정보는 전날 기준이라 결론에 쓰지 않는다)', () => {
+  const s = summarizeLibraries([lib('AVAILABLE'), lib('ON_LOAN'), lib('ON_LOAN')], 0, '-')
+  assert.equal(s.value, '3곳 소장')
+  assert.equal(s.tone, 'ok')
+  assert.equal(summarizeLibraries([lib('ON_LOAN')], 0, '-').tone, 'ok')
 })
 
-test('공공도서관: 대출가능이 하나라도 있으면 실패가 섞여도 대출가능', () => {
-  const s = summarizeLibraries([lib('AVAILABLE'), lib('ON_LOAN')], 3, '-')
-  assert.equal(s.value, '1곳 대출가능')
-  assert.equal(s.tone, 'ok')
+test('공공도서관: 소장한 곳이 있고 확인 못 한 곳이 섞이면 그렇게 말한다', () => {
+  assert.equal(summarizeLibraries([lib('ON_LOAN'), lib('AVAILABLE')], 3, '-').value, '2곳 소장 · 일부 확인 못 함')
 })
 
 test('전자도서관: 한 곳 대출중, 한 곳 시간 초과면 모두 대출중이라 하지 않는다', () => {

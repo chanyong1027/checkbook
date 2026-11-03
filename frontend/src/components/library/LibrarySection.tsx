@@ -27,11 +27,19 @@ const REASON_LABEL: Record<string, string> = {
 
 function status(item: PublicLibraryBatchItem): { tone: Tone; label: string } {
   switch (item.state) {
-    case 'AVAILABLE': return { tone: 'ok', label: '대출가능' }
-    case 'ON_LOAN': return { tone: 'off', label: '대출중' }
+    // 칩은 소장 여부만 말한다. 정보나루 '대출가능'은 실측 24%만 맞아 칩 아래 작은 글씨로 내린다(loanNote)
+    case 'AVAILABLE':
+    case 'ON_LOAN': return { tone: 'ok', label: '소장' }
     case 'NOT_HELD': return { tone: 'off', label: '미소장' }
     default: return { tone: 'unknown', label: REASON_LABEL[item.reason ?? ''] ?? '확인 못 함' }
   }
+}
+
+/** 소장한 곳의 대출 정보. 결론(칩·요약)에 쓰지 않고 참고로만 보인다 */
+function loanNote(item: PublicLibraryBatchItem): string | null {
+  if (item.state === 'AVAILABLE') return '대출가능'
+  if (item.state === 'ON_LOAN') return '대출중'
+  return null
 }
 
 function LibraryLinks({ item }: { item: PublicLibraryBatchItem }) {
@@ -91,6 +99,7 @@ function LibraryRows({
     <ul role="list">
       {items.map((item, index) => {
         const s = status(item)
+        const note = loanNote(item)
         const selected = selection?.selectedCode === item.libCode
         return (
           <li
@@ -113,6 +122,7 @@ function LibraryRows({
                   )}
                   {item.address}
                 </p>
+                {note && <p className="text-label text-ink-600">{note}</p>}
               </div>
               <StatusChip tone={s.tone}>{s.label}</StatusChip>
             </div>
@@ -344,8 +354,8 @@ export function LibrarySection({
         </div>
       )}
 
-      {/* 정보나루는 전날 자료이고 대출중만 '불가'로 준다(예약·상호대차 중은 가능으로 옴) — D7-0 */}
-      <p className="mb-3 text-label text-ink-600">예약·상호대차 중인 책도 '대출가능'으로 보일 수 있어요</p>
+      {/* 정보나루는 전날 자료이고 대출중만 '불가'로 준다(예약·상호대차 중은 가능으로 옴, D7-0). 11-03 실측에서 '대출가능' 적중 24% */}
+      <p className="mb-3 text-label text-ink-600">대출 정보는 실제와 다를 수 있어요. 가기 전에 도서관에서 확인해 보세요</p>
 
       {(mode === 'saved' || origin) && (
         // 책·모드가 바뀌면 지도를 새로 그린다(사용자가 옮긴 상태를 넘기지 않게, SDK는 이미 받은 것을 쓴다)

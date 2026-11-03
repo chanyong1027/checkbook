@@ -399,7 +399,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   const summary: SummaryItem[] = [
     { href: '#library', label: '공공도서관', ...librarySummary(),
       action: '도서관 목록 보기',
-      note: '대출 상태는 전날 자료 기준' },
+      note: '대출 정보는 전날 자료라 다를 수 있어요' },
     { href: '#elibrary', label: '전자도서관', ...elibSummary(),
       // 책 정보가 없으면 전자도서관을 검색할 수 없다 — 고르기 대신 그 이유가 있는 칸으로 안내
       action: bookInfoNotice ? '전자도서관 안내 보기' : pendingELibraryIds ? '5곳 고르기' : hasSavedElibs ? '대출 목록 보기' : '전자도서관 고르기',
