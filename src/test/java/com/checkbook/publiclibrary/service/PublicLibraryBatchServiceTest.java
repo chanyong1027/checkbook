@@ -474,6 +474,18 @@ class PublicLibraryBatchServiceTest {
     }
 
     @Test
+    void 저장_모드에_정보나루에서_빠진_도서관이_있으면_모르는_코드처럼_400() {
+        PublicLibrary closed = lib(2);
+        closed.deactivate();
+        when(repository.findByLibCodeIn(anyCollection())).thenReturn(List.of(lib(1), closed));
+
+        assertThatThrownBy(() -> service.saved(ISBN, List.of("L001", "L002")))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.UNKNOWN_PUBLIC_LIBRARY);
+        verifyNoInteractions(snapshotService);
+    }
+
+    @Test
     void 저장_모드에_모르는_코드가_있으면_400() {
         when(repository.findByLibCodeIn(anyCollection())).thenReturn(List.of(lib(1)));
 

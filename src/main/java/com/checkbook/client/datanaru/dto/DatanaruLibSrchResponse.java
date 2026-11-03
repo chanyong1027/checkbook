@@ -8,7 +8,7 @@ import java.util.List;
 public record DatanaruLibSrchResponse(Response response) {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Response(List<LibEntry> libs) {
+    public record Response(Integer numFound, String error, List<LibEntry> libs) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

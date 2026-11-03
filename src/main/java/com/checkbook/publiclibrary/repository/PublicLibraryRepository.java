@@ -19,7 +19,8 @@ public interface PublicLibraryRepository extends JpaRepository<PublicLibrary, Lo
 
     boolean existsByLibCode(String libCode);
 
-    List<PublicLibrary> findByLatBetweenAndLonBetween(
+    /** 주변 검색 후보. 정보나루 참여 목록에서 빠진(비활성) 도서관은 넣지 않는다. */
+    List<PublicLibrary> findByActiveTrueAndLatBetweenAndLonBetween(
             double minLat,
             double maxLat,
             double minLon,
@@ -67,8 +68,16 @@ public interface PublicLibraryRepository extends JpaRepository<PublicLibrary, Lo
 
     List<PublicLibrary> findByLibCodeIn(Collection<String> libCodes);
 
-    /** 기관 선택용 검색(D7-1). 이름 또는 주소에 keyword가 들어간 기관. 정렬은 Pageable이 정한다. */
-    Slice<PublicLibrary> findByNameContainingIgnoreCaseOrAddressContainingIgnoreCase(
+    /**
+     * 기관 선택용 검색(D7-1). 이름 또는 주소에 keyword가 들어간 활성 기관. 정렬은 Pageable이 정한다.
+     * 파생 쿼리라 (활성 그리고 이름) 또는 (활성 그리고 주소)로 쓴다 — Containing의 %·_ 이스케이프를 그대로 받으려고
+     */
+    default Slice<PublicLibrary> searchActiveByNameOrAddress(String keyword, Pageable pageable) {
+        return findByActiveTrueAndNameContainingIgnoreCaseOrActiveTrueAndAddressContainingIgnoreCase(
+                keyword, keyword, pageable);
+    }
+
+    Slice<PublicLibrary> findByActiveTrueAndNameContainingIgnoreCaseOrActiveTrueAndAddressContainingIgnoreCase(
             String nameKeyword, String addressKeyword, Pageable pageable);
 
     private List<PublicLibrary> findWithinBoundingBox(double lat, double lon, double radiusKm) {
@@ -77,7 +86,7 @@ public interface PublicLibraryRepository extends JpaRepository<PublicLibrary, Lo
         double normalizedCosLat = Math.max(Math.abs(cosLat), 0.1);
         double lonDelta = radiusKm / (111.0 * normalizedCosLat);
 
-        return findByLatBetweenAndLonBetween(
+        return findByActiveTrueAndLatBetweenAndLonBetween(
                 lat - latDelta,
                 lat + latDelta,
                 lon - lonDelta,

@@ -2,6 +2,7 @@ package com.checkbook.client.datanaru;
 
 import com.checkbook.client.datanaru.dto.DatanaruBookExistResponse;
 import com.checkbook.client.datanaru.dto.DatanaruBookExistResult;
+import com.checkbook.client.datanaru.dto.DatanaruLibSrchPage;
 import com.checkbook.client.datanaru.dto.DatanaruLibSrchResponse;
 import com.checkbook.client.datanaru.dto.DatanaruLibSrchResult;
 import com.checkbook.client.datanaru.dto.DatanaruLoanBookResult;
@@ -108,40 +109,55 @@ public class DatanaruClient {
         return null;
     }
 
-    // 도서관 목록·인기 대출 목록은 배치라 예산 차단선을 넘어도 보낸다(세기만)
+    /** 좌표가 있는 도서관만. 초기 적재(PublicLibraryDataLoader)가 쓴다. */
     public List<DatanaruLibSrchResult> libSrch(int pageNo, int pageSize) {
+        return libSrchPage(pageNo, pageSize).libraries().stream()
+                .filter(result -> result.lat() != null && result.lon() != null)
+                .toList();
+    }
+
+    // 도서관 목록·인기 대출 목록은 배치라 예산 차단선을 넘어도 보낸다(세기만).
+    // 사용자 경로가 아니라 긴 타임아웃(listClient)을 쓴다 — 17쪽 중 한 쪽만 1.2초를 넘어도 동기화 전체가 실패하지 않게
+    public DatanaruLibSrchPage libSrchPage(int pageNo, int pageSize) {
         budget.record(ExternalProvider.DATANARU);
+        DatanaruLibSrchResponse response;
         try {
-            DatanaruLibSrchResponse response = defaultClient.get()
+            response = listClient.get()
                     .uri("/libSrch?authKey={key}&pageNo={page}&pageSize={size}&format=json",
                             authKey, pageNo, pageSize)
                     .retrieve()
                     .body(DatanaruLibSrchResponse.class);
-
-            if (response == null || response.response() == null || response.response().libs() == null) {
-                return List.of();
-            }
-
-            return response.response().libs().stream()
-                    .map(DatanaruLibSrchResponse.LibEntry::lib)
-                    .filter(Objects::nonNull)
-                    .map(lib -> new DatanaruLibSrchResult(
-                            lib.libCode(),
-                            lib.libName(),
-                            lib.address(),
-                            parseDouble(lib.latitude()),
-                            parseDouble(lib.longitude()),
-                            lib.region(),
-                            lib.homepage(),
-                            lib.tel(),
-                            lib.fax(),
-                            lib.operatingTime(),
-                            lib.closed()))
-                    .filter(result -> result.lat() != null && result.lon() != null)
-                    .toList();
         } catch (Exception e) {
             throw new DatanaruResponseException("정보나루 libSrch 실패: pageNo=" + pageNo, e);
         }
+        if (response == null || response.response() == null) {
+            return new DatanaruLibSrchPage(null, 0, List.of());
+        }
+        // 키 오류·한도 초과도 200에 error를 담아 온다 — '일부만 받음'이 아니라 호출 실패로 올려 원인이 보이게 한다
+        if (response.response().error() != null && !response.response().error().isBlank()) {
+            throw new DatanaruResponseException(
+                    "정보나루 libSrch 오류 응답: pageNo=" + pageNo + ", error=" + response.response().error());
+        }
+        List<DatanaruLibSrchResponse.LibEntry> entries =
+                response.response().libs() == null ? List.of() : response.response().libs();
+        List<DatanaruLibSrchResult> libraries = entries.stream()
+                .filter(Objects::nonNull)
+                .map(DatanaruLibSrchResponse.LibEntry::lib)
+                .filter(lib -> lib != null && lib.libCode() != null && !lib.libCode().isBlank())
+                .map(lib -> new DatanaruLibSrchResult(
+                        lib.libCode().strip(),
+                        lib.libName(),
+                        lib.address(),
+                        parseDouble(lib.latitude()),
+                        parseDouble(lib.longitude()),
+                        lib.region(),
+                        lib.homepage(),
+                        lib.tel(),
+                        lib.fax(),
+                        lib.operatingTime(),
+                        lib.closed()))
+                .toList();
+        return new DatanaruLibSrchPage(response.response().numFound(), entries.size(), libraries);
     }
 
     public List<DatanaruLoanBookResult> loanItemSrch(int pageSize) {

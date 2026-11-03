@@ -400,6 +400,8 @@ tests:
         values: '0x30'
       - series: 'elibrary_contract_site_failed_total{job="checkbook-app", slot="blue"}'
         values: '0x30'
+      - series: 'public_library_sync_total{job="checkbook-app", slot="blue", result="success"}'
+        values: '0x30'
       - series: 'external_budget_limit{job="checkbook-app", slot="blue", provider="yes24", kind="block"}'
         values: '19000x30'
       - series: 'external_budget_used{job="checkbook-app", slot="blue", provider="yes24"}'
@@ -640,5 +642,49 @@ tests:
       # 31시 확인이 8일 창 밖으로 나갔다
       - eval_time: 240h
         alertname: cb-elibrary-contract-stale
+        exp_alerts:
+          - exp_labels: {tier: info}
+
+  # ---------- 공공도서관 목록 동기화 ----------
+  - name: 동기화가 중단·실패하면 사유별로 울리고, 성공은 울리지 않는다
+    interval: 1m
+    input_series:
+      # 기동 때 결과마다 0으로 만들어 둔다. 기동 실행은 150초 뒤라 0이 먼저 수집된다 — 10분에 한 번 돌아 too_many_removed가 된다
+      - series: 'public_library_sync_total{job="checkbook-app", slot="blue", result="too_many_removed"}'
+        values: '0x9 1x80'
+      - series: 'public_library_sync_total{job="checkbook-app", slot="blue", result="success"}'
+        values: '0x9 1x80'
+      - series: 'public_library_sync_total{job="checkbook-app", slot="blue", result="failed"}'
+        values: '0x89'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: cb-library-list-sync-failed
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: cb-library-list-sync-failed
+        exp_alerts:
+          - exp_labels: {tier: info, result: too_many_removed}
+      - eval_time: 75m
+        alertname: cb-library-list-sync-failed
+        exp_alerts: []
+
+  - name: 동기화가 8일 넘게 성공하지 않으면 울리되, 지표가 생긴 지 7일이 안 됐으면 판단하지 않는다
+    interval: 1h
+    input_series:
+      # 0시에 배포(0으로 생김), 1시에 기동 동기화 성공, 그 뒤로는 실패만 한다
+      - series: 'public_library_sync_total{job="checkbook-app", slot="blue", result="success"}'
+        values: '0 1x250'
+      - series: 'public_library_sync_total{job="checkbook-app", slot="blue", result="failed"}'
+        values: '0x100 1x150'
+    alert_rule_test:
+      - eval_time: 20h
+        alertname: cb-library-list-sync-stale
+        exp_alerts: []
+      - eval_time: 180h
+        alertname: cb-library-list-sync-stale
+        exp_alerts: []
+      # 1시 성공이 8일(192h) 창 밖으로 나갔다 — 실패는 있어도 성공이 없다
+      - eval_time: 200h
+        alertname: cb-library-list-sync-stale
         exp_alerts:
           - exp_labels: {tier: info}

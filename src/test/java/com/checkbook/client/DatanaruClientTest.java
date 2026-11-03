@@ -5,6 +5,7 @@ import com.checkbook.client.datanaru.DatanaruInvalidResponseException;
 import com.checkbook.client.datanaru.DatanaruProperties;
 import com.checkbook.client.datanaru.DatanaruResponseException;
 import com.checkbook.client.datanaru.dto.DatanaruBookExistResult;
+import com.checkbook.client.datanaru.dto.DatanaruLibSrchPage;
 import com.checkbook.client.datanaru.dto.DatanaruLibSrchResult;
 import com.checkbook.common.ratelimit.ExternalCallBudget;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -162,6 +163,63 @@ class DatanaruClientTest {
 
         assertThatThrownBy(() -> client.bookExist("9788936439743", "111111"))
                 .isInstanceOf(Exception.class);
+    }
+
+    @Test
+    void libSrchPage는_전체_건수와_좌표_없는_도서관까지_돌려준다() throws Exception {
+        server = new MockWebServer();
+        server.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""
+                        {"response": {"numFound": 1620, "libs": [
+                          {"lib": {"libCode": "111111", "libName": "종로도서관", "latitude": "37.57", "longitude": "126.98"}},
+                          {"lib": {"libCode": "222222", "libName": "좌표없음도서관", "latitude": "", "longitude": "126.98"}}
+                        ]}}
+                        """));
+        server.start();
+        DatanaruClient client = new DatanaruClient(
+                RestClient.builder(),
+                new DatanaruProperties(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000),
+                new SimpleMeterRegistry(), ExternalCallBudget.unlimited());
+
+        DatanaruLibSrchPage page = client.libSrchPage(1, 100);
+
+        assertThat(page.numFound()).isEqualTo(1620);
+        assertThat(page.receivedCount()).isEqualTo(2);
+        assertThat(page.libraries()).extracting(DatanaruLibSrchResult::libCode).containsExactly("111111", "222222");
+        assertThat(page.libraries().get(1).lat()).isNull();
+    }
+
+    @Test
+    void libSrchPage는_응답_본문이_비면_전체_건수를_모른다() throws Exception {
+        server = new MockWebServer();
+        server.enqueue(new MockResponse().setHeader("Content-Type", "application/json").setBody("{}"));
+        server.start();
+        DatanaruClient client = new DatanaruClient(
+                RestClient.builder(),
+                new DatanaruProperties(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000),
+                new SimpleMeterRegistry(), ExternalCallBudget.unlimited());
+
+        DatanaruLibSrchPage page = client.libSrchPage(1, 100);
+
+        assertThat(page.numFound()).isNull();
+        assertThat(page.receivedCount()).isZero();
+    }
+
+    @Test
+    void libSrchPage는_오류_응답이면_일부만_받은_것이_아니라_호출_실패로_올린다() throws Exception {
+        server = new MockWebServer();
+        server.enqueue(new MockResponse().setHeader("Content-Type", "application/json")
+                .setBody("{\"response\": {\"error\": \"인증키가 유효하지 않습니다\"}}"));
+        server.start();
+        DatanaruClient client = new DatanaruClient(
+                RestClient.builder(),
+                new DatanaruProperties(baseUrl("/api"), "test-key", SUCCESS_CASE_TIMEOUT_MS, 10000),
+                new SimpleMeterRegistry(), ExternalCallBudget.unlimited());
+
+        assertThatThrownBy(() -> client.libSrchPage(1, 100))
+                .isInstanceOf(DatanaruResponseException.class)
+                .hasMessageContaining("인증키가 유효하지 않습니다");
     }
 
     @Test

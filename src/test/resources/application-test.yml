@@ -43,6 +43,8 @@ search:
 
 public-library:
   bootstrap-enabled: false
+  list-sync:
+    enabled: false
   executor-pool-size: 20
   executor-queue-capacity: 20
 
