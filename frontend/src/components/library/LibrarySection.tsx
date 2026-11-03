@@ -99,6 +99,7 @@ function LibraryRows({
     <ul role="list">
       {items.map((item, index) => {
         const s = status(item)
+        const note = loanNote(item)
         const selected = selection?.selectedCode === item.libCode
         return (
           <li
@@ -121,7 +122,7 @@ function LibraryRows({
                   )}
                   {item.address}
                 </p>
-                {loanNote(item) && <p className="text-label text-ink-600">{loanNote(item)}</p>}
+                {note && <p className="text-label text-ink-600">{note}</p>}
               </div>
               <StatusChip tone={s.tone}>{s.label}</StatusChip>
             </div>
