@@ -28,6 +28,11 @@ elibrary:
   contract-check:
     enabled: false
 
+# 도서관 목록 동기화는 정보나루(부하 측정에선 스텁)로 나가 목록을 바꾼다 — 측정 DB가 흔들리지 않게 끈다
+public-library:
+  list-sync:
+    enabled: false
+
 logging:
   level:
     com.checkbook.client: INFO

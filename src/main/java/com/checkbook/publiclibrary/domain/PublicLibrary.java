@@ -59,6 +59,13 @@ public class PublicLibrary extends BaseEntity {
     @Column(name = "closed_days", length = 1000)
     private String closedDays;
 
+    /**
+     * 정보나루 참여 목록에 있는지. 빠지면 지우지 않고 false로 둔다 — 다시 참여하면 되살리고,
+     * 그동안은 주변·이름 검색과 내 도서관에서 뺀다(bookExist가 빈 응답을 줘 늘 '확인 못 함'이 되므로).
+     */
+    @Column(nullable = false)
+    private boolean active = true;
+
     @Builder
     public PublicLibrary(
             String libCode,
@@ -84,5 +91,32 @@ public class PublicLibrary extends BaseEntity {
         this.fax = fax;
         this.operatingHours = operatingHours;
         this.closedDays = closedDays;
+    }
+
+    public void deactivate() {
+        this.active = false;
+    }
+
+    /**
+     * 정보나루 목록의 최신 값으로 고치고 되살린다. 이름·좌표가 비어 오면 그 칸만 기존 값을 지킨다
+     * (좌표 없는 도서관도 목록에는 있으니 빠진 것으로 치지 않되, 지도·거리 계산은 옛 좌표로 계속한다).
+     */
+    public void refresh(String name, String address, Double lat, Double lon, String regionName, String homepage,
+                        String phone, String fax, String operatingHours, String closedDays) {
+        if (name != null && !name.isBlank()) {
+            this.name = name;
+        }
+        if (lat != null && lon != null) {
+            this.lat = lat;
+            this.lon = lon;
+        }
+        this.address = address;
+        this.regionName = regionName;
+        this.homepage = homepage;
+        this.phone = phone;
+        this.fax = fax;
+        this.operatingHours = operatingHours;
+        this.closedDays = closedDays;
+        this.active = true;
     }
 }

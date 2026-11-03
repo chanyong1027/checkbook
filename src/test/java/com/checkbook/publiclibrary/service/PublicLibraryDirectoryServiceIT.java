@@ -51,6 +51,16 @@ class PublicLibraryDirectoryServiceIT {
     }
 
     @Test
+    void 정보나루에서_빠진_비활성_도서관은_찾지_않는다() {
+        PublicLibrary closed = lib("C9", "용산폐관도서관", "서울 용산구");
+        closed.deactivate();
+        repository.save(closed);
+
+        assertThat(service.search("용산", 0, 20).items())
+                .extracting(PublicLibraryDirectoryResponse.Item::libCode).containsExactly("C1", "C2", "C3");
+    }
+
+    @Test
     void 다음_페이지가_있으면_hasNext() {
         PublicLibraryDirectoryResponse first = service.search("용산", 0, 2);
         PublicLibraryDirectoryResponse second = service.search("용산", 1, 2);

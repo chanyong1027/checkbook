@@ -409,6 +409,30 @@ def build_rules():
                 "로그: " + APP_LOGS.replace("-1 hour", "-8 day") + " | grep '전자도서관 계약 확인'",
                 "월 09:17에 앱이 떠 있었는지(배포·다운), elibrary.contract-check.enabled가 켜져 있는지",
             ]),
+        # 공공도서관 목록 동기화(2026-11-03): 기동 직후와 월 04:40에 돌고 결과 카운터가 1 오른다.
+        # 막히면 정보나루에서 빠진 도서관이 주변 후보로 남아 '확인 못 함'이 되고, 새 도서관은 묻지 않는다
+        Rule(
+            uid="cb-library-list-sync-failed", tier=INFO, title="공공도서관 목록 동기화 중단",
+            expr=increase("public_library_sync_total", f'{APP}, result!="success"', "1h", by="result") + " > 0",
+            summary="공공도서관 목록 동기화가 {{ $labels.result }}로 끝나 목록을 바꾸지 않았습니다 — "
+                    "too_many_removed는 빠질 도서관이 활성의 10%를 넘음, incomplete는 numFound만큼 못 받음, failed는 호출 실패",
+            runbook=[
+                "사유·건수: Explore(로그) `" + LOKI_APP + ' |= "공공도서관 목록 동기화"`',
+                "too_many_removed면 정보나루 참여도서관 목록(사이트의 엑셀)과 건수를 비교한다 — 정말 많이 빠졌으면 "
+                "application.yaml public-library.list-sync.max-removal-ratio를 잠시 올려 배포하고 되돌린다",
+                "incomplete·failed가 한 번이면 다음 실행(배포 또는 월 04:40)을 기다린다. 이어지면 정보나루 공지·상태 확인",
+            ]),
+        Rule(
+            uid="cb-library-list-sync-stale", tier=INFO, title="공공도서관 목록 동기화 멈춤",
+            # 계약 확인 멈춤과 같은 식 — 지표가 7~8일 전에도 있었을 때만 본다. 성공만 센다(실패가 이어져도 울린다)
+            expr=(f'sum (increase(public_library_sync_total{{{APP}, result="success"}}[8d]))\n'
+                  f"and on () count (max_over_time(public_library_sync_total{{{APP}}}[1d] offset 7d)) > 0"),
+            op="lt", value=1,
+            summary="공공도서관 목록 동기화가 8일 넘게 성공하지 않았습니다 — 정보나루에서 빠진 도서관이 후보로 남을 수 있습니다",
+            runbook=[
+                "로그: " + APP_LOGS.replace("-1 hour", "-8 day") + " | grep '공공도서관 목록 동기화'",
+                "public-library.list-sync.enabled가 켜져 있는지, 월 04:40에 앱이 떠 있었는지",
+            ]),
         Rule(
             uid="cb-disk-filling", tier=INFO, title="디스크가 하루 안에 찰 것으로 보임",
             expr=_disk_used_above(40, fill_within_hours=24),

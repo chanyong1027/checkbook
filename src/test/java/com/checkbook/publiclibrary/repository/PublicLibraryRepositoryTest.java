@@ -36,7 +36,7 @@ class PublicLibraryRepositoryTest {
                 .build()
         );
 
-        when(repository.findByLatBetweenAndLonBetween(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+        when(repository.findByActiveTrueAndLatBetweenAndLonBetween(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
                 .thenReturn(libraries);
 
         List<PublicLibrary> result = repository.findNearest(37.5666, 126.9784, 1);
@@ -47,7 +47,7 @@ class PublicLibraryRepositoryTest {
 
     @Test
     void findNearestReturnsEmptyWhenLimitIsZero() {
-        when(repository.findByLatBetweenAndLonBetween(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+        when(repository.findByActiveTrueAndLatBetweenAndLonBetween(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
                 .thenReturn(List.of(PublicLibrary.builder()
                 .libCode("L1")
                 .name("종로도서관")
@@ -67,7 +67,7 @@ class PublicLibraryRepositoryTest {
                 .lon(126.982)
                 .build();
 
-        when(repository.findByLatBetweenAndLonBetween(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+        when(repository.findByActiveTrueAndLatBetweenAndLonBetween(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
                 .thenReturn(List.of())
                 .thenReturn(List.of())
                 .thenReturn(List.of(library));
@@ -85,7 +85,7 @@ class PublicLibraryRepositoryTest {
                 PublicLibrary.builder().libCode("A").name("가").lat(37.5665).lon(126.9780).build()
         );
 
-        when(repository.findByLatBetweenAndLonBetween(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+        when(repository.findByActiveTrueAndLatBetweenAndLonBetween(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
                 .thenReturn(libraries);
 
         List<PublicLibrary> result = repository.findNearest(37.5665, 126.9780, 10);
@@ -109,7 +109,7 @@ class PublicLibraryRepositoryTest {
         double lonDelta = 10.0 / (111.0 * Math.cos(Math.toRadians(CENTER_LAT)));
         PublicLibrary corner = at("CORNER", CENTER_LAT + latDelta * 0.95, CENTER_LON + lonDelta * 0.95);
         PublicLibrary inside = at("IN", CENTER_LAT + 0.08, CENTER_LON); // 약 8.9km
-        when(repository.findByLatBetweenAndLonBetween(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+        when(repository.findByActiveTrueAndLatBetweenAndLonBetween(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
                 .thenReturn(List.of(corner, inside));
 
         List<PublicLibrary> result = repository.findWithinRadius(CENTER_LAT, CENTER_LON, 10.0);
@@ -119,7 +119,7 @@ class PublicLibraryRepositoryTest {
 
     @Test
     void findWithinRadius의_네모는_반경_원을_모두_덮는다() {
-        when(repository.findByLatBetweenAndLonBetween(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+        when(repository.findByActiveTrueAndLatBetweenAndLonBetween(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
                 .thenReturn(List.of());
 
         repository.findWithinRadius(CENTER_LAT, CENTER_LON, 10.0);
@@ -128,7 +128,7 @@ class PublicLibraryRepositoryTest {
         ArgumentCaptor<Double> maxLat = ArgumentCaptor.forClass(Double.class);
         ArgumentCaptor<Double> minLon = ArgumentCaptor.forClass(Double.class);
         ArgumentCaptor<Double> maxLon = ArgumentCaptor.forClass(Double.class);
-        verify(repository).findByLatBetweenAndLonBetween(
+        verify(repository).findByActiveTrueAndLatBetweenAndLonBetween(
                 minLat.capture(), maxLat.capture(), minLon.capture(), maxLon.capture());
         // 네모 네 변까지의 실제 거리가 모두 반경 이상이어야 원 안의 기관을 놓치지 않는다(사각형 반례 방지)
         assertThat(DistanceCalculator.km(CENTER_LAT, CENTER_LON, minLat.getValue(), CENTER_LON)).isGreaterThanOrEqualTo(10.0);
@@ -139,7 +139,7 @@ class PublicLibraryRepositoryTest {
 
     @Test
     void findWithinRadius는_거리순_동률은_코드순으로_정렬한다() {
-        when(repository.findByLatBetweenAndLonBetween(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
+        when(repository.findByActiveTrueAndLatBetweenAndLonBetween(anyDouble(), anyDouble(), anyDouble(), anyDouble()))
                 .thenReturn(List.of(
                         at("FAR", CENTER_LAT + 0.05, CENTER_LON),
                         at("B", CENTER_LAT + 0.01, CENTER_LON),

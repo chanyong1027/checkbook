@@ -25,8 +25,7 @@ public class PublicLibraryDirectoryService {
 
     public PublicLibraryDirectoryResponse search(String keyword, int page, int size) {
         String trimmed = keyword.strip();
-        Slice<PublicLibrary> slice = repository.findByNameContainingIgnoreCaseOrAddressContainingIgnoreCase(
-                trimmed, trimmed, PageRequest.of(page, size, ORDER));
+        Slice<PublicLibrary> slice = repository.searchActiveByNameOrAddress(trimmed, PageRequest.of(page, size, ORDER));
         return new PublicLibraryDirectoryResponse(
                 slice.getContent().stream().map(PublicLibraryDirectoryResponse.Item::from).toList(),
                 slice.hasNext());

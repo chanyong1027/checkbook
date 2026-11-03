@@ -2,6 +2,7 @@ package com.checkbook.client.datanaru;
 
 import com.checkbook.client.datanaru.dto.DatanaruBookExistResponse;
 import com.checkbook.client.datanaru.dto.DatanaruBookExistResult;
+import com.checkbook.client.datanaru.dto.DatanaruLibSrchPage;
 import com.checkbook.client.datanaru.dto.DatanaruLibSrchResponse;
 import com.checkbook.client.datanaru.dto.DatanaruLibSrchResult;
 import com.checkbook.client.datanaru.dto.DatanaruLoanBookResult;
@@ -108,8 +109,15 @@ public class DatanaruClient {
         return null;
     }
 
-    // 도서관 목록·인기 대출 목록은 배치라 예산 차단선을 넘어도 보낸다(세기만)
+    /** 좌표가 있는 도서관만. 초기 적재(PublicLibraryDataLoader)가 쓴다. */
     public List<DatanaruLibSrchResult> libSrch(int pageNo, int pageSize) {
+        return libSrchPage(pageNo, pageSize).libraries().stream()
+                .filter(result -> result.lat() != null && result.lon() != null)
+                .toList();
+    }
+
+    // 도서관 목록·인기 대출 목록은 배치라 예산 차단선을 넘어도 보낸다(세기만)
+    public DatanaruLibSrchPage libSrchPage(int pageNo, int pageSize) {
         budget.record(ExternalProvider.DATANARU);
         try {
             DatanaruLibSrchResponse response = defaultClient.get()
@@ -118,15 +126,17 @@ public class DatanaruClient {
                     .retrieve()
                     .body(DatanaruLibSrchResponse.class);
 
-            if (response == null || response.response() == null || response.response().libs() == null) {
-                return List.of();
+            if (response == null || response.response() == null) {
+                return new DatanaruLibSrchPage(null, 0, List.of());
             }
-
-            return response.response().libs().stream()
-                    .map(DatanaruLibSrchResponse.LibEntry::lib)
+            List<DatanaruLibSrchResponse.LibEntry> entries =
+                    response.response().libs() == null ? List.of() : response.response().libs();
+            List<DatanaruLibSrchResult> libraries = entries.stream()
                     .filter(Objects::nonNull)
+                    .map(DatanaruLibSrchResponse.LibEntry::lib)
+                    .filter(lib -> lib != null && lib.libCode() != null && !lib.libCode().isBlank())
                     .map(lib -> new DatanaruLibSrchResult(
-                            lib.libCode(),
+                            lib.libCode().strip(),
                             lib.libName(),
                             lib.address(),
                             parseDouble(lib.latitude()),
@@ -137,8 +147,8 @@ public class DatanaruClient {
                             lib.fax(),
                             lib.operatingTime(),
                             lib.closed()))
-                    .filter(result -> result.lat() != null && result.lon() != null)
                     .toList();
+            return new DatanaruLibSrchPage(response.response().numFound(), entries.size(), libraries);
         } catch (Exception e) {
             throw new DatanaruResponseException("정보나루 libSrch 실패: pageNo=" + pageNo, e);
         }

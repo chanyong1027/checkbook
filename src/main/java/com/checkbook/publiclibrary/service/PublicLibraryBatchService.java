@@ -124,7 +124,9 @@ public class PublicLibraryBatchService {
         if (unique.size() > MAX_SAVED_LIBRARIES) {
             throw new BusinessException(ErrorCode.PUBLIC_LIBRARY_CODES_LIMIT_EXCEEDED);
         }
+        // 정보나루에서 빠진(비활성) 도서관도 모르는 코드처럼 다룬다 — 물어도 늘 '확인 못 함'이라 다시 고르게 한다
         Map<String, PublicLibrary> byCode = repository.findByLibCodeIn(unique).stream()
+                .filter(PublicLibrary::isActive)
                 .collect(Collectors.toMap(PublicLibrary::getLibCode, Function.identity(), (a, b) -> a));
         if (!byCode.keySet().containsAll(unique)) {
             // 오래된 저장 코드. 몰래 빼고 조회하지 않는다 — 화면이 재선택을 안내한다

@@ -81,6 +81,13 @@ search:
 
 public-library:
   bootstrap-enabled: false
+  # 정보나루 참여 목록(libSrch)에 맞춰 도서관을 추가·갱신·비활성한다. 기동 직후 한 번 + 매주(2026-11-03 결정)
+  # 결과는 public.library.sync 지표 → Grafana 규칙(deploy/grafana/rules.py)이 Slack 낮 채널로 알린다
+  list-sync:
+    enabled: true
+    cron: "0 40 4 * * MON"   # 월 04:40 KST
+    # 빠질 도서관이 활성의 이 비율을 넘으면 정보나루 쪽 오류로 보고 아무것도 바꾸지 않는다
+    max-removal-ratio: 0.10
   # fan-out 20/요청 × 동시 요청 2건 full-width. baseline에선 이 풀이 아니라 searchExecutor가
   # 병목이었으나(incomplete 0%), 상류 확장(3→12) 후의 2차 병목 대비
   executor-pool-size: 40
