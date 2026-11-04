@@ -1,5 +1,6 @@
 package com.checkbook.search.service;
 
+import com.checkbook.common.matcher.BookMetadataNormalizer;
 import com.checkbook.common.ratelimit.ExternalCallBudget;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
@@ -117,7 +118,8 @@ class PublicLibraryParallelBenchmarkTest {
                     identificationService,
                     millieBookService,
                     availabilityService,
-                    searchExecutor, new SimpleMeterRegistry()
+                    searchExecutor, new SimpleMeterRegistry(),
+                    new SubscriptionSearchLinks(new BookMetadataNormalizer())
             );
             service.search(TEST_ISBN, 37.5665, 126.9780, null);
         } finally {

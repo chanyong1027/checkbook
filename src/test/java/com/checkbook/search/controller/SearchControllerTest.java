@@ -80,7 +80,7 @@ class SearchControllerTest {
                         List.of(),
                         new SearchResponse.UsedBookInfo("https://www.aladin.co.kr/shop/UsedShop/wuseditemall.aspx?ISBN=9788994492032"),
                         new SearchResponse.NewBookInfo(32000, "https://www.yes24.com/product/goods/1"),
-                        new SearchResponse.SubscriptionInfo(MillieAvailability.unavailable()),
+                        new SearchResponse.SubscriptionInfo(MillieAvailability.unavailable(), List.of()),
                         new SearchResponse.SearchMetadata(
                                 LocalDateTime.now(),
                                 List.of(new SearchResponse.SectionStatusDetail(
@@ -268,7 +268,7 @@ class SearchControllerTest {
         return new SearchResponse(
                 new SearchResponse.BookInfo(null, null, "9788994492032", null, null),
                 List.of(), null, null,
-                new SearchResponse.SubscriptionInfo(MillieAvailability.unavailable()),
+                new SearchResponse.SubscriptionInfo(MillieAvailability.unavailable(), List.of()),
                 new SearchResponse.SearchMetadata(LocalDateTime.now(), List.of(), List.of(), null, false, null,
                         new SearchResponse.IdentificationInfo(
                                 IdentificationResult.Source.NONE, IdentificationResult.Yes24Status.NOT_FOUND)));
