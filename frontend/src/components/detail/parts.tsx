@@ -65,7 +65,7 @@ const TONE_ICON: Record<Tone, ReactNode> = {
 export function StatusChip({ tone, children }: { tone: Tone; children: ReactNode }) {
   return (
     <span
-      className={`inline-flex items-center gap-1 h-7 px-2.5 rounded-full text-label font-semibold whitespace-nowrap ${TONE_CLASS[tone]}`}
+      className={`inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded-full text-label font-semibold whitespace-nowrap ${TONE_CLASS[tone]}`}
     >
       {TONE_ICON[tone]}
       {children}

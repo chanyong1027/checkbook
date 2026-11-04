@@ -9,14 +9,14 @@ const item = (searchLink: PublicLibrarySearchLink | null, homepage: string | nul
   state: 'AVAILABLE', reason: null, searchLink,
 })
 
-test('GET 결과 링크는 "사이트에서 검색" 링크가 된다', () => {
+test('GET 결과 링크는 "대출 상태 확인" 링크가 된다', () => {
   const link = siteLinkOf(item({ kind: 'RESULT', method: 'GET', url: 'https://lib.example/s?kwd=%ED%9D%B0', fields: null }))
-  assert.deepEqual(link, { kind: 'get', href: 'https://lib.example/s?kwd=%ED%9D%B0', label: '사이트에서 검색' })
+  assert.deepEqual(link, { kind: 'get', href: 'https://lib.example/s?kwd=%ED%9D%B0', label: '대출 상태 확인' })
 })
 
 test('POST 결과 링크는 같은 문구의 버튼형 폼이 된다', () => {
   const link = siteLinkOf(item({ kind: 'RESULT', method: 'POST', url: 'https://lib.example/s', fields: { kwd: '흰' } }))
-  assert.deepEqual(link, { kind: 'post', action: 'https://lib.example/s', fields: [['kwd', '흰']], label: '사이트에서 검색' })
+  assert.deepEqual(link, { kind: 'post', action: 'https://lib.example/s', fields: [['kwd', '흰']], label: '대출 상태 확인' })
 })
 
 test('검색 화면만 되는 곳은 "도서관 검색"', () => {
