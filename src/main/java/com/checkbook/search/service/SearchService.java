@@ -60,6 +60,7 @@ public class SearchService {
     private final PublicLibraryAvailabilityService publicLibraryAvailabilityService;
     private final ExecutorService searchExecutor;
     private final MeterRegistry meterRegistry;
+    private final SubscriptionSearchLinks subscriptionSearchLinks;
 
     @Value("${search.total-deadline:2800}")
     private long totalDeadlineMs = 2800;
@@ -69,13 +70,15 @@ public class SearchService {
             MillieBookService millieBookService,
             PublicLibraryAvailabilityService publicLibraryAvailabilityService,
             @Qualifier("searchExecutor") ExecutorService searchExecutor,
-            MeterRegistry meterRegistry
+            MeterRegistry meterRegistry,
+            SubscriptionSearchLinks subscriptionSearchLinks
     ) {
         this.identificationService = identificationService;
         this.millieBookService = millieBookService;
         this.publicLibraryAvailabilityService = publicLibraryAvailabilityService;
         this.searchExecutor = searchExecutor;
         this.meterRegistry = meterRegistry;
+        this.subscriptionSearchLinks = subscriptionSearchLinks;
         // 알림이 보는 조합(FAILED·SKIPPED × 이유)을 기동 때 0으로 미리 만든다. 처음 실패하는 순간에 생기면
         // 첫 값이 1이라 increase()가 그 실패를 못 센다(배포로 재시작할 때마다 되풀이). 섹션 4 × (2 × 이유 10 + 1)
         for (SearchSection section : SearchSection.values()) {
@@ -147,7 +150,7 @@ public class SearchService {
                 publicResults,
                 used.value(),
                 newBook.value(),
-                new SearchResponse.SubscriptionInfo(millieResult),
+                new SearchResponse.SubscriptionInfo(millieResult, subscriptionSearchLinks.forTitle(book.title())),
                 new SearchResponse.SearchMetadata(
                         LocalDateTime.now(), statuses, failures,
                         publicPage != null ? publicPage.total() : null,

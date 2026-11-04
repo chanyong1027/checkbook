@@ -81,9 +81,16 @@ export interface MillieAvailability {
   format: 'EBOOK' | 'AUDIOBOOK' | 'EBOOK_AND_AUDIOBOOK' | null
 }
 
+/** 있음/없음을 확인하지 않은 다른 구독 서비스의 검색 링크 */
+export interface SubscriptionSearchLink {
+  name: string
+  url: string
+}
+
 export interface SubscriptionInfo {
   millie: MillieAvailability
-  // 추후 RidiAvailability ridi, NaverAvailability naver 추가
+  // 이 필드가 없는 옛 서버 응답에서도 화면이 깨지지 않게 선택으로 둔다(프런트·서버 배포 순서 차이)
+  searchLinks?: SubscriptionSearchLink[]
 }
 
 export type SearchSection = 'PUBLIC_LIBRARY' | 'USED_BOOK' | 'NEW_BOOK' | 'SUBSCRIPTION'

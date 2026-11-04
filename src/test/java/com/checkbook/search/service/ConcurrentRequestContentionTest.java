@@ -1,5 +1,6 @@
 package com.checkbook.search.service;
 
+import com.checkbook.common.matcher.BookMetadataNormalizer;
 import com.checkbook.common.ratelimit.ExternalCallBudget;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
@@ -89,7 +90,7 @@ class ConcurrentRequestContentionTest {
             ReflectionTestUtils.setField(availabilityService, "maxCount", 20);
             ReflectionTestUtils.setField(availabilityService, "fanoutTimeoutMs", 2200L);
             SearchService service = new SearchService(
-                    identificationService, millieBookService, availabilityService, searchPool, new SimpleMeterRegistry());
+                    identificationService, millieBookService, availabilityService, searchPool, new SimpleMeterRegistry(), new SubscriptionSearchLinks(new BookMetadataNormalizer()));
 
             Callable<SearchResponse> call = () -> service.search(TEST_ISBN, 37.5665, 126.9780, null);
             List<Future<SearchResponse>> futures = callers.invokeAll(List.of(call, call));

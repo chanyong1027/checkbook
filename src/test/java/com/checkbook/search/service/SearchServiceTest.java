@@ -1,5 +1,7 @@
 package com.checkbook.search.service;
 
+import com.checkbook.common.matcher.BookMetadataNormalizer;
+import com.checkbook.search.dto.SubscriptionSearchLink;
 import com.checkbook.client.millie.MillieClientException;
 import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
@@ -87,7 +89,7 @@ class SearchServiceTest {
         searchExecutor = Executors.newFixedThreadPool(3);
         meterRegistry = new SimpleMeterRegistry();
         searchService = new SearchService(
-                identificationService, millieBookService, publicLibraryAvailabilityService, searchExecutor, meterRegistry);
+                identificationService, millieBookService, publicLibraryAvailabilityService, searchExecutor, meterRegistry, new SubscriptionSearchLinks(new BookMetadataNormalizer()));
         when(millieBookService.findAvailability(any(), any())).thenReturn(MillieAvailability.unavailable());
         when(publicLibraryAvailabilityService.fetch(ISBN, LAT, LON, 0)).thenReturn(libraryPage());
     }
@@ -357,6 +359,27 @@ class SearchServiceTest {
     }
 
     @Test
+    void searchLinksStayWhenMillieFails() {
+        when(identificationService.identify(ISBN, null)).thenReturn(found(13500, YES24_URL));
+        when(millieBookService.findAvailability(any(), any())).thenThrow(new MillieClientException("밀리 HTTP 500"));
+
+        SearchResponse r = assertConsistent(searchService.search(ISBN, null, null, null));
+
+        assertStatus(r, SearchSection.SUBSCRIPTION, SearchSectionStatus.FAILED, SearchSectionReason.UNAVAILABLE);
+        assertThat(r.subscription().searchLinks()).extracting(SubscriptionSearchLink::name)
+                .containsExactly("리디", "만권당", "크레마클럽");
+    }
+
+    @Test
+    void noSearchLinksWithoutTitle() {
+        when(identificationService.identify(ISBN, null)).thenReturn(miss(Yes24Status.TIMEOUT, true));
+
+        SearchResponse r = assertConsistent(searchService.search(ISBN, null, null, null));
+
+        assertThat(r.subscription().searchLinks()).isEmpty();
+    }
+
+    @Test
     void subscriptionClientTimeoutIsFailedTimeout() {
         when(identificationService.identify(ISBN, null)).thenReturn(found(13500, YES24_URL));
         when(millieBookService.findAvailability(any(), any())).thenThrow(
@@ -465,7 +488,7 @@ class SearchServiceTest {
         when(identificationService.identify(ISBN, null)).thenReturn(miss(Yes24Status.NOT_FOUND, true));
         ExecutorService unusedExecutor = org.mockito.Mockito.mock(ExecutorService.class);
         SearchService service = new SearchService(
-                identificationService, millieBookService, publicLibraryAvailabilityService, unusedExecutor, new SimpleMeterRegistry());
+                identificationService, millieBookService, publicLibraryAvailabilityService, unusedExecutor, new SimpleMeterRegistry(), new SubscriptionSearchLinks(new BookMetadataNormalizer()));
 
         SearchResponse response = assertConsistent(service.search(ISBN, null, null, null));
 

@@ -36,8 +36,9 @@ public record SearchResponse(
     }
 
     public record SubscriptionInfo(
-            MillieAvailability millie
-            // 추후 RidiAvailability ridi, NaverAvailability naver 추가
+            MillieAvailability millie,
+            /** 있음/없음을 확인하지 않는 다른 구독 서비스의 검색 링크. millie 조회 결과와 무관하고, 검색어를 만들 수 없을 때만 비어 있다. */
+            List<SubscriptionSearchLink> searchLinks
     ) {
     }
 

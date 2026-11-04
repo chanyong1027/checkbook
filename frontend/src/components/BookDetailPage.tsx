@@ -15,6 +15,7 @@ import { usePreferences } from '../preferences/PreferencesContext'
 import {
   BookIcon,
   ClockIcon,
+  ExternalIcon,
   HeadphonesIcon,
   LibraryIcon,
   RefreshIcon,
@@ -578,28 +579,61 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
     )
   }
 
-  function subscriptionBody() {
+  function millieStatus() {
     if (!result) return <SectionNotice>구독 정보를 불러오지 못했어요</SectionNotice>
     if (subSection?.status === 'SKIPPED' && subSection.reason === 'NO_METADATA') {
       return <SectionNotice>책 정보를 확인하지 못해 구독 여부를 확인할 수 없어요</SectionNotice>
     }
     if (subSection?.status === 'SKIPPED' && subSection.reason === 'DAILY_LIMIT') {
-      return <SectionNotice>오늘은 조회가 많아 구독 여부를 확인할 수 없어요. 내일 다시 시도해주세요</SectionNotice>
+      return <SectionNotice>오늘은 조회가 많아 밀리의서재 구독 여부를 확인할 수 없어요. 내일 다시 시도해주세요</SectionNotice>
     }
     if (subSection?.status === 'FAILED') {
-      return <SectionNotice>구독 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요</SectionNotice>
+      return <SectionNotice>밀리의서재 구독 정보를 불러오지 못했어요. 잠시 후 다시 시도해주세요</SectionNotice>
     }
-    if (subSection?.status !== 'SUCCESS') return <SectionNotice>구독 여부를 확인할 수 없어요</SectionNotice>
+    if (subSection?.status !== 'SUCCESS') return <SectionNotice>밀리의서재 구독 여부를 확인할 수 없어요</SectionNotice>
 
     const millie = result.subscription.millie
     if (!millie.available) return <SectionNotice>밀리의서재에는 없어요</SectionNotice>
     return (
       <div className="flex flex-wrap items-center gap-3">
+        <span className="text-body font-semibold text-ink-900">밀리의서재</span>
         <StatusChip tone="ok">{formatLabel(millie.format)} 있음</StatusChip>
         {isSafeUrl(millie.detailUrl) && (
           <ExternalButton href={millie.detailUrl} label="밀리에서 보기 (새 창)" className="sm:ml-auto">
             밀리에서 보기
           </ExternalButton>
+        )}
+      </div>
+    )
+  }
+
+  // 밀리 결과와 따로 그린다 — 밀리 조회가 실패해도 다른 서비스로 넘어갈 길이 남아야 한다.
+  // 있음/없음을 확인하지 않은 링크라 '찾아보기'로만 말한다
+  function subscriptionBody() {
+    const links = (result?.subscription.searchLinks ?? []).filter(link => isSafeUrl(link.url))
+    return (
+      <div className="flex flex-col gap-3">
+        {millieStatus()}
+        {links.length > 0 && (
+          <div className="border-t border-ink-100 pt-3">
+            <p className="text-meta font-semibold text-ink-700">다른 구독 서비스에서 찾아보기</p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+              {links.map(link => (
+                <a
+                  key={link.name}
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`${link.name}에서 찾아보기 (새 탭)`}
+                  className="inline-flex items-center gap-0.5 min-h-9 text-label font-semibold text-primary hover:text-primary-dark hover:underline underline-offset-2"
+                >
+                  {link.name}에서 찾아보기
+                  <ExternalIcon size={14} />
+                </a>
+              ))}
+            </div>
+            <p className="mt-1 text-meta text-ink-600">책이 있는지는 각 서비스에서 확인해 주세요</p>
+          </div>
         )}
       </div>
     )
@@ -736,7 +770,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
         {searchLoading ? (
           <SectionSkeleton id="subscription" rows={1} />
         ) : (
-          <DetailSection id="subscription" icon={<HeadphonesIcon size={20} />} title="밀리의서재">
+          <DetailSection id="subscription" icon={<HeadphonesIcon size={20} />} title="구독">
             {subscriptionBody()}
           </DetailSection>
         )}
