@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PublicLibraryBatchItem } from '../../types'
 import { usePreferences } from '../../preferences/PreferencesContext'
-import { isSafeUrl } from '../../utils/url'
 import { formatDistance } from '../../utils/distance'
 import { StatusChip, type Tone } from '../detail/parts'
+import { siteLinkOf } from './siteLink'
 import type { SummaryItem } from '../detail/BookPanel'
 import { summarizeLibraries } from '../detail/summary'
 import { GlobeIcon, MapPinIcon, NavigateIcon, RefreshIcon, SpinnerIcon } from '../shared/icons'
@@ -44,13 +44,24 @@ function loanNote(item: PublicLibraryBatchItem): string | null {
 
 function LibraryLinks({ item }: { item: PublicLibraryBatchItem }) {
   const link = 'inline-flex items-center gap-1 min-h-9 text-label font-semibold text-ink-700 hover:text-ink-900 hover:underline underline-offset-2'
+  const site = siteLinkOf(item)
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-      {isSafeUrl(item.homepage) && (
-        <a href={item.homepage ?? undefined} target="_blank" rel="noopener noreferrer" aria-label={`${item.name} 홈페이지 열기`} className={link}>
+      {site?.kind === 'get' && (
+        <a href={site.href} target="_blank" rel="noopener noreferrer" aria-label={`${item.name} ${site.label} (새 탭)`} className={link}>
           <GlobeIcon size={14} />
-          홈페이지
+          {site.label}
         </a>
+      )}
+      {site?.kind === 'post' && (
+        // 주소에 검색어가 안 남는 사이트: 누르면 새 탭에서 그 사이트 검색을 제출한다(결정 POST 자동 제출 카드 A안)
+        <form method="post" action={site.action} target="_blank" rel="noopener noreferrer" className="inline-flex">
+          {site.fields.map(([name, value]) => <input key={name} type="hidden" name={name} value={value} />)}
+          <button type="submit" aria-label={`${item.name} ${site.label} (새 탭)`} className={`${link} cursor-pointer`}>
+            <GlobeIcon size={14} />
+            {site.label}
+          </button>
+        </form>
       )}
       <a
         href={`https://map.kakao.com/link/search/${encodeURIComponent(item.name)}`}
@@ -256,12 +267,15 @@ const pill = (active: boolean) =>
  */
 export function LibrarySection({
   isbn13,
+  title,
   location,
   locationLoading,
   onRequestLocation,
   onSummaryChange,
 }: {
   isbn13: string
+  /** 도서관 사이트 검색 링크에 쓸 책 제목. 아직 모르면 null(그 사이 받은 도서관은 홈페이지 링크) */
+  title: string | null
   location: { lat: number; lon: number } | null
   locationLoading: boolean
   onRequestLocation: () => void
@@ -292,8 +306,8 @@ export function LibrarySection({
   const originIsGps = origin != null && !('referenceLibCode' in origin)
   const distanceFrom = originIsGps ? '내 위치' : reference?.name ?? null
 
-  const savedLookup = useSavedLibraries(isbn13, saved.map(l => l.libCode), mode === 'saved')
-  const nearby = useNearbyExplorer(isbn13, origin, mode === 'nearby')
+  const savedLookup = useSavedLibraries(isbn13, saved.map(l => l.libCode), mode === 'saved', title)
+  const nearby = useNearbyExplorer(isbn13, origin, mode === 'nearby', title)
 
   // 지도와 목록이 같은 기관을 가리키게 한다. 마커를 누르면 목록 행을, 행에서 누르면 마커를 강조한다
   const [selectedCode, setSelectedCode] = useState<string | null>(null)

@@ -43,7 +43,10 @@ function isAbort(err: unknown): boolean {
  * 주변 탐색. 기준(origin)·책이 바뀌면 처음부터 다시 찾고, 지난 응답은 세대 번호로 버린다.
  * 한 탐색 동안 같은 기준을 보낸다(GPS를 다시 받으면 순서가 바뀌어 offset이 어긋남).
  */
-export function useNearbyExplorer(isbn13: string, origin: LibraryOrigin | null, enabled: boolean) {
+export function useNearbyExplorer(isbn13: string, origin: LibraryOrigin | null, enabled: boolean, title?: string | null) {
+  // 제목은 의존값이 아니라 ref로 읽는다 — 공유 링크 진입처럼 제목이 늦게 오면 그 뒤 배치부터 링크가 붙고, 탐색은 다시 시작하지 않는다
+  const titleRef = useRef(title)
+  useEffect(() => { titleRef.current = title }, [title])
   const [state, setState] = useState<ExplorerState>(INITIAL_STATE)
   const [running, setRunning] = useState(false)
   const [stop, setStop] = useState<ExploreStop | null>(null)
@@ -83,7 +86,7 @@ export function useNearbyExplorer(isbn13: string, origin: LibraryOrigin | null, 
       let timedOut = false
       const timer = setTimeout(() => { timedOut = true; controller.abort() }, Math.max(0, ROUND_DEADLINE_MS - elapsed))
       try {
-        const res = await getNearbyLibraryBatch(isbn13, current, offset, controller.signal)
+        const res = await getNearbyLibraryBatch(isbn13, current, offset, controller.signal, titleRef.current)
         if (gen !== generation.current) return
         const result = applyBatch(s, round, offset, res)
         s = result.state
@@ -169,7 +172,7 @@ export function useNearbyExplorer(isbn13: string, origin: LibraryOrigin | null, 
     setRetrying(true)
     setError(null)
     try {
-      const res = await getSavedLibraryBatch(isbn13, codes)
+      const res = await getSavedLibraryBatch(isbn13, codes, undefined, titleRef.current)
       if (gen !== generation.current) return
       setState(prev => mergeRetry(prev, res))
     } catch (err) {
@@ -185,7 +188,9 @@ export function useNearbyExplorer(isbn13: string, origin: LibraryOrigin | null, 
 }
 
 /** 내 도서관(저장한 기관 최대 5곳). 한 배치로 끝나고, 미소장도 그대로 보여 준다 */
-export function useSavedLibraries(isbn13: string, libCodes: string[], enabled: boolean) {
+export function useSavedLibraries(isbn13: string, libCodes: string[], enabled: boolean, title?: string | null) {
+  const titleRef = useRef(title)
+  useEffect(() => { titleRef.current = title }, [title])
   const [items, setItems] = useState<PublicLibraryBatchItem[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -202,7 +207,7 @@ export function useSavedLibraries(isbn13: string, libCodes: string[], enabled: b
     abortRef.current = controller
     setLoading(true)
     setError(null)
-    getSavedLibraryBatch(isbn13, codesKey.split(','), controller.signal)
+    getSavedLibraryBatch(isbn13, codesKey.split(','), controller.signal, titleRef.current)
       .then(res => {
         if (abortRef.current === controller) setItems(res.items)
       })
