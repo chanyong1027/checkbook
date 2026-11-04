@@ -62,7 +62,7 @@ class PublicLibraryBatchServiceTest {
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     // L001만 제목 검색 링크 형식이 있다(합성 주소)
     private final PublicLibrarySearchLinks searchLinks = new PublicLibrarySearchLinks(List.of(new PublicLibrarySearchLinks.Site(
-            "lib1.example", "RESULT", "GET", "https://lib1.example/search?kwd={title}", null, List.of("L001"), "2026-11-04", List.of())));
+            "lib1.example", "RESULT", "GET", "https://lib1.example/search?kwd={title}", null, List.of("L001"), "2026-11-04", List.of(), null)));
 
     @BeforeEach
     void setUp() {

@@ -15,7 +15,7 @@ import {
 function item(code: string, state: LibraryState, distanceKm: number | null = Number(code.slice(1)) / 10): PublicLibraryBatchItem {
   return {
     libCode: code, name: code, address: null, latitude: 37.5, longitude: 127.0,
-    distanceKm, homepage: null, state, reason: state === 'UNKNOWN' ? 'TIMEOUT' : null,
+    distanceKm, homepage: null, state, reason: state === 'UNKNOWN' ? 'TIMEOUT' : null, searchLink: null,
   }
 }
 
@@ -141,6 +141,19 @@ test('다시 확인: 복구된 소장 기관은 원래 거리로 합치고, 미�
   assert.deepEqual(merged.found.map(f => [f.libCode, f.distanceKm]), [['L1', 0.1], ['L2', 0.2]])
   assert.deepEqual(merged.unknown.map(u => [u.libCode, u.reason]), [['L4', 'CIRCUIT_OPEN']])
   assert.equal(merged.nextOffset, 10)
+})
+
+test('다시 확인 응답의 사이트 검색 링크를 잃지 않는다(처음 배치엔 제목이 없었을 수 있다)', () => {
+  const link = { kind: 'RESULT' as const, method: 'GET' as const, url: 'https://lib.example/s?kwd=x', fields: null }
+  const start: ExplorerState = { found: [], unknown: [item('L1', 'UNKNOWN'), item('L2', 'UNKNOWN')], seen: ['L1', 'L2'], nextOffset: null }
+
+  const merged = mergeRetry(start, batch([
+    { ...item('L1', 'AVAILABLE'), distanceKm: null, searchLink: link },
+    { ...item('L2', 'UNKNOWN'), distanceKm: null, reason: 'CIRCUIT_OPEN', searchLink: link },
+  ], null))
+
+  assert.deepEqual(merged.found[0].searchLink, link)
+  assert.deepEqual(merged.unknown[0].searchLink, link)
 })
 
 test('다음 배치는 남은 시간이 2.4초 이상일 때만', () => {

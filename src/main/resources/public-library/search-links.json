@@ -17,17 +17,6 @@
    ]
   },
   {
-   "host": "anseong.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://www.anseong.go.kr/search/front/Search.jsp?searchKey=all&qt={title}",
-   "libCodes": [
-    "141026"
-   ],
-   "checkedAt": "2026-11-03",
-   "flags": []
-  },
-  {
    "host": "ascl.asan.go.kr",
    "kind": "RESULT",
    "method": "GET",
@@ -43,7 +32,8 @@
    ],
    "checkedAt": "2026-11-04",
    "flags": [
-    "robots 막힘 — 운영자 요청 시 즉시 제거"
+    "robots 막힘 — 운영자 요청 시 즉시 제거",
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)"
    ]
   },
   {
@@ -82,21 +72,6 @@
    "checkedAt": "2026-11-04",
    "flags": [
     "배포 출처에서 한 번 더 확인"
-   ]
-  },
-  {
-   "host": "blog.naver.com",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://blog.naver.com/PostSearchList.naver?blogId=djkkumnamu&SearchText={title}",
-   "libCodes": [
-    "111072",
-    "711468"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": [
-    "robots 막힘 — 운영자 요청 시 즉시 제거",
-    "약관 미확인(링크 못 찾음)"
    ]
   },
   {
@@ -290,32 +265,6 @@
    "flags": []
   },
   {
-   "host": "dalseong.daegu.kr",
-   "kind": "RESULT",
-   "method": "POST",
-   "url": "https://www.dalseong.daegu.kr/search_page/search_page.jsp",
-   "fields": {
-    "_total_category_elect": "",
-    "query": "{title}"
-   },
-   "libCodes": [
-    "127065",
-    "727009",
-    "727010",
-    "727011",
-    "727012",
-    "727014",
-    "727023",
-    "727026"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": [
-    "시험 책 0건 — 다른 책으로 결과 확인 권장",
-    "robots 막힘 — 운영자 요청 시 즉시 제거",
-    "배포 출처에서 한 번 더 확인"
-   ]
-  },
-  {
    "host": "dblib.sen.go.kr",
    "kind": "RESULT",
    "method": "GET",
@@ -372,7 +321,7 @@
    "host": "donghaelib.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.donghaelib.go.kr/web/program/searchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchClassNo1Aggs=ALL&searchLibrary=ALL&searchField=ALL&searchWord={title}",
+   "url": "https://www.donghaelib.go.kr/web/program/searchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchClassNo1Aggs=ALL&searchField=ALL&searchWord={title}",
    "libCodes": [
     "142034",
     "142037",
@@ -381,7 +330,21 @@
     "142057"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "142034": "MB",
+     "142037": "MA",
+     "142051": "MC",
+     "142056": "ME",
+     "142057": "MD"
+    },
+    "url": "https://www.donghaelib.go.kr/web/program/searchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchClassNo1Aggs=ALL&searchField=ALL&searchWord={title}"
+   }
   },
   {
    "host": "dylib.jne.go.kr",
@@ -471,26 +434,6 @@
    ]
   },
   {
-   "host": "geumcheonlib.seoul.kr",
-   "kind": "RESULT",
-   "method": "POST",
-   "url": "https://geumcheonlib.seoul.kr/geumcheonlib/uce/search/totalList.do?selfId=1097",
-   "fields": {
-    "searchKeyword": "{title}"
-   },
-   "libCodes": [
-    "111040",
-    "111077",
-    "111113",
-    "111434"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": [
-    "robots 막힘 — 운영자 요청 시 즉시 제거",
-    "배포 출처에서 한 번 더 확인"
-   ]
-  },
-  {
    "host": "geuntae.co.kr",
    "kind": "RESULT",
    "method": "GET",
@@ -537,25 +480,6 @@
    "flags": [
     "배포 출처에서 한 번 더 확인"
    ]
-  },
-  {
-   "host": "gjl.gimje.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://gjl.gimje.go.kr/index.gimje?menuCd=DOM_000000101000000000&book_type=BOOK&manage_code=MA%2CMK%2CGG%2CAL&search_txt={title}",
-   "libCodes": [
-    "145026",
-    "145033",
-    "145041",
-    "145048",
-    "145074",
-    "145126",
-    "145133",
-    "745073",
-    "745074"
-   ],
-   "checkedAt": "2026-11-03",
-   "flags": []
   },
   {
    "host": "gjlib.cne.go.kr",
@@ -848,7 +772,6 @@
     "search_type": "detail",
     "pageno": "1",
     "page_no": "1",
-    "manage_code": "AA",
     "search_shelf": "",
     "search_field": "search_title",
     "display": "10",
@@ -874,8 +797,28 @@
    "checkedAt": "2026-11-04",
    "flags": [
     "robots 막힘 — 운영자 요청 시 즉시 제거",
-    "배포 출처에서 한 번 더 확인"
-   ]
+    "배포 출처에서 한 번 더 확인",
+    "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "manage_code",
+    "codes": {
+     "121002": "AA"
+    },
+    "fields": {
+     "subType": "library",
+     "procMode": "search",
+     "search_type": "detail",
+     "pageno": "1",
+     "page_no": "1",
+     "search_shelf": "",
+     "search_field": "search_title",
+     "display": "10",
+     "book_type": "BOOK",
+     "search_txt": "{title}"
+    }
+   }
   },
   {
    "host": "hplib.jne.go.kr",
@@ -1138,86 +1081,24 @@
    "host": "lib.andong.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.andong.go.kr/andonglibrary/intro/search/index.do?menu_idx=349&search_type=TITLE&search_type2=TITLE&viewPage=1&manage_code=OD%2CMA%2CGN&search_text={title}",
+   "url": "https://lib.andong.go.kr/andonglibrary/intro/search/index.do?menu_idx=349&search_type=TITLE&search_type2=TITLE&viewPage=1&search_text={title}",
    "libCodes": [
     "147030",
-    "147163",
     "147170"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
-  },
-  {
-   "host": "lib.ansan.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "http://lib.ansan.go.kr/gwansan/KeywordSearchResult/{title}",
-   "libCodes": [
-    "141032",
-    "141050",
-    "141051",
-    "141099",
-    "141133",
-    "141134",
-    "141188",
-    "141189",
-    "141190",
-    "141191",
-    "141252",
-    "141253",
-    "141406",
-    "141478",
-    "141481",
-    "141482",
-    "141508",
-    "141509",
-    "141554",
-    "141563",
-    "141567",
-    "141654",
-    "141662",
-    "741011",
-    "741046",
-    "741450",
-    "741541"
+   "flags": [
+    "11-04 범위: 통합 미확인 — 지점 링크만",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
    ],
-   "checkedAt": "2026-11-04",
-   "flags": []
-  },
-  {
-   "host": "lib.anyang.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://lib.anyang.go.kr/manan/searchResultList.do?searchType=SIMPLE&searchManageCodeArr=MI&topSearchCondition=book&searchKeyword={title}",
-   "libCodes": [
-    "141027",
-    "141036",
-    "141047",
-    "141077",
-    "141095",
-    "141132",
-    "141263",
-    "141538",
-    "141571",
-    "141573",
-    "141669"
-   ],
-   "checkedAt": "2026-11-03",
-   "flags": []
-  },
-  {
-   "host": "lib.changwon.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://lib.changwon.go.kr/book/search.php?lib_code=gh&search_type=normal&manage_code=MC&search_txt={title}&outter=Y",
-   "libCodes": [
-    "148050",
-    "148052",
-    "148237",
-    "148319"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": []
+   "branch": {
+    "param": "manage_code",
+    "codes": {
+     "147030": "MA",
+     "147170": "OD"
+    },
+    "url": "https://lib.andong.go.kr/andonglibrary/intro/search/index.do?menu_idx=349&search_type=TITLE&search_type2=TITLE&viewPage=1&search_text={title}"
+   }
   },
   {
    "host": "lib.chungju.go.kr",
@@ -1229,7 +1110,6 @@
     "searchCategory": "ALL",
     "searchClassNo1Aggs": "ALL",
     "searchField": "ALL",
-    "searchLibrary": "ALL",
     "searchWord": "{title}"
    },
    "libCodes": [
@@ -1241,14 +1121,15 @@
    ],
    "checkedAt": "2026-11-04",
    "flags": [
-    "배포 출처에서 한 번 더 확인"
+    "배포 출처에서 한 번 더 확인",
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)"
    ]
   },
   {
    "host": "lib.dongjak.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.dongjak.go.kr/dj/intro/search/index.do?CSRFToken=1d6c05c1-46da-4af0-a6aa-2dd85329ebad&menu_idx=111&booktype=BOOK&libraryCodes=lib_MA%2Clib_MD%2Clib_MF%2Clib_ME%2Clib_MH%2Clib_MJ%2Clib_MK%2Clib_ML%2Clib_MC%2Clib_MN%2Clib_MP&search_type=L_TITLE&search_text={title}",
+   "url": "https://lib.dongjak.go.kr/dj/intro/search/index.do?menu_idx=111&booktype=BOOK&search_type=L_TITLE&search_text={title}",
    "libCodes": [
     "111102",
     "111107",
@@ -1264,45 +1145,37 @@
    ],
    "checkedAt": "2026-11-04",
    "flags": [
-    "CSRFToken",
-    "needs_check:토큰 없이 열리는지"
+    "11-04 토큰 없이 브라우저로 결과 확인",
+    "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)"
    ]
-  },
-  {
-   "host": "lib.gangseo.seoul.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://lib.gangseo.seoul.kr/KeywordSearchResult/{title}",
-   "libCodes": [
-    "111067",
-    "111097",
-    "111098",
-    "111118",
-    "111309",
-    "111373",
-    "111378",
-    "111453"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": []
   },
   {
    "host": "lib.gen.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.jge.go.kr/songjung/site/search/bookSearch.do?cmd_name=bookandnonbooksearch&search_type=detail&search_item=search_title&manage_code=ME&search_txt={title}",
+   "url": "https://lib.jge.go.kr/songjung/site/search/bookSearch.do?cmd_name=bookandnonbooksearch&search_type=detail&search_item=search_title&search_txt={title}",
    "libCodes": [
     "124001",
-    "124002",
     "124005",
     "124007",
-    "124011",
-    "129221"
+    "124011"
    ],
    "checkedAt": "2026-11-04",
    "flags": [
-    "robots 막힘 — 운영자 요청 시 즉시 제거"
-   ]
+    "robots 막힘 — 운영자 요청 시 즉시 제거",
+    "11-04 범위: 통합 미확인 — 지점 링크만",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "manage_code",
+    "codes": {
+     "124001": "ME",
+     "124005": "MA",
+     "124007": "MB",
+     "124011": "MC"
+    },
+    "url": "https://lib.jge.go.kr/songjung/site/search/bookSearch.do?cmd_name=bookandnonbooksearch&search_type=detail&search_item=search_title&search_txt={title}"
+   }
   },
   {
    "host": "lib.geoje.go.kr",
@@ -1380,13 +1253,15 @@
     "748097"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)"
+   ]
   },
   {
    "host": "lib.gjcity.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.gjcity.go.kr/lay1/program/S1T446C461/jnet/resourcessearch/resultList.do?searchType=SIMPLE&searchKey=ALL&searchLibrary=ALL&searchKeyword={title}",
+   "url": "https://lib.gjcity.go.kr/lay1/program/S1T446C461/jnet/resourcessearch/resultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}",
    "libCodes": [
     "141114",
     "141147",
@@ -1400,13 +1275,15 @@
     "741464"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)"
+   ]
   },
   {
    "host": "lib.goe.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.goe.go.kr/kwa/intro/search/index.do?menu_idx=10&viewPage=1&separateShelfCode=&facet_manage_code=&facet_author=&facet_publisher=&facet_pub_year=&facet_subject_code=&facet_media_code=&reSearchTitle=&reSearchAuthor=&reSearchPubler=&reSearchKeyword=&search_text=&search_type=&book_list=&title={title}&author=&publer=&keyword=&search_start_date=&search_end_date=&subjectCode=&booktype=BOOKANDNONBOOK&shelfCode=&_libraryCodes=on&_libraryCodes=on&libraryCodes=MG&_libraryCodes=on&_libraryCodes=on&_libraryCodes=on&_libraryCodes=on&_libraryCodes=on&_libraryCodes=on&_libraryCodes=on&_libraryCodes=on&_libraryCodes=on#search_result",
+   "url": "https://lib.goe.go.kr/kwa/intro/search/index.do?menu_idx=10&viewPage=1&separateShelfCode=&facet_manage_code=&facet_author=&facet_publisher=&facet_pub_year=&facet_subject_code=&facet_media_code=&reSearchTitle=&reSearchAuthor=&reSearchPubler=&reSearchKeyword=&search_text=&search_type=&book_list=&title={title}&author=&publer=&keyword=&search_start_date=&search_end_date=&subjectCode=&booktype=BOOKANDNONBOOK&shelfCode=&_libraryCodes=on&_libraryCodes=on&_libraryCodes=on&_libraryCodes=on&_libraryCodes=on&_libraryCodes=on&_libraryCodes=on&_libraryCodes=on&_libraryCodes=on&_libraryCodes=on&_libraryCodes=on#search_result",
    "libCodes": [
     "141004",
     "141005",
@@ -1421,7 +1298,9 @@
     "141141"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)"
+   ]
   },
   {
    "host": "lib.goesan.go.kr",
@@ -1438,7 +1317,7 @@
    "host": "lib.gunsan.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.gunsan.go.kr/web/program/searchResultList.do?searchType=SIMPLE&searchManageCode=ALL&searchKeyword={title}",
+   "url": "https://lib.gunsan.go.kr/web/program/searchResultList.do?searchType=SIMPLE&searchKeyword={title}",
    "libCodes": [
     "145002",
     "145029",
@@ -1448,13 +1327,23 @@
     "145155"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchManageCodeArr",
+    "codes": {
+     "145002": "MA"
+    },
+    "url": "https://lib.gunsan.go.kr/web/program/searchResultList.do?searchType=SIMPLE&searchKeyword={title}"
+   }
   },
   {
    "host": "lib.guro.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.guro.go.kr/#/search/ex?all=1%7Ck%7Ca%7C{title}&branch=1",
+   "url": "https://lib.guro.go.kr/#/search/ex?all=1%7Ck%7Ca%7C{title}",
    "libCodes": [
     "111099",
     "111100",
@@ -1471,7 +1360,9 @@
     "111562"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)"
+   ]
   },
   {
    "host": "lib.gwanak.go.kr",
@@ -1482,7 +1373,6 @@
     "searchType": "SIMPLE",
     "searchCategory": "BOOK",
     "searchKey": "ALL",
-    "searchLibrary": "ALL",
     "searchKeyword": "{title}"
    },
    "libCodes": [
@@ -1498,8 +1388,29 @@
    "checkedAt": "2026-11-04",
    "flags": [
     "robots 막힘 — 운영자 요청 시 즉시 제거",
-    "배포 출처에서 한 번 더 확인"
-   ]
+    "배포 출처에서 한 번 더 확인",
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "111045": "MA",
+     "111062": "KJ",
+     "111063": "KP",
+     "111160": "KE",
+     "111192": "KW",
+     "111218": "G3",
+     "111312": "G4",
+     "311744": "L5"
+    },
+    "fields": {
+     "searchType": "SIMPLE",
+     "searchCategory": "BOOK",
+     "searchKey": "ALL",
+     "searchKeyword": "{title}"
+    }
+   }
   },
   {
    "host": "lib.gwangyang.go.kr",
@@ -1515,7 +1426,9 @@
     "146185"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)"
+   ]
   },
   {
    "host": "lib.gwe.go.kr",
@@ -1547,7 +1460,9 @@
     "142089"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)"
+   ]
   },
   {
    "host": "lib.gyeongnam.go.kr",
@@ -1561,29 +1476,10 @@
    "flags": []
   },
   {
-   "host": "lib.ice.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://lib.ice.go.kr/bupyeong/intro/search/index.do?menu_idx=229&booktype=BOOK&search_type=L_TITLE&search_text={title}",
-   "libCodes": [
-    "123002",
-    "123003",
-    "123004",
-    "123005",
-    "123006",
-    "123007",
-    "123009",
-    "123010",
-    "128010"
-   ],
-   "checkedAt": "2026-11-03",
-   "flags": []
-  },
-  {
    "host": "lib.iksan.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.iksan.go.kr/md/site/search/bookSearch.do?cmd_name=bookandnonbooksearch&search_type=detail&search_item=search_title&manage_code=MA&search_txt={title}",
+   "url": "https://lib.iksan.go.kr/md/site/search/bookSearch.do?cmd_name=bookandnonbooksearch&search_type=detail&search_item=search_title&search_txt={title}",
    "libCodes": [
     "145024",
     "145042",
@@ -1596,61 +1492,9 @@
    "checkedAt": "2026-11-04",
    "flags": [
     "robots 막힘 — 운영자 요청 시 즉시 제거",
-    "약관 미확인(링크 못 찾음)"
+    "약관 미확인(링크 못 찾음)",
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)"
    ]
-  },
-  {
-   "host": "lib.jbe.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://lib.jbe.go.kr/gcplib/intro/search/index.do?menu_idx=2&booktype=BOOK&search_type=L_TITLE&search_text={title}",
-   "libCodes": [
-    "145001",
-    "145004",
-    "145006",
-    "145007",
-    "145008",
-    "145009",
-    "145010",
-    "145011",
-    "145013",
-    "145014",
-    "145015",
-    "145016",
-    "145019",
-    "145021",
-    "145022",
-    "145034",
-    "145036",
-    "145077"
-   ],
-   "checkedAt": "2026-11-03",
-   "flags": []
-  },
-  {
-   "host": "lib.jeju.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://www.jeju.go.kr/lib/service/search/simple.htm?lib=&q={title}",
-   "libCodes": [
-    "149002",
-    "149005",
-    "149006",
-    "149008",
-    "149011",
-    "149012",
-    "149013",
-    "149014",
-    "149015",
-    "149016",
-    "149017",
-    "149018",
-    "149019",
-    "149022",
-    "149023"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": []
   },
   {
    "host": "lib.jemulpo.go.kr",
@@ -1664,19 +1508,6 @@
    "flags": []
   },
   {
-   "host": "lib.jeongeup.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://lib.jeongeup.go.kr:31824/search/keyword/{title}",
-   "libCodes": [
-    "145020",
-    "145032",
-    "145047"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": []
-  },
-  {
    "host": "lib.jeongseon.go.kr",
    "kind": "RESULT",
    "method": "GET",
@@ -1685,28 +1516,6 @@
     "142125"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
-  },
-  {
-   "host": "lib.jeonju.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://lib.jeonju.go.kr/index.jeonju?menuCd=DOM_000000101001001000&book_type=BOOK&manage_code=JL%2CMA%2CST%2CWT%2CPH%2CHJ%2CDT%2CGT%2CIT%2CMB%2CJT%2CMC%2CJQ&search_txt={title}",
-   "libCodes": [
-    "145017",
-    "145018",
-    "145030",
-    "145035",
-    "145039",
-    "145051",
-    "145097",
-    "145131",
-    "145139",
-    "145142",
-    "145145",
-    "145150"
-   ],
-   "checkedAt": "2026-11-03",
    "flags": []
   },
   {
@@ -1727,36 +1536,32 @@
     "731144"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
-  },
-  {
-   "host": "lib.nyj.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://lib.nyj.go.kr/jyy/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}",
-   "libCodes": [
-    "141035",
-    "141071",
-    "141091",
-    "141137",
-    "141146",
-    "141175",
-    "141176",
-    "141401",
-    "141521",
-    "141536",
-    "141568",
-    "141585",
-    "141625"
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
    ],
-   "checkedAt": "2026-11-04",
-   "flags": []
+   "branch": {
+    "param": "manage_code",
+    "codes": {
+     "131076": "MA",
+     "131085": "MM",
+     "731005": "MD",
+     "731006": "MC",
+     "731013": "MB",
+     "731053": "MF",
+     "731124": "MG",
+     "731133": "MH",
+     "731136": "MJ",
+     "731144": "ML"
+    },
+    "url": "http://lib.junggu.ulsan.kr/lib/unit/search/list.do?mId=001003001000000000&search_txt={title}"
+   }
   },
   {
    "host": "lib.paju.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.paju.go.kr/gclib/menu/10174/program/30005/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchLibraryArr=MB&searchKey=ALL&searchKeyword={title}",
+   "url": "https://lib.paju.go.kr/gclib/menu/10174/program/30005/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}",
    "libCodes": [
     "141040",
     "141041",
@@ -1782,13 +1587,39 @@
     "741292"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "141040": "MB",
+     "141041": "MC",
+     "141049": "MD",
+     "141082": "MA",
+     "141156": "MQ",
+     "141242": "ME",
+     "141243": "MS",
+     "141251": "MF",
+     "141268": "SD",
+     "141326": "MH",
+     "141489": "ML",
+     "141517": "MI",
+     "141544": "MM",
+     "141602": "MP",
+     "141604": "MR",
+     "141614": "MO",
+     "141630": "MJ"
+    },
+    "url": "https://lib.paju.go.kr/gclib/menu/10174/program/30005/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}"
+   }
   },
   {
    "host": "lib.pocheon.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.pocheon.go.kr/ildong/menu/10367/program/30004/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50&searchLibraryArr=MC",
+   "url": "https://lib.pocheon.go.kr/ildong/menu/10367/program/30004/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
    "libCodes": [
     "141094",
     "141102",
@@ -1799,35 +1630,29 @@
     "141634"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
-  },
-  {
-   "host": "lib.sacheon.go.kr",
-   "kind": "RESULT",
-   "method": "POST",
-   "url": "https://lib.sacheon.go.kr/elc/search/search.do",
-   "fields": {
-    "research_yn": "N",
-    "search_manage_code": "MA",
-    "search_type": "normal",
-    "idx": "101010100",
-    "search_txt": "{title}"
-   },
-   "libCodes": [
-    "148169",
-    "148322"
-   ],
-   "checkedAt": "2026-11-04",
    "flags": [
-    "시험 책 0건 — 다른 책으로 결과 확인 권장",
-    "배포 출처에서 한 번 더 확인"
-   ]
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "141094": "MC",
+     "141102": "MD",
+     "141172": "MB",
+     "141333": "MA",
+     "141520": "ME",
+     "141553": "MF",
+     "141634": "MG"
+    },
+    "url": "https://lib.pocheon.go.kr/ildong/menu/10367/program/30004/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
+   }
   },
   {
    "host": "lib.sdm.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.sdm.or.kr/sdmlib/menu/10003/program/30001/searchResultList.do?searchType=SIMPLE&preSearchKeyword={title}&viewType=LIST&searchKeyword={title}&searchPubFormCode=ALL&currentPageNo=1&searchDisplay=20&searchArticle=SCORE&searchOrder=ASC&reSearchYn=N&searchManageCode=&searchAdvSearchKeywordA=&searchAdvSearchKeywordB=&searchAdvSearchKeywordC=&searchAdvSearchKeywordD=&searchAdvContentsType=&searchAdvTitle=&searchAdvAuthor=&searchAdvPublisher=&searchAdvIsbn=&searchAdvIssn=&searchAdvClassNo=&searchAdvFromPubYear=&searchAdvToPubYear=&searchAdvTextLang=&bookKey=&speciesKey=&isbn=&pubFormCode=&searchManageCodeArr=MB",
+   "url": "https://lib.sdm.or.kr/sdmlib/menu/10003/program/30001/searchResultList.do?searchType=SIMPLE&preSearchKeyword={title}&viewType=LIST&searchKeyword={title}&searchPubFormCode=ALL&currentPageNo=1&searchDisplay=20&searchArticle=SCORE&searchOrder=ASC&reSearchYn=N&searchAdvSearchKeywordA=&searchAdvSearchKeywordB=&searchAdvSearchKeywordC=&searchAdvSearchKeywordD=&searchAdvContentsType=&searchAdvTitle=&searchAdvAuthor=&searchAdvPublisher=&searchAdvIsbn=&searchAdvIssn=&searchAdvClassNo=&searchAdvFromPubYear=&searchAdvToPubYear=&searchAdvTextLang=&bookKey=&speciesKey=&isbn=&pubFormCode=",
    "libCodes": [
     "111051",
     "111179",
@@ -1845,13 +1670,36 @@
     "711077"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchManageCodeArr",
+    "codes": {
+     "111051": "MA",
+     "111179": "MB",
+     "111252": "MC",
+     "111273": "SE",
+     "111278": "SJ",
+     "111279": "SH",
+     "111280": "SG",
+     "111281": "SA",
+     "111290": "SF",
+     "711073": "SB",
+     "711074": "SC",
+     "711075": "SI",
+     "711076": "SK",
+     "711077": "SM"
+    },
+    "url": "https://lib.sdm.or.kr/sdmlib/menu/10003/program/30001/searchResultList.do?searchType=SIMPLE&preSearchKeyword={title}&viewType=LIST&searchKeyword={title}&searchPubFormCode=ALL&currentPageNo=1&searchDisplay=20&searchArticle=SCORE&searchOrder=ASC&reSearchYn=N&searchAdvSearchKeywordA=&searchAdvSearchKeywordB=&searchAdvSearchKeywordC=&searchAdvSearchKeywordD=&searchAdvContentsType=&searchAdvTitle=&searchAdvAuthor=&searchAdvPublisher=&searchAdvIsbn=&searchAdvIssn=&searchAdvClassNo=&searchAdvFromPubYear=&searchAdvToPubYear=&searchAdvTextLang=&bookKey=&speciesKey=&isbn=&pubFormCode="
+   }
   },
   {
    "host": "lib.sejong.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.sejong.go.kr/hansol/site/search/bookSearch.do?cmd_name=bookandnonbooksearch&manage_code=MA&search_type=detail&search_item=search_title&search_txt={title}",
+   "url": "https://lib.sejong.go.kr/hansol/site/search/bookSearch.do?cmd_name=bookandnonbooksearch&search_type=detail&search_item=search_title&search_txt={title}",
    "libCodes": [
     "144146",
     "150001",
@@ -1870,13 +1718,36 @@
     "150016"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "manage_code",
+    "codes": {
+     "144146": "MA",
+     "150001": "MB",
+     "150002": "MC",
+     "150003": "MG",
+     "150004": "MJ",
+     "150005": "MH",
+     "150007": "MN",
+     "150008": "MO",
+     "150009": "MP",
+     "150010": "MQ",
+     "150011": "MR",
+     "150013": "MT",
+     "150014": "MU",
+     "150016": "NA"
+    },
+    "url": "https://lib.sejong.go.kr/hansol/site/search/bookSearch.do?cmd_name=bookandnonbooksearch&search_type=detail&search_item=search_title&search_txt={title}"
+   }
   },
   {
    "host": "lib.siheung.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.siheung.go.kr/#/search/si?all=1%7Ck%7Ca%7C{title}&rq=BRANCH%3D2&mashup=PYXIS",
+   "url": "https://lib.siheung.go.kr/#/search/si?all=1%7Ck%7Ca%7C{title}&mashup=PYXIS",
    "libCodes": [
     "141045",
     "141066",
@@ -1892,7 +1763,9 @@
     "141632"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)"
+   ]
   },
   {
    "host": "lib.sje.go.kr",
@@ -1935,13 +1808,15 @@
     "747069"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)"
+   ]
   },
   {
    "host": "lib.yangcheon.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.yangcheon.or.kr/libsin/site/search/bookSearch.do?cmd_name=bookandnonbooksearch&search_type=detail&search_item=search_title&manage_code=MD&search_txt={title}",
+   "url": "https://lib.yangcheon.or.kr/libsin/site/search/bookSearch.do?cmd_name=bookandnonbooksearch&search_type=detail&search_item=search_title&search_txt={title}",
    "libCodes": [
     "111081",
     "111240",
@@ -1956,37 +1831,70 @@
    "checkedAt": "2026-11-04",
    "flags": [
     "robots 막힘 — 운영자 요청 시 즉시 제거",
-    "약관 미확인(링크 못 찾음)"
-   ]
+    "약관 미확인(링크 못 찾음)",
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "manage_code",
+    "codes": {
+     "111081": "MD",
+     "111240": "MG",
+     "111242": "MB",
+     "111461": "ME",
+     "111463": "MA",
+     "111480": "SG",
+     "111481": "MF",
+     "111504": "MH",
+     "711359": "MC"
+    },
+    "url": "https://lib.yangcheon.or.kr/libsin/site/search/bookSearch.do?cmd_name=bookandnonbooksearch&search_type=detail&search_item=search_title&search_txt={title}"
+   }
   },
   {
    "host": "lib.yongin.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.yongin.go.kr/guseong/menu/10563/program/30013/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchLibrary=MA&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
+   "url": "https://lib.yongin.go.kr/guseong/menu/10563/program/30013/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
    "libCodes": [
-    "141038",
     "141079",
     "141110",
     "141118",
     "141129",
-    "141149",
     "141160",
     "141217",
-    "141239",
     "141389",
     "141390",
     "141541",
-    "141556",
     "141564",
     "141582",
-    "141599",
     "141643",
-    "141646",
     "141663"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 미확인 — 지점 링크만",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "141079": "MB",
+     "141110": "MC",
+     "141118": "MD",
+     "141129": "MI",
+     "141160": "MF",
+     "141217": "MJ",
+     "141389": "ML",
+     "141390": "MM",
+     "141541": "MN",
+     "141564": "MP",
+     "141582": "MX",
+     "141643": "MZ",
+     "141663": "NN"
+    },
+    "url": "https://lib.yongin.go.kr/guseong/menu/10563/program/30013/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
+   }
   },
   {
    "host": "lib.yuseong.go.kr",
@@ -2005,44 +1913,8 @@
     "130031"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
-  },
-  {
-   "host": "library.bsgangseo.go.kr",
-   "kind": "RESULT",
-   "method": "POST",
-   "url": "https://library.busan.go.kr/gsbooks/book/search/collectionOfMaterials",
-   "fields": {
-    "searchMode": "normal",
-    "procMode": "search",
-    "search_type": "normal",
-    "pageno": "1",
-    "orderby_item": "",
-    "orderby": "",
-    "display": "10",
-    "manage_code": "AR,BQ,CB,KH,KJ",
-    "search_shelf": "",
-    "option": "0",
-    "search_txt": "{title}",
-    "search_author": "",
-    "search_publisher": "",
-    "search_year_start": "",
-    "search_year_end": "",
-    "search_keyword": "",
-    "subject_code": "",
-    "search_isbn_issn": ""
-   },
-   "libCodes": [
-    "121020",
-    "126156",
-    "126161",
-    "726304",
-    "726305"
-   ],
-   "checkedAt": "2026-11-04",
    "flags": [
-    "robots 막힘 — 운영자 요청 시 즉시 제거",
-    "배포 출처에서 한 번 더 확인"
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)"
    ]
   },
   {
@@ -2081,7 +1953,9 @@
     "143136"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)"
+   ]
   },
   {
    "host": "library.chilgok.go.kr",
@@ -2094,28 +1968,17 @@
     "147134"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
-  },
-  {
-   "host": "library.chuncheon.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://library.chuncheon.go.kr/search/book-search/librarybook/?manageCode=MA%2CTM%2CHM%2CSM%2CNM%2CDM%2CYM%2CDD&searchType=ALL&searchTxt={title}",
-   "libCodes": [
-    "142020",
-    "142039",
-    "142040",
-    "142041",
-    "142043",
-    "142045",
-    "142050",
-    "142110"
-   ],
-   "checkedAt": "2026-11-04",
    "flags": [
-    "robots 막힘 — 운영자 요청 시 즉시 제거",
-    "약관 미확인(링크 못 찾음)"
-   ]
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "manage_code",
+    "codes": {
+     "147075": "MA"
+    },
+    "url": "https://library.chilgok.go.kr/cg/intro/search/index.do?menu_idx=349&search_type=title&search_text={title}"
+   }
   },
   {
    "host": "library.chungnam.go.kr",
@@ -2129,74 +1992,6 @@
    "flags": [
     "robots 막힘 — 운영자 요청 시 즉시 제거"
    ]
-  },
-  {
-   "host": "library.daegu.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://library.daegu.go.kr/228/intro/search/index.do?menu_idx=0&viewPage=1&separateShelfCode=&facet_manage_code=&facet_author=&facet_publisher=&facet_pub_year=&facet_subject_code=&facet_media_code=&reSearchTitle=&reSearchAuthor=&reSearchPubler=&reSearchKeyword=&subjectCode=&shelfCode=&media_code=&booktype=BOOKANDNONBOOK&title={title}",
-   "libCodes": [
-    "122001",
-    "122002",
-    "122003",
-    "122004",
-    "122007",
-    "122008",
-    "122009",
-    "122010",
-    "122011",
-    "127001",
-    "127002",
-    "127005",
-    "127006",
-    "127007",
-    "127008",
-    "127009",
-    "127011",
-    "127012",
-    "127013",
-    "127016",
-    "127017",
-    "127018",
-    "127021",
-    "127049",
-    "127056",
-    "127058",
-    "127066",
-    "127070",
-    "127072",
-    "127084",
-    "127085",
-    "127086",
-    "127087",
-    "127088",
-    "127090",
-    "127091",
-    "127093",
-    "127094",
-    "127095",
-    "127096",
-    "127098",
-    "127099",
-    "127108",
-    "127109",
-    "127110",
-    "127111",
-    "147004",
-    "327003",
-    "327009",
-    "727025",
-    "727036",
-    "727038",
-    "727040",
-    "727055",
-    "727068",
-    "727083",
-    "727102",
-    "727107"
-   ],
-   "checkedAt": "2026-11-03",
-   "flags": []
   },
   {
    "host": "library.donggu.ulsan.kr",
@@ -2213,14 +2008,26 @@
    "checkedAt": "2026-11-04",
    "flags": [
     "robots 막힘 — 운영자 요청 시 즉시 제거",
-    "약관 미확인(링크 못 찾음)"
-   ]
+    "약관 미확인(링크 못 찾음)",
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "manage_code",
+    "codes": {
+     "131016": "MA",
+     "131021": "MB",
+     "131028": "MD",
+     "131082": "ME"
+    },
+    "url": "https://library.donggu.ulsan.kr/main/site/search/bookSearch.do?cmd_name=bookandnonbooksearch&search_type=detail&search_item=search_title&search_txt={title}"
+   }
   },
   {
    "host": "library.gangnam.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://library.gangnam.go.kr/dchlib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchLibraryArr=MC&searchKey=TITLE&searchKeyword={title}",
+   "url": "https://library.gangnam.go.kr/dchlib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=TITLE&searchKeyword={title}",
    "libCodes": [
     "111039",
     "111056",
@@ -2247,7 +2054,29 @@
     "711492"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "111039": "MC",
+     "111056": "MJ",
+     "111069": "MK",
+     "111070": "MB",
+     "111073": "MI",
+     "111075": "ML",
+     "111103": "MF",
+     "111347": "MA",
+     "111479": "MD",
+     "111518": "SH",
+     "111526": "MM",
+     "711265": "MH",
+     "711267": "SC"
+    },
+    "url": "https://library.gangnam.go.kr/dchlib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=TITLE&searchKeyword={title}"
+   }
   },
   {
    "host": "library.geochang.go.kr",
@@ -2259,28 +2088,6 @@
    ],
    "checkedAt": "2026-11-03",
    "flags": []
-  },
-  {
-   "host": "library.gijang.go.kr",
-   "kind": "RESULT",
-   "method": "POST",
-   "url": "https://library.gijang.go.kr/portal/kolas/book/search.do?mId=1000000000",
-   "fields": {
-    "libraryPath": "jglib,gijang,jgchildlib,daera,gochon,naeri,slib,gyori,ilgwang,igchildlib",
-    "search_txt": "{title}"
-   },
-   "libCodes": [
-    "121026",
-    "126134",
-    "126159",
-    "126160",
-    "126165"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": [
-    "robots 막힘 — 운영자 요청 시 즉시 제거",
-    "배포 출처에서 한 번 더 확인"
-   ]
   },
   {
    "host": "library.gyeongju.go.kr",
@@ -2301,7 +2108,22 @@
     "747074"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "manage_code",
+    "codes": {
+     "147025": "MA",
+     "147114": "MJ",
+     "147128": "MK",
+     "147139": "ML",
+     "747019": "MH",
+     "747074": "MM"
+    },
+    "url": "http://library.gyeongju.go.kr/?page_id=search_booklist&mode=tBookList&collection=tot_book&search_field1=IAL&search_txt={title}"
+   }
   },
   {
    "host": "library.seogu.gwangju.kr",
@@ -2322,19 +2144,6 @@
    ]
   },
   {
-   "host": "library.sokcho.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://library.sokcho.go.kr/intro/book/search?searchType=normal&page=1&size=10&manageCode=MA%2CMC&search=true&bookType=NORMAL&searchInput={title}",
-   "libCodes": [
-    "142106",
-    "142131",
-    "742005"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": []
-  },
-  {
    "host": "library.ulsan.go.kr",
    "kind": "RESULT",
    "method": "GET",
@@ -2349,7 +2158,7 @@
    "host": "library.yeoncheon.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://library.yeoncheon.go.kr/searchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=TITLE&searchLibrary=ALL&searchKeyword={title}",
+   "url": "https://library.yeoncheon.go.kr/searchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=TITLE&searchKeyword={title}",
    "libCodes": [
     "141013",
     "141117",
@@ -2359,7 +2168,21 @@
     "741168"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "141117": "BR",
+     "141228": "MD",
+     "141250": "ME",
+     "741044": "MF",
+     "741168": "MG"
+    },
+    "url": "https://library.yeoncheon.go.kr/searchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=TITLE&searchKeyword={title}"
+   }
   },
   {
    "host": "malib.jne.go.kr",
@@ -2397,7 +2220,7 @@
    "host": "mplib.mapo.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://mplib.mapo.go.kr/sglib/PGM3007/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50&searchLibraryArr=MA",
+   "url": "https://mplib.mapo.go.kr/sglib/PGM3007/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
    "libCodes": [
     "111086",
     "111104",
@@ -2416,7 +2239,30 @@
     "711596"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "111086": "MA",
+     "111104": "ME",
+     "111105": "MF",
+     "111106": "MG",
+     "111171": "MH",
+     "111257": "MB",
+     "111258": "MI",
+     "111346": "MK",
+     "111374": "MC",
+     "111462": "HK",
+     "111467": "HQ",
+     "111469": "ML",
+     "111514": "MN",
+     "711140": "MJ"
+    },
+    "url": "https://mplib.mapo.go.kr/sglib/PGM3007/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
+   }
   },
   {
    "host": "mpllc.sen.go.kr",
@@ -2532,26 +2378,6 @@
    ]
   },
   {
-   "host": "nowonlib.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://nowonlib.kr/nowonchild/KeywordSearchResult/{title}",
-   "libCodes": [
-    "111047",
-    "111058",
-    "111085",
-    "111239",
-    "111307",
-    "111484",
-    "111485",
-    "111519"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": [
-    "robots 막힘 — 운영자 요청 시 즉시 제거"
-   ]
-  },
-  {
    "host": "nplib.jne.go.kr",
    "kind": "RESULT",
    "method": "POST",
@@ -2613,7 +2439,7 @@
    "host": "phlib.pohang.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://phlib.pohang.go.kr/phlib/intro/search/index.do?menu_idx=297&search_type2=TITLE&LibraryCodes=GuALL%2CMD%2CMA%2CMB%2CMC%2CME%2CMF%2CPM%2CMH%2CMI%2CMJ%2CDongALL%2CNA%2CNB%2CNC%2CND%2CNF%2CNG%2CNH%2CNE%2CNJ%2CNK%2CNL%2CNM%2CNN%2CNP%2CNQ%2CNS%2CNU%2CNV%2CNY%2CNZ%2CPC%2CPD%2CPE%2CPG%2CPH%2CPI%2CPJ%2CPK%2CPL%2CPN%2CPQ%2CZZ%2CPS%2CPT%2CPU%2CPB%2CPV%2CPR&booktype=BOOK&search_text={title}",
+   "url": "https://phlib.pohang.go.kr/phlib/intro/search/index.do?menu_idx=297&search_type2=TITLE&booktype=BOOK&search_text={title}",
    "libCodes": [
     "147036",
     "147037",
@@ -2659,7 +2485,8 @@
    ],
    "checkedAt": "2026-11-04",
    "flags": [
-    "robots 막힘 — 운영자 요청 시 즉시 제거"
+    "robots 막힘 — 운영자 요청 시 즉시 제거",
+    "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)"
    ]
   },
   {
@@ -2669,30 +2496,6 @@
    "url": "https://picturebook.seocholib.or.kr/KeywordSearchResult/{title}",
    "libCodes": [
     "111477"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": []
-  },
-  {
-   "host": "public.seocholib.or.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://public.seocholib.or.kr/KeywordSearchResult/{title}",
-   "libCodes": [
-    "111136",
-    "111138",
-    "111141",
-    "111142",
-    "111146",
-    "111163",
-    "111224",
-    "111243",
-    "111244",
-    "111246",
-    "111247",
-    "111249",
-    "111250",
-    "111251"
    ],
    "checkedAt": "2026-11-04",
    "flags": []
@@ -3002,55 +2805,57 @@
     "131084"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "manage_code",
+    "codes": {
+     "131001": "NS",
+     "131002": "KM",
+     "131003": "NT",
+     "131005": "MA",
+     "131020": "CA",
+     "131025": "CB",
+     "131027": "CJ",
+     "131031": "CP",
+     "131036": "CH",
+     "131037": "CI",
+     "131041": "CK",
+     "131043": "CO",
+     "131056": "BA",
+     "131059": "CL",
+     "131068": "CN",
+     "131079": "MG",
+     "131083": "SJ",
+     "131084": "GD"
+    },
+    "url": "https://usbl.bukgu.ulsan.kr/main/site/search/bookSearch.do?cmd_name=bookandnonbooksearch&search_type=detail&use_facet=N&search_item=search_title&search_txt={title}"
+   }
   },
   {
    "host": "uwlib.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://uwlib.or.kr/small/menu/10719/program/30002/searchResultList.do?searchType=DETAIL&mobLang=%ED%9E%88%EB%9D%BC%EA%B0%80%EB%82%98&searchLibrary=ALL&searchRoom=ALL&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchWordTitle={title}",
+   "url": "https://uwlib.or.kr/small/menu/10719/program/30002/searchResultList.do?searchType=DETAIL&mobLang=%ED%9E%88%EB%9D%BC%EA%B0%80%EB%82%98&searchRoom=ALL&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchWordTitle={title}",
    "libCodes": [
     "741103",
     "741761"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
-  },
-  {
-   "host": "www.anseong.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://www.anseong.go.kr/search/front/Search.jsp?searchKey=all&qt={title}",
-   "libCodes": [
-    "14116801",
-    "732227",
-    "732228",
-    "732229",
-    "732230"
+   "flags": [
+    "11-04 범위: 통합 미확인 — 지점 링크만",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
    ],
-   "checkedAt": "2026-11-03",
-   "flags": []
-  },
-  {
-   "host": "www.apl.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://www.anseong.go.kr/search/front/Search.jsp?searchKey=all&qt={title}",
-   "libCodes": [
-    "141168",
-    "141213",
-    "141289",
-    "141290",
-    "141291",
-    "141292",
-    "141293",
-    "141294",
-    "141295",
-    "141296",
-    "141547"
-   ],
-   "checkedAt": "2026-11-03",
-   "flags": []
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "741103": "NH",
+     "741761": "ML"
+    },
+    "url": "https://uwlib.or.kr/small/menu/10719/program/30002/searchResultList.do?searchType=DETAIL&mobLang=%ED%9E%88%EB%9D%BC%EA%B0%80%EB%82%98&searchRoom=ALL&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchWordTitle={title}"
+   }
   },
   {
    "host": "www.bcl.go.kr",
@@ -3094,13 +2899,15 @@
     "741533"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)"
+   ]
   },
   {
    "host": "www.bppl.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.bppl.or.kr/miracle/menu/10285/program/30031/searchResultList.do?searchType=DETAIL&searchLibrary=ALL&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchCategory=ALL&searchWordTitle={title}",
+   "url": "https://www.bppl.or.kr/miracle/menu/10285/program/30031/searchResultList.do?searchType=DETAIL&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchCategory=ALL&searchWordTitle={title}",
    "libCodes": [
     "128007",
     "128035",
@@ -3110,39 +2917,20 @@
     "128085"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
-  },
-  {
-   "host": "www.bsbukgu.go.kr",
-   "kind": "RESULT",
-   "method": "POST",
-   "url": "https://www.bsbukgu.go.kr/mdlib/index.bsbukgu?menuCd=DOM_000001103001000000&mode=result",
-   "fields": {
-    "search_category": "search_title",
-    "libraryPath": "mdlib",
-    "search_txt": "{title}"
-   },
-   "libCodes": [
-    "121023",
-    "126025",
-    "126152"
-   ],
-   "checkedAt": "2026-11-04",
    "flags": [
-    "배포 출처에서 한 번 더 확인"
-   ]
-  },
-  {
-   "host": "www.bsdonggu.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://www.bsdonggu.go.kr/library/index.donggu?search_category=search_title&pageno=1&menuCd=DOM_000000803001001000&search_isbn_issn=&search_year_start=&search_year_end=&search_shelf=&subject_code=&media_code=&display=10&orderby_item=&orderby=&manage_code=AS&search_txt={title}",
-   "libCodes": [
-    "121021",
-    "126158"
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
    ],
-   "checkedAt": "2026-11-04",
-   "flags": []
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "128007": "MA",
+     "128040": "MC",
+     "128056": "MD",
+     "128085": "MF"
+    },
+    "url": "https://www.bppl.or.kr/miracle/menu/10285/program/30031/searchResultList.do?searchType=DETAIL&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchCategory=ALL&searchWordTitle={title}"
+   }
   },
   {
    "host": "www.bsseogu.go.kr",
@@ -3187,7 +2975,8 @@
    ],
    "checkedAt": "2026-11-04",
    "flags": [
-    "배포 출처에서 한 번 더 확인"
+    "배포 출처에서 한 번 더 확인",
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)"
    ]
   },
   {
@@ -3247,36 +3036,12 @@
    ]
   },
   {
-   "host": "www.dangjin.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://lib.dangjin.go.kr/dls_le/index.php?mod=wdDataSearch&act=searchIList&reWord%5B%5D=&preWord=&preItem=&preCond=&deSearch=2&word1=&word2=&word3=&item1=&itme2=&item3=&cond1=&item=total&word={title}",
-   "libCodes": [
-    "144023",
-    "144034",
-    "144055",
-    "144056",
-    "144057",
-    "144058",
-    "144059",
-    "144062",
-    "144063",
-    "144109",
-    "144113",
-    "744005"
-   ],
-   "checkedAt": "2026-11-03",
-   "flags": []
-  },
-  {
    "host": "www.donggu-lib.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://library.daegu.go.kr/donggu/intro/search/index.do?menu_idx=9&booktype=BOOKANDNONBOOK&libraryCodes=CA&libraryCodes=CB&title={title}#search_result",
+   "url": "https://library.daegu.go.kr/donggu/intro/search/index.do?menu_idx=9&booktype=BOOKANDNONBOOK&title={title}#search_result",
    "libCodes": [
-    "127029",
     "127030",
-    "127031",
     "127048",
     "727061",
     "727062",
@@ -3287,7 +3052,25 @@
     "727069"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 미확인 — 지점 링크만",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "libraryCodes",
+    "codes": {
+     "127030": "FL",
+     "127048": "FP",
+     "727061": "GR",
+     "727062": "GS",
+     "727064": "GT",
+     "727065": "GU",
+     "727066": "GV",
+     "727067": "GW",
+     "727069": "GY"
+    },
+    "url": "https://library.daegu.go.kr/donggu/intro/search/index.do?menu_idx=9&booktype=BOOKANDNONBOOK&title={title}#search_result"
+   }
   },
   {
    "host": "www.donghaelib.go.kr",
@@ -3301,45 +3084,10 @@
    "flags": []
   },
   {
-   "host": "www.dongnae.go.kr",
-   "kind": "RESULT",
-   "method": "POST",
-   "url": "https://library.busan.go.kr/desbooks/book/search/collectionOfMaterials",
-   "fields": {
-    "searchMode": "normal",
-    "procMode": "search",
-    "search_type": "normal",
-    "pageno": "1",
-    "orderby_item": "",
-    "orderby": "",
-    "display": "10",
-    "manage_code": "BK",
-    "search_shelf": "",
-    "option": "0",
-    "search_txt": "{title}",
-    "search_author": "",
-    "search_publisher": "",
-    "search_year_start": "",
-    "search_year_end": "",
-    "search_keyword": "",
-    "subject_code": "",
-    "search_isbn_issn": ""
-   },
-   "libCodes": [
-    "126146",
-    "126153"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": [
-    "robots 막힘 — 운영자 요청 시 즉시 제거",
-    "배포 출처에서 한 번 더 확인"
-   ]
-  },
-  {
    "host": "www.eplib.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.eplib.or.kr/eplib/program/alpasq/searchResultList.do?searchType=SIMPLE&searchManageCodeArr=MA&searchKeyword={title}",
+   "url": "https://www.eplib.or.kr/eplib/program/alpasq/searchResultList.do?searchType=SIMPLE&searchKeyword={title}",
    "libCodes": [
     "111042",
     "111110",
@@ -3358,13 +3106,31 @@
     "711308"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchManageCodeArr",
+    "codes": {
+     "111110": "MB",
+     "111124": "MC",
+     "111126": "MD",
+     "111458": "MI",
+     "111482": "MR",
+     "111491": "MU",
+     "711152": "MG",
+     "711307": "MQ",
+     "711308": "ML"
+    },
+    "url": "https://www.eplib.or.kr/eplib/program/alpasq/searchResultList.do?searchType=SIMPLE&searchKeyword={title}"
+   }
   },
   {
    "host": "www.gaplib.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.gaplib.go.kr/intro/searchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchLibrary=ALL&searchKey=ALL&searchKeyword={title}",
+   "url": "https://www.gaplib.go.kr/intro/searchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchKeyword={title}",
    "libCodes": [
     "141001",
     "141105",
@@ -3372,7 +3138,20 @@
     "141286"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "141001": "MA",
+     "141105": "MB",
+     "141143": "MC",
+     "141286": "MD"
+    },
+    "url": "https://www.gaplib.go.kr/intro/searchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchKeyword={title}"
+   }
   },
   {
    "host": "www.gb.go.kr",
@@ -3391,43 +3170,6 @@
    ]
   },
   {
-   "host": "www.gbelib.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://www.gbelib.kr/gr/intro/search/index.do?menu_idx=8&booktype=L_TITLEAUTHOR&search_text={title}",
-   "libCodes": [
-    "147002",
-    "147003",
-    "147006",
-    "147007",
-    "147008",
-    "147009",
-    "147010",
-    "147011",
-    "147012",
-    "147013",
-    "147014",
-    "147015",
-    "147016",
-    "147017",
-    "147018",
-    "147019",
-    "147020",
-    "147021",
-    "147022",
-    "147023",
-    "147024",
-    "147031",
-    "147032",
-    "147039",
-    "147040",
-    "147046",
-    "147105"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": []
-  },
-  {
    "host": "www.gbeti.or.kr",
    "kind": "RESULT",
    "method": "GET",
@@ -3439,59 +3181,6 @@
    "flags": [
     "시험 책 0건 — 다른 책으로 결과 확인 권장"
    ]
-  },
-  {
-   "host": "www.gbgs.go.kr",
-   "kind": "RESULT",
-   "method": "POST",
-   "url": "https://www.gbgs.go.kr/lib/kolas/search.tc",
-   "fields": {
-    "mn": "1053",
-    "pageSeq": "587",
-    "pageIndex": "1",
-    "searchType": "",
-    "jongbook": "_book",
-    "startpage": "1",
-    "mode": "5",
-    "value1": "{title}",
-    "value2": "",
-    "value3": "",
-    "buhovalue1": "",
-    "buhovalue2": "",
-    "buhovalue3": "",
-    "buhovalue4": "",
-    "field1": "IAL",
-    "sort": "RK DESC",
-    "msa": "",
-    "resultListType": "list",
-    "mgc": "",
-    "limitpage": "10"
-   },
-   "libCodes": [
-    "147001",
-    "147165"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": [
-    "배포 출처에서 한 번 더 확인"
-   ]
-  },
-  {
-   "host": "www.gblib.or.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://www.gblib.or.kr/gangbuk/search/total.do?wherefrom=out#a_qf=Z&a_rq=&a_lib=MA&a_q={title}",
-   "libCodes": [
-    "111037",
-    "111038",
-    "111052",
-    "111174",
-    "111182",
-    "111383",
-    "111465"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": []
   },
   {
    "host": "www.gclib.go.kr",
@@ -3512,24 +3201,6 @@
     "robots 막힘 — 운영자 요청 시 즉시 제거",
     "배포 출처에서 한 번 더 확인"
    ]
-  },
-  {
-   "host": "www.gdlibrary.or.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://www.gdlibrary.or.kr/portal/menu/38/book/search/collection?searchType=normal&tabSearch=false&form_code=&media_code=&doc_type=&sortField=score&sortOrder=desc&display=10&searchInput={title}&title=&author=&publisher=&isbn=&keyword=&pub_year_from=&pub_year_to=&lib_type=&manage_code=MH%2CMF%2CMA%2CMB%2CBR%2CMC%2CMD%2CME&smart_manage_code=&small_manage_code=",
-   "libCodes": [
-    "111078",
-    "111101",
-    "111125",
-    "111176",
-    "111470",
-    "111501",
-    "111546",
-    "111549"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": []
   },
   {
    "host": "www.geumjeong.go.kr",
@@ -3570,13 +3241,25 @@
     "146077"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "libCode",
+    "codes": {
+     "146035": "MB",
+     "146051": "MC",
+     "146077": "MA"
+    },
+    "url": "https://www.ghlib.go.kr/BookSearch?query={title}"
+   }
   },
   {
    "host": "www.gimpo.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.gimpo.go.kr/modam/bookSearchList.do?key=11488&rep=1&option=0&type=&searchSort=TITLE&orderby=DESC&pageUnit=10&searchCnd=&searchKrwd={title}&manageCode=FS",
+   "url": "https://www.gimpo.go.kr/modam/bookSearchList.do?key=11488&rep=1&option=0&type=&searchSort=TITLE&orderby=DESC&pageUnit=10&searchCnd=&searchKrwd={title}",
    "libCodes": [
     "141057",
     "141121",
@@ -3591,7 +3274,26 @@
     "741008"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "manageCode",
+    "codes": {
+     "141121": "BR",
+     "141169": "TJ",
+     "141266": "DK",
+     "141404": "YG",
+     "141591": "GC",
+     "141593": "JG",
+     "141606": "PM",
+     "141640": "MS",
+     "141670": "MD",
+     "741008": "GR"
+    },
+    "url": "https://www.gimpo.go.kr/modam/bookSearchList.do?key=11488&rep=1&option=0&type=&searchSort=TITLE&orderby=DESC&pageUnit=10&searchCnd=&searchKrwd={title}"
+   }
   },
   {
    "host": "www.gjlib.go.kr",
@@ -3614,13 +3316,15 @@
     "146186"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)"
+   ]
   },
   {
    "host": "www.goyanglib.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.goyanglib.or.kr/MB/menu/10315/program/30001/searchResultList.do?searchType=SIMPLE&searchManageCodeArr=MB&searchKeyword={title}",
+   "url": "https://www.goyanglib.or.kr/MB/menu/10315/program/30001/searchResultList.do?searchType=SIMPLE&searchKeyword={title}",
    "libCodes": [
     "141018",
     "141055",
@@ -3650,7 +3354,30 @@
     "741511"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchManageCodeArr",
+    "codes": {
+     "141055": "MA",
+     "141123": "MF",
+     "141124": "MG",
+     "141139": "MJ",
+     "141140": "MK",
+     "141150": "ML",
+     "141388": "MM",
+     "141398": "MN",
+     "141546": "MO",
+     "141555": "MP",
+     "141574": "MT",
+     "141631": "MU",
+     "141635": "MQ",
+     "141657": "MV"
+    },
+    "url": "https://www.goyanglib.or.kr/MB/menu/10315/program/30001/searchResultList.do?searchType=SIMPLE&searchKeyword={title}"
+   }
   },
   {
    "host": "www.gunpolib.go.kr",
@@ -3667,7 +3394,7 @@
    "host": "www.gurilib.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.gurilib.go.kr/inlib/program/searchResultList.do?searchType=SIMPLE&searchManageCode=ALL&mainSearchCondition=book&searchKeyword={title}",
+   "url": "https://www.gurilib.go.kr/inlib/program/searchResultList.do?searchType=SIMPLE&mainSearchCondition=book&searchKeyword={title}",
    "libCodes": [
     "141020",
     "141070",
@@ -3676,14 +3403,25 @@
    ],
    "checkedAt": "2026-11-04",
    "flags": [
-    "robots 막힘 — 운영자 요청 시 즉시 제거"
-   ]
+    "robots 막힘 — 운영자 요청 시 즉시 제거",
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchManageCodeArr",
+    "codes": {
+     "141020": "BR",
+     "141225": "TP",
+     "141656": "GM"
+    },
+    "url": "https://www.gurilib.go.kr/inlib/program/searchResultList.do?searchType=SIMPLE&mainSearchCondition=book&searchKeyword={title}"
+   }
   },
   {
    "host": "www.gwangjinlib.seoul.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.gwangjinlib.seoul.kr/gjinfo/plusSearchResultList.do?searchType=SIMPLE&searchLibrary=ALL&searchKey=ALL&searchKeyword={title}",
+   "url": "https://www.gwangjinlib.seoul.kr/gjinfo/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}",
    "libCodes": [
     "111036",
     "111115",
@@ -3695,7 +3433,22 @@
     "111537"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "111036": "MA",
+     "111115": "MC",
+     "111495": "MF",
+     "111521": "MG",
+     "111523": "MH",
+     "111537": "MI"
+    },
+    "url": "https://www.gwangjinlib.seoul.kr/gjinfo/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}"
+   }
   },
   {
    "host": "www.hmlib.or.kr",
@@ -3719,7 +3472,7 @@
    "host": "www.hscitylib.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.hscitylib.or.kr/nylib/menu/10160/program/30001/searchResultList.do?searchType=SIMPLE&searchManageCodeArr=MA&searchKeyword={title}",
+   "url": "https://www.hscitylib.or.kr/nylib/menu/10160/program/30001/searchResultList.do?searchType=SIMPLE&searchKeyword={title}",
    "libCodes": [
     "141042",
     "141048",
@@ -3754,43 +3507,41 @@
     "741937"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
-  },
-  {
-   "host": "www.icheonlib.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://www.icheonlib.go.kr/search/tot/result?si=TOTAL&st=KWRD&si=1&q={title}&x=0&y=0",
-   "libCodes": [
-    "141029",
-    "141068",
-    "141166",
-    "141539"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": []
-  },
-  {
-   "host": "www.incheonlib.go.kr",
-   "kind": "RESULT",
-   "method": "POST",
-   "url": "https://www.incheonlib.go.kr/itg/sch/bsch/list.do?mnidx=385",
-   "fields": {
-    "mainSearch": "on",
-    "searchKeyword": "{title}"
-   },
-   "libCodes": [
-    "123001",
-    "128096",
-    "128097",
-    "128098",
-    "128107",
-    "328015"
-   ],
-   "checkedAt": "2026-11-04",
    "flags": [
-    "배포 출처에서 한 번 더 확인"
-   ]
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchManageCodeArr",
+    "codes": {
+     "141042": "MA",
+     "141048": "MB",
+     "141076": "MC",
+     "141088": "MD",
+     "141145": "ME",
+     "141233": "MG",
+     "141247": "MJ",
+     "141283": "MK",
+     "141403": "ML",
+     "141519": "MM",
+     "141575": "MO",
+     "141611": "MR",
+     "141621": "MS",
+     "141624": "MI",
+     "141637": "MW",
+     "141644": "MY",
+     "141645": "MX",
+     "141671": "NA",
+     "741226": "MN",
+     "741473": "MQ",
+     "741567": "MT",
+     "741568": "MU",
+     "741827": "TA",
+     "741828": "MZ",
+     "741937": "TC"
+    },
+    "url": "https://www.hscitylib.or.kr/nylib/menu/10160/program/30001/searchResultList.do?searchType=SIMPLE&searchKeyword={title}"
+   }
   },
   {
    "host": "www.issl.go.kr",
@@ -3811,7 +3562,8 @@
    ],
    "checkedAt": "2026-11-04",
    "flags": [
-    "배포 출처에서 한 번 더 확인"
+    "배포 출처에서 한 번 더 확인",
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)"
    ]
   },
   {
@@ -3820,20 +3572,28 @@
    "method": "GET",
    "url": "https://libsearch.jecheon.go.kr/bookSearch.do?key=2502260002&pageIndex=1&nonBookPageIndex=1&search_txt=&detail=N&sc_normalChk=Y&typeCk=&orderBy=&orderByItem=&sortYn=&viewType=&facetManageCode=&facetAuthor=&facetPublisher=&facetPubYear=&facetSubjectCode=&facetMediaCode=&nonBookFacetManageCode=&nonBookFacetAuthor=&nonBookFacetPublisher=&nonBookFacetPubYear=&nonBookFacetSubjectCode=&nonBookFacetMediaCode=&preSearchWord=&sc_gubun=&searchWord={title}",
    "libCodes": [
-    "143015",
     "143143"
    ],
    "checkedAt": "2026-11-04",
    "flags": [
     "robots 막힘 — 운영자 요청 시 즉시 제거",
-    "약관 미확인(링크 못 찾음)"
-   ]
+    "약관 미확인(링크 못 찾음)",
+    "11-04 범위: 통합 미확인 — 지점 링크만",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "manageCode",
+    "codes": {
+     "143143": "MH"
+    },
+    "url": "https://libsearch.jecheon.go.kr/bookSearch.do?key=2502260002&pageIndex=1&nonBookPageIndex=1&search_txt=&detail=N&sc_normalChk=Y&typeCk=&orderBy=&orderByItem=&sortYn=&viewType=&facetManageCode=&facetAuthor=&facetPublisher=&facetPubYear=&facetSubjectCode=&facetMediaCode=&nonBookFacetManageCode=&nonBookFacetAuthor=&nonBookFacetPublisher=&nonBookFacetPubYear=&nonBookFacetSubjectCode=&nonBookFacetMediaCode=&preSearchWord=&sc_gubun=&searchWord={title}"
+   }
   },
   {
    "host": "www.junggulib.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.junggulib.or.kr/SJGL/program/searchResultList.do?searchType=SIMPLE&searchManageCode=ALL&searchKeyword={title}",
+   "url": "https://www.junggulib.or.kr/SJGL/program/searchResultList.do?searchType=SIMPLE&searchKeyword={title}",
    "libCodes": [
     "111108",
     "111180",
@@ -3847,45 +3607,59 @@
    "checkedAt": "2026-11-04",
    "flags": [
     "robots 막힘 — 운영자 요청 시 즉시 제거",
-    "약관 미확인(링크 못 찾음)"
-   ]
+    "약관 미확인(링크 못 찾음)",
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchManageCodeArr",
+    "codes": {
+     "111108": "MF",
+     "111180": "MD",
+     "111220": "MH",
+     "111511": "MC",
+     "111513": "MA",
+     "711539": "CA"
+    },
+    "url": "https://www.junggulib.or.kr/SJGL/program/searchResultList.do?searchType=SIMPLE&searchKeyword={title}"
+   }
   },
   {
    "host": "www.jungnanglib.seoul.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.jungnanglib.seoul.kr/jnlib/program/searchResultList.do?searchType=SIMPLE&searchManageCodeArr=MA&searchKeyword={title}",
+   "url": "https://www.jungnanglib.seoul.kr/jnlib/program/searchResultList.do?searchType=SIMPLE&searchKeyword={title}",
    "libCodes": [
     "111034",
     "111060",
     "111311",
     "111478",
-    "111488",
-    "111547",
-    "711090"
+    "111488"
    ],
    "checkedAt": "2026-11-04",
    "flags": [
     "robots 막힘 — 운영자 요청 시 즉시 제거",
-    "약관 미확인(링크 못 찾음)"
-   ]
-  },
-  {
-   "host": "www.kidslib.org",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://libsearch.jecheon.go.kr/bookSearch.do?key=&pageIndex=1&nonBookPageIndex=1&search_txt=&detail=N&sc_normalChk=Y&typeCk=&orderBy=&orderByItem=&sortYn=&viewType=&facetManageCode=&facetAuthor=&facetPublisher=&facetPubYear=&facetSubjectCode=&facetMediaCode=&nonBookFacetManageCode=&nonBookFacetAuthor=&nonBookFacetPublisher=&nonBookFacetPubYear=&nonBookFacetSubjectCode=&nonBookFacetMediaCode=&preSearchWord=&sc_gubun=&manageCode=MA&searchWord={title}",
-   "libCodes": [
-    "143025"
+    "약관 미확인(링크 못 찾음)",
+    "11-04 범위: 통합 미확인 — 지점 링크만",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
    ],
-   "checkedAt": "2026-11-03",
-   "flags": []
+   "branch": {
+    "param": "searchManageCodeArr",
+    "codes": {
+     "111034": "MA",
+     "111060": "MB",
+     "111311": "MD",
+     "111478": "ME",
+     "111488": "MF"
+    },
+    "url": "https://www.jungnanglib.seoul.kr/jnlib/program/searchResultList.do?searchType=SIMPLE&searchKeyword={title}"
+   }
   },
   {
    "host": "www.l4d.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.l4d.or.kr/info/menu/10142/program/30010/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchLibrary=MD&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
+   "url": "https://www.l4d.or.kr/info/menu/10142/program/30010/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
    "libCodes": [
     "111053",
     "111065",
@@ -3913,7 +3687,24 @@
     "711485"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "111065": "MA",
+     "111304": "MC",
+     "111445": "MF",
+     "111490": "SP",
+     "111534": "MN",
+     "711079": "MG",
+     "711250": "SM",
+     "711427": "SN"
+    },
+    "url": "https://www.l4d.or.kr/info/menu/10142/program/30010/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
+   }
   },
   {
    "host": "www.libyj.go.kr",
@@ -3933,13 +3724,15 @@
     "741758"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)"
+   ]
   },
   {
    "host": "www.namdonglib.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://alpasq.namdonglib.go.kr/search/keyword/{title}?manageCode=ALL",
+   "url": "https://alpasq.namdonglib.go.kr/search/keyword/{title}",
    "libCodes": [
     "128049",
     "128050",
@@ -3947,7 +3740,8 @@
    ],
    "checkedAt": "2026-11-04",
    "flags": [
-    "robots 막힘 — 운영자 요청 시 즉시 제거"
+    "robots 막힘 — 운영자 요청 시 즉시 제거",
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)"
    ]
   },
   {
@@ -3988,64 +3782,12 @@
    ]
   },
   {
-   "host": "www.namwon.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://www.namwon.go.kr/lib/web/program/searchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchLibrary=ALL&searchField=ALL&searchWord={title}",
-   "libCodes": [
-    "145050",
-    "145149",
-    "145156"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": [
-    "robots 막힘 — 운영자 요청 시 즉시 제거"
-   ]
-  },
-  {
    "host": "www.neutinamu.org",
    "kind": "RESULT",
    "method": "GET",
    "url": "http://www.neutinamu.org/page/search/result.php?tsch={title}",
    "libCodes": [
     "141083"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": []
-  },
-  {
-   "host": "www.nowonlib.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://www.nowonlib.kr/KeywordSearchResult/{title}",
-   "libCodes": [
-    "111131",
-    "111133",
-    "111135",
-    "111414",
-    "111415",
-    "111431",
-    "111512",
-    "141619",
-    "311034",
-    "711044",
-    "711603",
-    "711604",
-    "711605",
-    "711606",
-    "711607",
-    "711608",
-    "711609",
-    "711610",
-    "711611",
-    "711612",
-    "711613",
-    "711614",
-    "711615",
-    "711616",
-    "711617",
-    "711618",
-    "741562"
    ],
    "checkedAt": "2026-11-04",
    "flags": []
@@ -4065,23 +3807,6 @@
    ]
   },
   {
-   "host": "www.osanlibrary.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://www.osanlibrary.go.kr/cheonghak/program/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=TITLE&searchKeyword={title}",
-   "libCodes": [
-    "141014",
-    "141127",
-    "141158",
-    "141174",
-    "141264",
-    "141540",
-    "141610"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": []
-  },
-  {
    "host": "www.pc.go.kr",
    "kind": "RESULT",
    "method": "GET",
@@ -4093,13 +3818,25 @@
     "142115"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "manage_code",
+    "codes": {
+     "142036": "MB",
+     "142042": "MA",
+     "142115": "MH"
+    },
+    "url": "https://www.pc.go.kr/lib/main/site/search/bookSearch.do?cmd_name=bookandnonbooksearch&search_type=detail&use_facet=N&search_item=search_title&search_txt={title}"
+   }
   },
   {
    "host": "www.ptlib.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.ptlib.go.kr/pslib/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50&searchLibraryArr=BA",
+   "url": "https://www.ptlib.go.kr/pslib/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
    "libCodes": [
     "141016",
     "141031",
@@ -4117,7 +3854,30 @@
     "141598"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "141016": "MB",
+     "141031": "MA",
+     "141084": "MC",
+     "141103": "MD",
+     "141318": "BA",
+     "141319": "BB",
+     "141320": "BC",
+     "141513": "MF",
+     "141514": "ME",
+     "141515": "BD",
+     "141569": "BE",
+     "141580": "MG",
+     "141589": "MH",
+     "141598": "MJ"
+    },
+    "url": "https://www.ptlib.go.kr/pslib/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
+   }
   },
   {
    "host": "www.saha.go.kr",
@@ -4159,7 +3919,9 @@
     "111500"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)"
+   ]
   },
   {
    "host": "www.seocholib.or.kr",
@@ -4171,26 +3933,6 @@
    ],
    "checkedAt": "2026-11-04",
    "flags": []
-  },
-  {
-   "host": "www.seogu.gwangju.kr",
-   "kind": "RESULT",
-   "method": "POST",
-   "url": "https://library.seogu.gwangju.kr/library/index.9is",
-   "fields": {
-    "contentUid": "9be5df897834aa070178680e7bfe07b9",
-    "from": "main",
-    "searchKeyword": "{title}"
-   },
-   "libCodes": [
-    "124009",
-    "129004",
-    "129222"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": [
-    "배포 출처에서 한 번 더 확인"
-   ]
   },
   {
    "host": "www.seosan.go.kr",
@@ -4206,14 +3948,26 @@
    ],
    "checkedAt": "2026-11-04",
    "flags": [
-    "robots 막힘 — 운영자 요청 시 즉시 제거"
-   ]
+    "robots 막힘 — 운영자 요청 시 즉시 제거",
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "manageCode",
+    "codes": {
+     "144032": "144032_AB",
+     "144070": "144070_BA",
+     "144111": "144111_BB",
+     "144123": "144123_BC"
+    },
+    "url": "https://searcheb.seosan.go.kr/dls_le/index.php?mod=wdDataSearch&act=searchIList&reWord%5B%5D=&preItem=total&preCond=&deSearch=2&word1=&word2=&word3=&item1=&item2=&item3=&cond1=&cond1=&cond1=&preWord={title}"
+   }
   },
   {
    "host": "www.snlib.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.snlib.go.kr/bd/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchLibraryArr=MB&topSearchType=BOOK&searchKeyword={title}",
+   "url": "https://www.snlib.go.kr/bd/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&topSearchType=BOOK&searchKeyword={title}",
    "libCodes": [
     "141052",
     "141053",
@@ -4234,13 +3988,35 @@
     "741042"
    ],
    "checkedAt": "2026-11-04",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "141052": "MB",
+     "141060": "MS",
+     "141069": "MA",
+     "141142": "MG",
+     "141484": "MU",
+     "141518": "MM",
+     "141588": "MH",
+     "141601": "MV",
+     "141623": "MW",
+     "141649": "MT",
+     "141665": "MD",
+     "141672": "MO",
+     "741042": "BF"
+    },
+    "url": "https://www.snlib.go.kr/bd/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&topSearchType=BOOK&searchKeyword={title}"
+   }
   },
   {
    "host": "www.splib.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.splib.or.kr/spglib/menu/10468/program/30002/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchLibrary=ALL&searchKey=ALL&searchKeyword={title}",
+   "url": "https://www.splib.or.kr/spglib/menu/10468/program/30002/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchKeyword={title}",
    "libCodes": [
     "111049",
     "111084",
@@ -4256,65 +4032,38 @@
     "111472"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
-  },
-  {
-   "host": "www.suwonlib.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://mob.suwonlib.go.kr/search?historyChk=Y&isSearchType=normal&searchTxt={title}&kCid=&kdcValue=&searchKind=book&manageCode=141025&isInnerSearch=F&innerSearchTxt=&keywordSearch=false&displayNo=10&orderbyItem=ACCURACY_SORT&orderby=DESC&pageNo=1&facetLib=&facetLibName=&facetAuthor=&facetPublisher=&facetPubYear=&facetSubject=&facetSubjectName=&facetMedia=&facetMediaName=",
-   "libCodes": [
-    "141024",
-    "141025",
-    "141061",
-    "141064",
-    "141085",
-    "141086",
-    "141087",
-    "141092",
-    "141093",
-    "141107",
-    "141138",
-    "141301",
-    "141537",
-    "141542",
-    "141549",
-    "141550",
-    "141551",
-    "141552",
-    "141557",
-    "141572",
-    "141595",
-    "141596",
-    "141612"
+   "flags": [
+    "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
    ],
-   "checkedAt": "2026-11-04",
-   "flags": []
-  },
-  {
-   "host": "www.suyeong.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://www.suyeong.go.kr/library/index.suyeong?search_type=&pageno=1&menuCd=DOM_000001603001001000&search_category=search_title&search_txt={title}&manage_code=AV&manage_code=AY&manage_code=AO&manage_code=HX&manage_code=LB&orderby_item=&orderby=&search_isbn_issn=&subject_code=&media_code=&search_year_start=&search_year_end=&display=10",
-   "libCodes": [
-    "121024",
-    "121091"
-   ],
-   "checkedAt": "2026-11-04",
-   "flags": []
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "111049": "MB",
+     "111084": "BA",
+     "111114": "BB",
+     "111173": "BC",
+     "111175": "BD",
+     "111191": "MC",
+     "111448": "MF",
+     "111456": "MG"
+    },
+    "url": "https://www.splib.or.kr/spglib/menu/10468/program/30002/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchKeyword={title}"
+   }
   },
   {
    "host": "www.taebaek.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.taebaek.go.kr/kolaseek/plus/search/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=TITLE&searchLibrary=ALL&searchKeyword={title}",
+   "url": "https://lib.taebaek.go.kr/kolaseek/plus/search/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=TITLE&searchKeyword={title}",
    "libCodes": [
     "142030",
     "142112"
    ],
    "checkedAt": "2026-11-04",
    "flags": [
-    "robots 막힘 — 운영자 요청 시 즉시 제거"
+    "robots 막힘 — 운영자 요청 시 즉시 제거",
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)"
    ]
   },
   {
@@ -4332,8 +4081,22 @@
    ],
    "checkedAt": "2026-11-04",
    "flags": [
-    "robots 막힘 — 운영자 요청 시 즉시 제거"
-   ]
+    "robots 막힘 — 운영자 요청 시 즉시 제거",
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "libraryCodes",
+    "codes": {
+     "141075": "MA",
+     "141119": "MB",
+     "141131": "MC",
+     "141597": "MD",
+     "141627": "ME",
+     "141642": "SS"
+    },
+    "url": "https://www.uilib.go.kr/main/intro/search/index.do?menu_idx=9&booktype=ALL&title={title}"
+   }
   },
   {
    "host": "www.ulsannamgu.go.kr",
@@ -4347,44 +4110,9 @@
     "131074"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
-  },
-  {
-   "host": "www.unilib.dobong.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "http://www.unilib.dobong.kr/site/search/search00.do?cmd_name=bookandnonbooksearch&search_type=detail&search_item=&manage_code=MA%2CMB%2CMC%2CME%2CMG%2CMJ%2CMF%2CMH%2CSA%2CMD%2CSB%2CSL%2CSM%2CSN%2CSO%2CSP%2CSK%2CSQ%2CSR%2CSS%2CST%2CSU%2CSG%2CSH%2CSC&search_txt={title}",
-   "libCodes": [
-    "111041",
-    "111129",
-    "111189",
-    "111208",
-    "111262",
-    "111270",
-    "111271",
-    "111272",
-    "111274",
-    "111282",
-    "111331",
-    "111348",
-    "111350",
-    "111351",
-    "111357",
-    "111454",
-    "111457",
-    "111496",
-    "111524",
-    "511015",
-    "711316",
-    "711317",
-    "711318",
-    "711319",
-    "711320",
-    "711323",
-    "711324"
-   ],
-   "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)"
+   ]
   },
   {
    "host": "www.usdl.or.kr",
@@ -4401,7 +4129,7 @@
    "host": "www.ydplib.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.ydplib.or.kr/drlib/menu/10077/program/30002/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchRoom=ALL&searchKey1=TITLE&searchOperator1=AND&searchKey2=AUTHOR&searchOperator2=AND&searchKey3=PUBLISHER&searchOperator3=AND&searchKey4=KEYWORD&searchOperator4=AND&searchKey5=ISBN&searchOperator5=AND&searchLibrary=ALL&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchKeyword1={title}",
+   "url": "https://www.ydplib.or.kr/drlib/menu/10077/program/30002/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchRoom=ALL&searchKey1=TITLE&searchOperator1=AND&searchKey2=AUTHOR&searchOperator2=AND&searchKey3=PUBLISHER&searchOperator3=AND&searchKey4=KEYWORD&searchOperator4=AND&searchKey5=ISBN&searchOperator5=AND&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchKeyword1={title}",
    "libCodes": [
     "111083",
     "111111",
@@ -4412,56 +4140,27 @@
     "111550"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
-  },
-  {
-   "host": "www.yeongdo.go.kr",
-   "kind": "RESULT",
-   "method": "GET",
-   "url": "https://www.yeongdo.go.kr/search/searchResult.web?sstring={title}",
-   "libCodes": [
-    "121014",
-    "126015"
-   ],
-   "checkedAt": "2026-11-04",
    "flags": [
-    "robots 막힘 — 운영자 요청 시 즉시 제거"
-   ]
-  },
-  {
-   "host": "www.yeonje.go.kr",
-   "kind": "RESULT",
-   "method": "POST",
-   "url": "https://library.busan.go.kr/yjbooks/book/search/collectionOfMaterials",
-   "fields": {
-    "procMode": "search",
-    "search_type": "detail",
-    "pageno": "1",
-    "manage_code": "BH,HS,HT,HU,HV,JW,KW",
-    "search_shelf": "",
-    "search_field": "search_title",
-    "book_type": "BOOK",
-    "option": "0",
-    "reg_no": "",
-    "orderby_item": "",
-    "orderby": "",
-    "display": "10",
-    "search_txt": "{title}"
-   },
-   "libCodes": [
-    "126143",
-    "126167"
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
    ],
-   "checkedAt": "2026-11-04",
-   "flags": [
-    "배포 출처에서 한 번 더 확인"
-   ]
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "111111": "CB",
+     "111121": "CC",
+     "111444": "MA",
+     "111530": "LX",
+     "111536": "LY"
+    },
+    "url": "https://www.ydplib.or.kr/drlib/menu/10077/program/30002/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchRoom=ALL&searchKey1=TITLE&searchOperator1=AND&searchKey2=AUTHOR&searchOperator2=AND&searchKey3=PUBLISHER&searchOperator3=AND&searchKey4=KEYWORD&searchOperator4=AND&searchKey5=ISBN&searchOperator5=AND&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchKeyword1={title}"
+   }
   },
   {
    "host": "www.yjlib.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.yjlib.go.kr/web/program/searchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchClassNo1Aggs=ALL&searchLibrary=ALL&searchField=ALL&searchWord={title}",
+   "url": "https://www.yjlib.go.kr/web/program/searchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchClassNo1Aggs=ALL&searchField=ALL&searchWord={title}",
    "libCodes": [
     "141054",
     "141177",
@@ -4473,13 +4172,26 @@
     "741094"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "141177": "MC",
+     "141331": "MA",
+     "141586": "ME",
+     "741094": "MD"
+    },
+    "url": "https://www.yjlib.go.kr/web/program/searchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchClassNo1Aggs=ALL&searchField=ALL&searchWord={title}"
+   }
   },
   {
    "host": "www.yslibrary.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.yslibrary.or.kr/cheongpa/searchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50&searchLibraryArr=MB",
+   "url": "https://www.yslibrary.or.kr/cheongpa/searchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
    "libCodes": [
     "111120",
     "111364",
@@ -4499,7 +4211,29 @@
     "711650"
    ],
    "checkedAt": "2026-11-03",
-   "flags": []
+   "flags": [
+    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+   ],
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "111364": "YN",
+     "111409": "YD",
+     "111473": "MA",
+     "711023": "YG",
+     "711397": "YB",
+     "711398": "YC",
+     "711401": "YI",
+     "711402": "YJ",
+     "711403": "YK",
+     "711405": "YM",
+     "711466": "YS",
+     "711497": "YO",
+     "711650": "OA"
+    },
+    "url": "https://www.yslibrary.or.kr/cheongpa/searchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
+   }
   },
   {
    "host": "www.yspubliclib.go.kr",
@@ -4531,7 +4265,8 @@
    "checkedAt": "2026-11-04",
    "flags": [
     "robots 막힘 — 운영자 요청 시 즉시 제거",
-    "배포 출처에서 한 번 더 확인"
+    "배포 출처에서 한 번 더 확인",
+    "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)"
    ]
   },
   {

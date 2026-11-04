@@ -125,11 +125,13 @@ export function mergeRetry(state: ExplorerState, res: PublicLibraryBatchResponse
     if (!original) continue
     if (isHeld(item)) {
       unknown = unknown.filter(u => u.libCode !== item.libCode)
-      found.push({ ...original, state: item.state, reason: null })
+      // 거리는 처음 배치 것을 지키고, 사이트 검색 링크는 새 응답 것을 쓴다(처음 배치엔 제목이 없었을 수 있다)
+      found.push({ ...original, state: item.state, reason: null, searchLink: item.searchLink ?? original.searchLink })
     } else if (item.state === 'NOT_HELD') {
       unknown = unknown.filter(u => u.libCode !== item.libCode)
     } else {
-      unknown = unknown.map(u => (u.libCode === item.libCode ? { ...u, reason: item.reason } : u))
+      unknown = unknown.map(u => (u.libCode === item.libCode
+        ? { ...u, reason: item.reason, searchLink: item.searchLink ?? u.searchLink } : u))
     }
   }
   found.sort(byDistance)
