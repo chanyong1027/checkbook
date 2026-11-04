@@ -198,12 +198,20 @@ export function useSavedLibraries(isbn13: string, libCodes: string[], enabled: b
   const codesKey = libCodes.join(',')
   const itemsRef = useRef(items)
   useEffect(() => { itemsRef.current = items }, [items])
+  /** 첫 조회 중에 제목이 왔다 — 첫 조회가 끝나 목록이 보이면 조용히 한 번 더 불러 링크를 붙인다 */
+  const linkAfterFirstRef = useRef(false)
 
   /** quiet: 이미 보이는 목록에 사이트 링크만 붙이려는 재조회 — 불러오는 중·오류 표시를 건드리지 않고 성공할 때만 바꾼다 */
   const load = useCallback((wantQuiet = false) => {
-    // 첫 조회가 끝나기 전에 제목이 오면 보이는 목록이 없다. 이때 조용히 부르면 실패해도 오류가 안 떠
-    // '확인 중'에서 멈추므로(11-04 리뷰), 목록이 있을 때만 조용히 부른다
+    // 첫 조회가 끝나기 전에 제목이 오면(공유 링크 진입) 첫 조회를 버리지 않는다. 버리고 새로 부르면
+    // '확인 중'이 길어지고 배치 한 번을 낭비한다(11-04 사용자 확인). 목록이 뜬 뒤 조용히 부른다
+    if (wantQuiet && itemsRef.current == null && abortRef.current) {
+      linkAfterFirstRef.current = true
+      return
+    }
+    // 목록이 없을 때 조용히 부르면 실패해도 오류가 안 떠 '확인 중'에서 멈춘다(11-04 리뷰) — 목록이 있을 때만 조용히
     const quiet = wantQuiet && itemsRef.current != null
+    linkAfterFirstRef.current = false
     abortRef.current?.abort()
     if (!codesKey) {
       setItems(null)
@@ -217,7 +225,10 @@ export function useSavedLibraries(isbn13: string, libCodes: string[], enabled: b
     }
     getSavedLibraryBatch(isbn13, codesKey.split(','), controller.signal, titleRef.current)
       .then(res => {
-        if (abortRef.current === controller) setItems(res.items)
+        if (abortRef.current === controller) {
+          setItems(res.items)
+          itemsRef.current = res.items // 아래 이어 부르기가 '목록 있음'으로 보게 바로 맞춘다
+        }
       })
       .catch(err => {
         if (!isAbort(err) && abortRef.current === controller && !quiet) {
@@ -228,6 +239,11 @@ export function useSavedLibraries(isbn13: string, libCodes: string[], enabled: b
         if (abortRef.current === controller) {
           setLoading(false)
           abortRef.current = null // 끝난 요청 — 아래에서 '불러오는 중'으로 보지 않게
+          if (linkAfterFirstRef.current) {
+            linkAfterFirstRef.current = false
+            // 첫 조회가 실패했으면 목록이 없어 오류·다시 시도가 보인다. 다시 시도는 제목을 싣고 부른다
+            if (itemsRef.current != null) load(true)
+          }
         }
       })
   }, [isbn13, codesKey])

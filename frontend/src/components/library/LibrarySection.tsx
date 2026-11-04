@@ -10,10 +10,12 @@ import { ExternalIcon, MapPinIcon, NavigateIcon, RefreshIcon, SpinnerIcon } from
 import { stopMessage } from './nearbyExplorer.ts'
 import { useNearbyExplorer, useSavedLibraries, type LibraryOrigin } from './useLibraryLookups'
 import { LibraryMap } from './LibraryMap'
+import { initialMode, readLastMode, shouldAutoLocate, writeLastMode, type LibraryMode, type PermissionStateLike } from './libraryMode'
+import { browserStore } from '../../preferences/preferences'
 import { kakaoMapKey } from './kakaoMaps.ts'
 import { toMapPoints } from './mapPoints.ts'
 
-type Mode = 'saved' | 'nearby'
+type Mode = LibraryMode
 type OriginChoice = 'gps' | 'reference'
 export type LibrarySummary = Pick<SummaryItem, 'value' | 'tone'>
 
@@ -290,18 +292,24 @@ export function LibrarySection({
   title: string | null
   location: { lat: number; lon: number } | null
   locationLoading: boolean
-  onRequestLocation: () => void
+  onRequestLocation: (options?: { silent?: boolean }) => void
   onSummaryChange: (summary: LibrarySummary) => void
 }) {
   const { preferences, openSettings } = usePreferences()
   const saved = preferences.publicLibraries
   const reference = preferences.referenceLibrary
-  const [mode, setMode] = useState<Mode>(saved.length > 0 ? 'saved' : 'nearby')
+  // 마지막에 고른 보기 모드로 연다(모드 이름만 기억, 위치는 저장하지 않음)
+  const [mode, setModeState] = useState<Mode>(() => initialMode(saved.length, readLastMode(browserStore())))
   const [originChoice, setOriginChoice] = useState<OriginChoice>(location ? 'gps' : 'reference')
+  /** 사용자가 고른 모드만 기억한다(저장한 곳이 없어 저절로 바뀐 건 기억하지 않음) */
+  const chooseMode = (next: Mode) => {
+    setModeState(next)
+    writeLastMode(browserStore(), next)
+  }
 
   // 저장한 곳을 다 지우면 주변으로
   useEffect(() => {
-    if (saved.length === 0 && mode === 'saved') setMode('nearby')
+    if (saved.length === 0 && mode === 'saved') setModeState('nearby')
   }, [saved.length, mode])
 
   // 위치 허용은 사용자가 누른 것이므로 그 기준으로 바꾼다
@@ -317,6 +325,36 @@ export function LibrarySection({
       : null
   const originIsGps = origin != null && !('referenceLibCode' in origin)
   const distanceFrom = originIsGps ? '내 위치' : reference?.name ?? null
+
+  // 위치 권한이 이미 '허용'이면 새로고침 뒤에도 버튼 없이 위치를 받는다. 권한 상태 확인은 팝업을 띄우지 않는다
+  const [permission, setPermission] = useState<PermissionStateLike>(null)
+  useEffect(() => {
+    let status: PermissionStatus | null = null
+    let cancelled = false
+    try {
+      navigator.permissions?.query({ name: 'geolocation' }).then(s => {
+        if (cancelled) return
+        status = s
+        setPermission(s.state)
+        s.onchange = () => setPermission(s.state)
+      }).catch(() => {})
+    } catch {
+      // 권한 확인을 못 하는 브라우저는 지금처럼 버튼으로만
+    }
+    return () => {
+      cancelled = true
+      if (status) status.onchange = null
+    }
+  }, [])
+  const autoLocated = useRef(false)
+  const hasOrigin = origin != null
+  useEffect(() => {
+    if (autoLocated.current) return
+    if (shouldAutoLocate({ permission, mode, hasOrigin, loading: locationLoading })) {
+      autoLocated.current = true // 한 화면에서 한 번만(실패하면 지금처럼 오류와 버튼)
+      onRequestLocation({ silent: true }) // 실패하면 오류 없이 버튼만(누르지 않은 오류를 띄우지 않음)
+    }
+  }, [permission, mode, hasOrigin, locationLoading, onRequestLocation])
 
   const savedLookup = useSavedLibraries(isbn13, saved.map(l => l.libCode), mode === 'saved', title)
   const nearby = useNearbyExplorer(isbn13, origin, mode === 'nearby', title)
@@ -374,10 +412,10 @@ export function LibrarySection({
     <div>
       {saved.length > 0 && (
         <div className="flex gap-2 mb-3" role="group" aria-label="도서관 보기 방식">
-          <button type="button" className={pill(mode === 'saved')} aria-pressed={mode === 'saved'} onClick={() => setMode('saved')}>
+          <button type="button" className={pill(mode === 'saved')} aria-pressed={mode === 'saved'} onClick={() => chooseMode('saved')}>
             내 도서관 {saved.length}
           </button>
-          <button type="button" className={pill(mode === 'nearby')} aria-pressed={mode === 'nearby'} onClick={() => setMode('nearby')}>
+          <button type="button" className={pill(mode === 'nearby')} aria-pressed={mode === 'nearby'} onClick={() => chooseMode('nearby')}>
             주변
           </button>
         </div>
@@ -400,7 +438,7 @@ export function LibrarySection({
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
-              onClick={onRequestLocation}
+              onClick={() => onRequestLocation()}
               disabled={locationLoading}
               className="min-h-11 px-5 rounded-xl bg-primary text-white text-meta font-bold hover:bg-primary-dark transition cursor-pointer disabled:opacity-50"
             >
