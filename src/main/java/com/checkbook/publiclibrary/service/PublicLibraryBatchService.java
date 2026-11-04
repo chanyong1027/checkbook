@@ -2,6 +2,7 @@ package com.checkbook.publiclibrary.service;
 
 import com.checkbook.common.concurrent.AsyncSubmit;
 import com.checkbook.common.exception.BusinessException;
+import com.checkbook.common.matcher.BookMetadataNormalizer;
 import com.checkbook.common.exception.ErrorCode;
 import com.checkbook.common.util.DistanceCalculator;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
@@ -10,6 +11,8 @@ import com.checkbook.publiclibrary.dto.LibraryCheckFailure;
 import com.checkbook.publiclibrary.dto.LibraryState;
 import com.checkbook.publiclibrary.dto.PublicLibraryBatchItem;
 import com.checkbook.publiclibrary.dto.PublicLibraryBatchResponse;
+import com.checkbook.publiclibrary.link.PublicLibrarySearchLink;
+import com.checkbook.publiclibrary.link.PublicLibrarySearchLinks;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
 import com.checkbook.publiclibrary.snapshot.domain.SnapshotFailureCause;
 import com.checkbook.publiclibrary.snapshot.domain.SnapshotSourceStatus;
@@ -56,6 +59,8 @@ public class PublicLibraryBatchService {
     private final ExecutorService publicLibraryExecutor;
     private final Map<Mode, Map<BatchStopReason, Timer>> batchTimers;
     private final Map<LibraryState, Counter> stateCounters;
+    private final PublicLibrarySearchLinks searchLinks;
+    private final BookMetadataNormalizer normalizer;
 
     @Value("${search.public-library-page-size}")
     private int pageSize;
@@ -70,8 +75,12 @@ public class PublicLibraryBatchService {
             LibraryAvailabilitySnapshotService snapshotService,
             PublicLibraryRepository repository,
             @Qualifier("publicLibraryExecutor") ExecutorService publicLibraryExecutor,
-            MeterRegistry meterRegistry
+            MeterRegistry meterRegistry,
+            PublicLibrarySearchLinks searchLinks,
+            BookMetadataNormalizer normalizer
     ) {
+        this.searchLinks = searchLinks;
+        this.normalizer = normalizer;
         this.snapshotService = snapshotService;
         this.repository = repository;
         this.publicLibraryExecutor = publicLibraryExecutor;
@@ -98,27 +107,27 @@ public class PublicLibraryBatchService {
     }
 
     /** 현재 좌표 기준 주변. 한 탐색 동안 화면이 같은 좌표를 보내야 offset이 이어진다. */
-    public PublicLibraryBatchResponse nearby(String isbn13, double lat, double lon, int offset) {
+    public PublicLibraryBatchResponse nearby(String isbn13, double lat, double lon, int offset, String title) {
         long startNanos = System.nanoTime();
         if (!Double.isFinite(lat) || !Double.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
             throw new BusinessException(ErrorCode.INVALID_LOCATION);
         }
-        return nearbyPage(isbn13, lat, lon, offset, startNanos);
+        return nearbyPage(isbn13, lat, lon, offset, title, startNanos);
     }
 
     /**
      * 사용자가 고른 기준 기관 좌표 기준 주변. 기준 기관 자신(거리 0)도 후보다.
      * 기준 기관이 비활성(정보나루에서 빠짐)이어도 좌표는 쓸 수 있어 받는다 — 후보 목록에서는 저장소가 이미 뺀다
      */
-    public PublicLibraryBatchResponse nearbyFromLibrary(String isbn13, String referenceLibCode, int offset) {
+    public PublicLibraryBatchResponse nearbyFromLibrary(String isbn13, String referenceLibCode, int offset, String title) {
         long startNanos = System.nanoTime();
         PublicLibrary reference = repository.findByLibCode(referenceLibCode)
                 .orElseThrow(() -> new BusinessException(ErrorCode.UNKNOWN_PUBLIC_LIBRARY));
-        return nearbyPage(isbn13, reference.getLat(), reference.getLon(), offset, startNanos);
+        return nearbyPage(isbn13, reference.getLat(), reference.getLon(), offset, title, startNanos);
     }
 
     /** 내 도서관. 요청 순서대로, 거리 없이, 미소장도 그대로 돌려준다. */
-    public PublicLibraryBatchResponse saved(String isbn13, List<String> libCodes) {
+    public PublicLibraryBatchResponse saved(String isbn13, List<String> libCodes, String title) {
         long startNanos = System.nanoTime();
         List<String> unique = new ArrayList<>(new LinkedHashSet<>(libCodes));
         if (unique.isEmpty()) {
@@ -138,10 +147,11 @@ public class PublicLibraryBatchService {
         List<Target> targets = unique.stream()
                 .map(code -> new Target(byCode.get(code), null))
                 .toList();
-        return check(Mode.SAVED, isbn13, targets, null, startNanos);
+        return check(Mode.SAVED, isbn13, targets, null, title, startNanos);
     }
 
-    private PublicLibraryBatchResponse nearbyPage(String isbn13, double lat, double lon, int offset, long startNanos) {
+    private PublicLibraryBatchResponse nearbyPage(String isbn13, double lat, double lon, int offset, String title,
+                                                  long startNanos) {
         List<PublicLibrary> candidates = repository.findWithinRadius(lat, lon, radiusKm);
         int total = candidates.size();
         int from = Math.min(offset, total);
@@ -151,11 +161,13 @@ public class PublicLibraryBatchService {
                         DistanceCalculator.km(lat, lon, library.getLat(), library.getLon())))
                 .toList();
         Integer nextOffset = to < total ? to : null;
-        return check(Mode.NEARBY, isbn13, targets, nextOffset, startNanos);
+        return check(Mode.NEARBY, isbn13, targets, nextOffset, title, startNanos);
     }
 
     private PublicLibraryBatchResponse check(Mode mode, String isbn13, List<Target> targets, Integer nextOffset,
-                                             long startNanos) {
+                                             String title, long startNanos) {
+        // 도서관 사이트 검색어: 밀리 검색과 같은 정규화(부제·판 정보를 뗀 본제목). 외부 호출이 아니라 형식 파일로 링크만 만든다
+        String keyword = title == null || title.isBlank() ? null : normalizer.searchKeyword(title);
         // 마감은 서비스 진입부터 잰다 — 후보 선정·큐 대기도 사용자가 기다리는 시간이다
         long deadlineNanos = startNanos + TimeUnit.MILLISECONDS.toNanos(fanoutTimeoutMs);
         // 마감을 두 번 확인한다: 제출 전(후보 조회가 시간을 다 썼으면 넣지 않음)과 워커 실행 직전
@@ -229,7 +241,7 @@ public class PublicLibraryBatchService {
                     state = LibraryState.of(result.hasBook(), result.loanAvailable());
                 }
             }
-            items.add(toItem(target, state, reason));
+            items.add(toItem(target, state, reason, searchLinks.linkFor(target.library().getLibCode(), keyword)));
         }
 
         // 공급자 전체가 막힌 이유(예산·서킷)를 먼저 알린다 — 다음 배치도 같은 결과라 화면 안내가 달라진다
@@ -278,7 +290,8 @@ public class PublicLibraryBatchService {
         }
     }
 
-    private static PublicLibraryBatchItem toItem(Target target, LibraryState state, LibraryCheckFailure reason) {
+    private static PublicLibraryBatchItem toItem(Target target, LibraryState state, LibraryCheckFailure reason,
+                                                 PublicLibrarySearchLink searchLink) {
         PublicLibrary library = target.library();
         Double distance = target.distanceKm() == null ? null : Math.round(target.distanceKm() * 10.0) / 10.0;
         return new PublicLibraryBatchItem(
@@ -290,7 +303,8 @@ public class PublicLibraryBatchService {
                 distance,
                 library.getHomepage(),
                 state,
-                reason);
+                reason,
+                searchLink);
     }
 
     /** 조회 대상 하나. distanceKm는 반올림 전 값(정렬은 이미 원값으로 끝났다). */

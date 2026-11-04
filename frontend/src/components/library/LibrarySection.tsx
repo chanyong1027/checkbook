@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PublicLibraryBatchItem } from '../../types'
 import { usePreferences } from '../../preferences/PreferencesContext'
-import { isSafeUrl } from '../../utils/url'
 import { formatDistance } from '../../utils/distance'
 import { StatusChip, type Tone } from '../detail/parts'
+import { siteLinkOf } from './siteLink'
 import type { SummaryItem } from '../detail/BookPanel'
 import { summarizeLibraries } from '../detail/summary'
-import { GlobeIcon, MapPinIcon, NavigateIcon, RefreshIcon, SpinnerIcon } from '../shared/icons'
+import { ExternalIcon, MapPinIcon, NavigateIcon, RefreshIcon, SpinnerIcon } from '../shared/icons'
 import { stopMessage } from './nearbyExplorer.ts'
 import { useNearbyExplorer, useSavedLibraries, type LibraryOrigin } from './useLibraryLookups'
 import { LibraryMap } from './LibraryMap'
@@ -35,22 +35,35 @@ function status(item: PublicLibraryBatchItem): { tone: Tone; label: string } {
   }
 }
 
-/** 소장한 곳의 대출 정보. 결론(칩·요약)에 쓰지 않고 참고로만 보인다 */
-function loanNote(item: PublicLibraryBatchItem): string | null {
-  if (item.state === 'AVAILABLE') return '대출가능'
-  if (item.state === 'ON_LOAN') return '대출중'
+/** 소장한 곳의 대출 정보. 결론은 소장 칩이고, 이건 한 단계 작은 칩으로 참고만 보인다 */
+function loanNote(item: PublicLibraryBatchItem): { label: string; className: string } | null {
+  if (item.state === 'AVAILABLE') return { label: '대출가능', className: 'bg-status-ok-soft text-status-ok' }
+  if (item.state === 'ON_LOAN') return { label: '대출중', className: 'bg-status-warn-soft text-status-warn' }
   return null
 }
 
 function LibraryLinks({ item }: { item: PublicLibraryBatchItem }) {
   const link = 'inline-flex items-center gap-1 min-h-9 text-label font-semibold text-ink-700 hover:text-ink-900 hover:underline underline-offset-2'
+  // 사이트 링크는 행에서 누를 이유가 가장 큰 곳이라(대출 정보가 어제 기준) 주황으로 앞에 둔다
+  const siteLinkClass = 'inline-flex items-center gap-0.5 min-h-9 text-label font-semibold text-primary hover:text-primary-dark hover:underline underline-offset-2'
+  const site = siteLinkOf(item)
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-      {isSafeUrl(item.homepage) && (
-        <a href={item.homepage ?? undefined} target="_blank" rel="noopener noreferrer" aria-label={`${item.name} 홈페이지 열기`} className={link}>
-          <GlobeIcon size={14} />
-          홈페이지
+      {site?.kind === 'get' && (
+        <a href={site.href} target="_blank" rel="noopener noreferrer" aria-label={`${item.name} ${site.label} (새 탭)`} className={siteLinkClass}>
+          {site.label}
+          <ExternalIcon size={14} />
         </a>
+      )}
+      {site?.kind === 'post' && (
+        // 주소에 검색어가 안 남는 사이트: 누르면 새 탭에서 그 사이트 검색을 제출한다(결정 POST 자동 제출 카드 A안)
+        <form method="post" action={site.action} target="_blank" rel="noopener noreferrer" className="inline-flex">
+          {site.fields.map(([name, value]) => <input key={name} type="hidden" name={name} value={value} />)}
+          <button type="submit" aria-label={`${item.name} ${site.label} (새 탭)`} className={`${siteLinkClass} cursor-pointer`}>
+            {site.label}
+            <ExternalIcon size={14} />
+          </button>
+        </form>
       )}
       <a
         href={`https://map.kakao.com/link/search/${encodeURIComponent(item.name)}`}
@@ -124,10 +137,20 @@ function LibraryRows({
                 </p>
               </div>
               {/* 대출 메모는 칩 바로 아래 오른쪽에 둔다 — 주소 줄 아래에 있으면 부가 정보에 섞여 안 보였다. 화면 낭독도 소장 → 대출 순 */}
-              <div className="flex shrink-0 flex-col items-end gap-1">
-                <StatusChip tone={s.tone}>{s.label}</StatusChip>
-                {note && <p className="text-label text-ink-700">{note}</p>}
-              </div>
+              {/* 소장 칩과 대출 칩은 같은 폭 칸에 쌓아 양쪽 끝선을 맞춘다(11-04 시안 A안) */}
+              {note ? (
+                <div className="grid w-[5.5rem] shrink-0 gap-1">
+                  <StatusChip tone={s.tone}>{s.label}</StatusChip>
+                  <span className={`inline-flex items-center justify-center gap-1 h-6 rounded-full text-label font-semibold whitespace-nowrap ${note.className}`}>
+                    <span aria-hidden="true" className="size-1.5 rounded-full bg-current" />
+                    {note.label}
+                  </span>
+                </div>
+              ) : (
+                <div className="shrink-0">
+                  <StatusChip tone={s.tone}>{s.label}</StatusChip>
+                </div>
+              )}
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-x-4">
               <LibraryLinks item={item} />
@@ -256,12 +279,15 @@ const pill = (active: boolean) =>
  */
 export function LibrarySection({
   isbn13,
+  title,
   location,
   locationLoading,
   onRequestLocation,
   onSummaryChange,
 }: {
   isbn13: string
+  /** 도서관 사이트 검색 링크에 쓸 책 제목. 아직 모르면 null(그 사이 받은 도서관은 홈페이지 링크) */
+  title: string | null
   location: { lat: number; lon: number } | null
   locationLoading: boolean
   onRequestLocation: () => void
@@ -292,8 +318,8 @@ export function LibrarySection({
   const originIsGps = origin != null && !('referenceLibCode' in origin)
   const distanceFrom = originIsGps ? '내 위치' : reference?.name ?? null
 
-  const savedLookup = useSavedLibraries(isbn13, saved.map(l => l.libCode), mode === 'saved')
-  const nearby = useNearbyExplorer(isbn13, origin, mode === 'nearby')
+  const savedLookup = useSavedLibraries(isbn13, saved.map(l => l.libCode), mode === 'saved', title)
+  const nearby = useNearbyExplorer(isbn13, origin, mode === 'nearby', title)
 
   // 지도와 목록이 같은 기관을 가리키게 한다. 마커를 누르면 목록 행을, 행에서 누르면 마커를 강조한다
   const [selectedCode, setSelectedCode] = useState<string | null>(null)

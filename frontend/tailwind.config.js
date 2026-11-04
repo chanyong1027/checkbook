@@ -37,6 +37,9 @@ export default {
           'off-soft': '#F2F4F6',
           danger: '#B42318',
           'danger-soft': '#FDECEA',
+          // 도서관 '대출중' 칩: 오류(빨강)가 아니라 잠깐 못 빌리는 상태라 황토색. 바탕 위 대비 7:1 이상
+          warn: '#8A4B00',
+          'warn-soft': '#FFF1D6',
         },
         brand: {
           // 버튼은 '배경 = 브랜드 색 틴트, 글자 = 진한 색'으로 쓴다. 브랜드 색을 그대로 글자로 쓰면

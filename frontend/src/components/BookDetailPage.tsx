@@ -439,6 +439,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
     return (
       <LibrarySection
         isbn13={isbn13}
+        title={displayBook?.title ?? null}
         location={useLocation && userLatRef.current != null && userLonRef.current != null
           ? { lat: userLatRef.current, lon: userLonRef.current } : null}
         locationLoading={locLoading}

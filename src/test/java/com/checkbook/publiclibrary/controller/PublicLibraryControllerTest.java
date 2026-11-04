@@ -6,6 +6,7 @@ import com.checkbook.publiclibrary.dto.LibraryCheckFailure;
 import com.checkbook.publiclibrary.dto.LibraryState;
 import com.checkbook.publiclibrary.dto.PublicLibraryBatchItem;
 import com.checkbook.publiclibrary.dto.PublicLibraryBatchResponse;
+import com.checkbook.publiclibrary.link.PublicLibrarySearchLink;
 import com.checkbook.publiclibrary.dto.PublicLibraryDirectoryResponse;
 import com.checkbook.publiclibrary.service.PublicLibraryBatchService;
 import com.checkbook.publiclibrary.service.PublicLibraryDirectoryService;
@@ -21,6 +22,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.MethodValidationPostProcessor;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -57,13 +59,13 @@ class PublicLibraryControllerTest {
     private static PublicLibraryBatchResponse sample() {
         return new PublicLibraryBatchResponse(List.of(
                 new PublicLibraryBatchItem("111001", "용산도서관", "서울", 37.5, 127.0, 1.2,
-                        null, LibraryState.UNKNOWN, LibraryCheckFailure.TIMEOUT)),
+                        null, LibraryState.UNKNOWN, LibraryCheckFailure.TIMEOUT, null)),
                 5, BatchStopReason.BATCH_DEADLINE);
     }
 
     @Test
     void 좌표_주변_조회는_offset을_넘기고_상태와_중단_사유를_응답한다() throws Exception {
-        when(batchService.nearby(ISBN, 37.5, 127.0, 5)).thenReturn(sample());
+        when(batchService.nearby(ISBN, 37.5, 127.0, 5, null)).thenReturn(sample());
 
         mockMvc.perform(get(BATCH).param("isbn13", ISBN).param("mode", "NEARBY")
                         .param("lat", "37.5").param("lon", "127.0").param("offset", "5"))
@@ -77,7 +79,7 @@ class PublicLibraryControllerTest {
 
     @Test
     void 기준_기관_주변_조회는_offset_기본값_0() throws Exception {
-        when(batchService.nearbyFromLibrary(ISBN, "111001", 0)).thenReturn(sample());
+        when(batchService.nearbyFromLibrary(ISBN, "111001", 0, null)).thenReturn(sample());
 
         mockMvc.perform(get(BATCH).param("isbn13", ISBN).param("mode", "NEARBY")
                         .param("referenceLibCode", "111001"))
@@ -86,12 +88,37 @@ class PublicLibraryControllerTest {
 
     @Test
     void 저장_모드는_쉼표_목록을_나눠_넘긴다() throws Exception {
-        when(batchService.saved(ISBN, List.of("A1", "B2"))).thenReturn(sample());
+        when(batchService.saved(ISBN, List.of("A1", "B2"), null)).thenReturn(sample());
 
         mockMvc.perform(get(BATCH).param("isbn13", ISBN).param("mode", "SAVED")
                         .param("libraryCodes", " A1, ,B2 "))
                 .andExpect(status().isOk());
-        verify(batchService).saved(ISBN, List.of("A1", "B2"));
+        verify(batchService).saved(ISBN, List.of("A1", "B2"), null);
+    }
+
+    @Test
+    void 제목을_넘기면_사이트_검색_링크가_응답에_실린다() throws Exception {
+        PublicLibraryBatchResponse withLink = new PublicLibraryBatchResponse(List.of(
+                new PublicLibraryBatchItem("111001", "용산도서관", "서울", 37.5, 127.0, 1.2, null, LibraryState.AVAILABLE, null,
+                        new PublicLibrarySearchLink(PublicLibrarySearchLink.Kind.RESULT, "POST", "https://lib.example/s",
+                                Map.of("kwd", "흰")))),
+                null, BatchStopReason.NONE);
+        when(batchService.nearby(ISBN, 37.5, 127.0, 0, "흰")).thenReturn(withLink);
+
+        mockMvc.perform(get(BATCH).param("isbn13", ISBN).param("mode", "NEARBY")
+                        .param("lat", "37.5").param("lon", "127.0").param("title", "흰"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items[0].searchLink.kind").value("RESULT"))
+                .andExpect(jsonPath("$.items[0].searchLink.method").value("POST"))
+                .andExpect(jsonPath("$.items[0].searchLink.fields.kwd").value("흰"));
+    }
+
+    @Test
+    void 제목이_200자를_넘으면_400() throws Exception {
+        mockMvc.perform(get(BATCH).param("isbn13", ISBN).param("mode", "SAVED").param("libraryCodes", "A1")
+                        .param("title", "가".repeat(201)))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(batchService);
     }
 
     @ParameterizedTest

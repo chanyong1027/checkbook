@@ -227,6 +227,16 @@ export interface PublicLibraryBatchItem {
   homepage: string | null
   state: LibraryState
   reason: LibraryCheckFailure | null
+  /** 그 도서관 사이트에서 이 책을 검색하는 링크. 형식이 없거나 제목을 보내지 않았으면 null(홈페이지 링크를 쓴다) */
+  searchLink: PublicLibrarySearchLink | null
+}
+
+/** 사용자 브라우저가 여는 도서관 사이트 검색 링크. POST면 fields를 새 탭에서 제출한다(주소에 검색어가 안 남는 사이트) */
+export interface PublicLibrarySearchLink {
+  kind: 'RESULT' | 'SEARCH_PAGE'
+  method: 'GET' | 'POST'
+  url: string
+  fields: Record<string, string> | null
 }
 
 export interface PublicLibraryBatchResponse {

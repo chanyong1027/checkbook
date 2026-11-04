@@ -57,7 +57,9 @@ public class PublicLibraryController {
             @RequestParam(required = false) Double lon,
             @RequestParam(required = false) @Size(max = 20) String referenceLibCode,
             @RequestParam(required = false) @Min(0) Integer offset,
-            @RequestParam(required = false) @Size(max = 200) String libraryCodes
+            @RequestParam(required = false) @Size(max = 200) String libraryCodes,
+            // 도서관 사이트 검색 링크를 만들 책 제목(선택). 없으면 링크 없이 지금처럼 응답한다
+            @RequestParam(required = false) @Size(max = 200) String title
     ) {
         if (!InputNormalizer.isValidIsbn13(isbn13)) {
             throw new BusinessException(ErrorCode.NON_STANDARD_ISBN);
@@ -73,14 +75,14 @@ public class PublicLibraryController {
                 }
                 int start = offset == null ? 0 : offset;
                 yield hasReference
-                        ? batchService.nearbyFromLibrary(isbn13, referenceLibCode.strip(), start)
-                        : batchService.nearby(isbn13, lat, lon, start);
+                        ? batchService.nearbyFromLibrary(isbn13, referenceLibCode.strip(), start, title)
+                        : batchService.nearby(isbn13, lat, lon, start, title);
             }
             case SAVED -> {
                 if (hasCoordinates || hasReference || offset != null) {
                     throw new BusinessException(ErrorCode.INVALID_PUBLIC_LIBRARY_QUERY);
                 }
-                yield batchService.saved(isbn13, parseCodes(libraryCodes));
+                yield batchService.saved(isbn13, parseCodes(libraryCodes), title);
             }
         };
         return ResponseEntity.ok(response);

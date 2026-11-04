@@ -2,12 +2,15 @@ package com.checkbook.publiclibrary.service;
 
 import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
+import com.checkbook.common.matcher.BookMetadataNormalizer;
 import com.checkbook.publiclibrary.domain.PublicLibrary;
 import com.checkbook.publiclibrary.dto.BatchStopReason;
 import com.checkbook.publiclibrary.dto.LibraryCheckFailure;
 import com.checkbook.publiclibrary.dto.LibraryState;
 import com.checkbook.publiclibrary.dto.PublicLibraryBatchItem;
 import com.checkbook.publiclibrary.dto.PublicLibraryBatchResponse;
+import com.checkbook.publiclibrary.link.PublicLibrarySearchLink;
+import com.checkbook.publiclibrary.link.PublicLibrarySearchLinks;
 import com.checkbook.publiclibrary.repository.PublicLibraryRepository;
 import com.checkbook.publiclibrary.snapshot.domain.SnapshotFailureCause;
 import com.checkbook.publiclibrary.snapshot.domain.SnapshotSourceStatus;
@@ -57,6 +60,9 @@ class PublicLibraryBatchServiceTest {
     private ExecutorService executor;
     private PublicLibraryBatchService service;
     private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
+    // L001만 제목 검색 링크 형식이 있다(합성 주소)
+    private final PublicLibrarySearchLinks searchLinks = new PublicLibrarySearchLinks(List.of(new PublicLibrarySearchLinks.Site(
+            "lib1.example", "RESULT", "GET", "https://lib1.example/search?kwd={title}", null, List.of("L001"), "2026-11-04", List.of(), null)));
 
     @BeforeEach
     void setUp() {
@@ -70,7 +76,7 @@ class PublicLibraryBatchServiceTest {
     }
 
     private PublicLibraryBatchService newService(ExecutorService pool, long timeoutMs) {
-        PublicLibraryBatchService created = new PublicLibraryBatchService(snapshotService, repository, pool, meterRegistry);
+        PublicLibraryBatchService created = new PublicLibraryBatchService(snapshotService, repository, pool, meterRegistry, searchLinks, new BookMetadataNormalizer());
         ReflectionTestUtils.setField(created, "pageSize", 5);
         ReflectionTestUtils.setField(created, "radiusKm", 10.0);
         ReflectionTestUtils.setField(created, "fanoutTimeoutMs", timeoutMs);
@@ -102,6 +108,44 @@ class PublicLibraryBatchServiceTest {
                         inv.getArgument(1), hasBook, loanAvailable, SnapshotSourceStatus.SUCCESS));
     }
 
+    // --- 사이트에서 검색 링크 ---
+
+    @Test
+    void 제목을_주면_형식이_있는_도서관에_부제를_뗀_검색어로_링크를_싣는다() {
+        when(repository.findWithinRadius(LAT, LON, 10.0)).thenReturn(libs(2));
+        stubState(true, true);
+
+        List<PublicLibraryBatchItem> items = service.nearby(ISBN, LAT, LON, 0, "소년이 온다 : 한강 장편소설").items();
+
+        PublicLibrarySearchLink link = items.get(0).searchLink();
+        assertThat(link.kind()).isEqualTo(PublicLibrarySearchLink.Kind.RESULT);
+        assertThat(link.url()).isEqualTo("https://lib1.example/search?kwd=%EC%86%8C%EB%85%84%EC%9D%B4%20%EC%98%A8%EB%8B%A4");
+        assertThat(items.get(1).searchLink()).isNull(); // 형식이 없는 도서관은 홈페이지 링크(화면)
+    }
+
+    @Test
+    void 제목이_없으면_결과_링크를_싣지_않는다_조회_결과는_그대로다() {
+        when(repository.findWithinRadius(LAT, LON, 10.0)).thenReturn(libs(1));
+        stubState(true, true);
+
+        PublicLibraryBatchItem item = service.nearby(ISBN, LAT, LON, 0, null).items().get(0);
+
+        assertThat(item.searchLink()).isNull();
+        assertThat(item.state()).isEqualTo(LibraryState.AVAILABLE);
+    }
+
+    @Test
+    void 확인_못_한_도서관에도_링크를_싣는다_사이트에서_직접_확인할_수_있게() {
+        when(repository.findByLibCodeIn(anyCollection())).thenReturn(List.of(lib(1)));
+        when(snapshotService.getAvailability(eq(ISBN), anyString()))
+                .thenReturn(LibraryAvailabilityResult.failed("L001", SnapshotFailureCause.UPSTREAM_ERROR));
+
+        PublicLibraryBatchItem item = service.saved(ISBN, List.of("L001"), "흰").items().get(0);
+
+        assertThat(item.state()).isEqualTo(LibraryState.UNKNOWN);
+        assertThat(item.searchLink().url()).isEqualTo("https://lib1.example/search?kwd=%ED%9D%B0");
+    }
+
     // --- NEARBY: 후보 구간과 nextOffset ---
 
     @Test
@@ -109,7 +153,7 @@ class PublicLibraryBatchServiceTest {
         when(repository.findWithinRadius(LAT, LON, 10.0)).thenReturn(libs(12));
         stubState(true, true);
 
-        PublicLibraryBatchResponse response = service.nearby(ISBN, LAT, LON, 0);
+        PublicLibraryBatchResponse response = service.nearby(ISBN, LAT, LON, 0, null);
 
         assertThat(response.items()).extracting(PublicLibraryBatchItem::libCode)
                 .containsExactly("L001", "L002", "L003", "L004", "L005");
@@ -122,7 +166,7 @@ class PublicLibraryBatchServiceTest {
         when(repository.findWithinRadius(LAT, LON, 10.0)).thenReturn(libs(12));
         stubState(true, true);
 
-        PublicLibraryBatchResponse response = service.nearby(ISBN, LAT, LON, 10);
+        PublicLibraryBatchResponse response = service.nearby(ISBN, LAT, LON, 10, null);
 
         assertThat(response.items()).hasSize(2);
         assertThat(response.nextOffset()).isNull();
@@ -132,7 +176,7 @@ class PublicLibraryBatchServiceTest {
     void 후보를_넘는_offset은_빈_결과와_null이다() {
         when(repository.findWithinRadius(LAT, LON, 10.0)).thenReturn(libs(3));
 
-        PublicLibraryBatchResponse response = service.nearby(ISBN, LAT, LON, 5);
+        PublicLibraryBatchResponse response = service.nearby(ISBN, LAT, LON, 5, null);
 
         assertThat(response.items()).isEmpty();
         assertThat(response.nextOffset()).isNull();
@@ -146,7 +190,7 @@ class PublicLibraryBatchServiceTest {
         when(repository.findWithinRadius(LAT, LON, 10.0)).thenReturn(libs(1));
         stubState(false, false);
 
-        PublicLibraryBatchItem item = service.nearby(ISBN, LAT, LON, 0).items().get(0);
+        PublicLibraryBatchItem item = service.nearby(ISBN, LAT, LON, 0, null).items().get(0);
 
         assertThat(item.state()).isEqualTo(LibraryState.NOT_HELD);
         assertThat(item.reason()).isNull();
@@ -157,7 +201,7 @@ class PublicLibraryBatchServiceTest {
         when(repository.findWithinRadius(LAT, LON, 10.0)).thenReturn(List.of(lib(3)));
         stubState(true, false);
 
-        PublicLibraryBatchItem item = service.nearby(ISBN, LAT, LON, 0).items().get(0);
+        PublicLibraryBatchItem item = service.nearby(ISBN, LAT, LON, 0, null).items().get(0);
 
         assertThat(item.state()).isEqualTo(LibraryState.ON_LOAN);
         assertThat(item.distanceKm()).isEqualTo(0.3); // 0.003도 ≈ 0.334km
@@ -169,10 +213,10 @@ class PublicLibraryBatchServiceTest {
 
     @Test
     void 범위를_벗어난_좌표는_400() {
-        assertThatThrownBy(() -> service.nearby(ISBN, 91.0, LON, 0))
+        assertThatThrownBy(() -> service.nearby(ISBN, 91.0, LON, 0, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.INVALID_LOCATION);
-        assertThatThrownBy(() -> service.nearby(ISBN, Double.NaN, LON, 0))
+        assertThatThrownBy(() -> service.nearby(ISBN, Double.NaN, LON, 0, null))
                 .isInstanceOf(BusinessException.class);
     }
 
@@ -185,7 +229,7 @@ class PublicLibraryBatchServiceTest {
         when(repository.findWithinRadius(reference.getLat(), reference.getLon(), 10.0)).thenReturn(libs(3));
         stubState(true, true);
 
-        PublicLibraryBatchResponse response = service.nearbyFromLibrary(ISBN, "L001", 0);
+        PublicLibraryBatchResponse response = service.nearbyFromLibrary(ISBN, "L001", 0, null);
 
         assertThat(response.items().get(0).libCode()).isEqualTo("L001");
         assertThat(response.items().get(0).distanceKm()).isEqualTo(0.0);
@@ -195,7 +239,7 @@ class PublicLibraryBatchServiceTest {
     void 모르는_기준_기관은_400() {
         when(repository.findByLibCode("NOPE")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.nearbyFromLibrary(ISBN, "NOPE", 0))
+        assertThatThrownBy(() -> service.nearbyFromLibrary(ISBN, "NOPE", 0, null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.UNKNOWN_PUBLIC_LIBRARY);
     }
@@ -212,7 +256,7 @@ class PublicLibraryBatchServiceTest {
                     : new LibraryAvailabilityResult(code, true, true, SnapshotSourceStatus.SUCCESS);
         });
 
-        PublicLibraryBatchResponse response = service.nearby(ISBN, LAT, LON, 0);
+        PublicLibraryBatchResponse response = service.nearby(ISBN, LAT, LON, 0, null);
 
         PublicLibraryBatchItem failed = response.items().get(1);
         assertThat(failed.state()).isEqualTo(LibraryState.UNKNOWN);
@@ -236,7 +280,7 @@ class PublicLibraryBatchServiceTest {
         });
 
         try {
-            PublicLibraryBatchResponse response = fast.nearby(ISBN, LAT, LON, 0);
+            PublicLibraryBatchResponse response = fast.nearby(ISBN, LAT, LON, 0, null);
 
             assertThat(response.items().get(0).state()).isEqualTo(LibraryState.AVAILABLE);
             assertThat(response.items().get(1).state()).isEqualTo(LibraryState.UNKNOWN);
@@ -262,7 +306,7 @@ class PublicLibraryBatchServiceTest {
         });
 
         try {
-            PublicLibraryBatchResponse response = newService(tiny, 150L).nearby(ISBN, LAT, LON, 0);
+            PublicLibraryBatchResponse response = newService(tiny, 150L).nearby(ISBN, LAT, LON, 0, null);
 
             assertThat(response.items().get(1).reason()).isEqualTo(LibraryCheckFailure.POOL_BUSY);
             assertThat(response.items().get(2).reason()).isEqualTo(LibraryCheckFailure.POOL_BUSY);
@@ -284,7 +328,7 @@ class PublicLibraryBatchServiceTest {
             return new LibraryAvailabilityResult(code, true, true, SnapshotSourceStatus.SUCCESS);
         });
 
-        PublicLibraryBatchResponse response = service.nearby(ISBN, LAT, LON, 0);
+        PublicLibraryBatchResponse response = service.nearby(ISBN, LAT, LON, 0, null);
 
         assertThat(response.items().get(0).state()).isEqualTo(LibraryState.UNKNOWN);
         assertThat(response.items().get(0).reason()).isEqualTo(LibraryCheckFailure.UPSTREAM_ERROR);
@@ -308,7 +352,7 @@ class PublicLibraryBatchServiceTest {
         single.submit(() -> { }).get(5, TimeUnit.SECONDS);
 
         try {
-            PublicLibraryBatchResponse response = newService(single, 300L).nearby(ISBN, LAT, LON, 0);
+            PublicLibraryBatchResponse response = newService(single, 300L).nearby(ISBN, LAT, LON, 0, null);
             release.countDown();
             single.shutdown();
             assertThat(single.awaitTermination(5, TimeUnit.SECONDS)).isTrue();
@@ -331,7 +375,7 @@ class PublicLibraryBatchServiceTest {
             return libs(5);
         });
 
-        PublicLibraryBatchResponse response = newService(executor, 10L).nearby(ISBN, LAT, LON, 0);
+        PublicLibraryBatchResponse response = newService(executor, 10L).nearby(ISBN, LAT, LON, 0, null);
 
         assertThat(response.items()).extracting(PublicLibraryBatchItem::reason)
                 .containsOnly(LibraryCheckFailure.TIMEOUT);
@@ -362,7 +406,7 @@ class PublicLibraryBatchServiceTest {
         };
         when(repository.findWithinRadius(LAT, LON, 10.0)).thenReturn(libs(2));
 
-        PublicLibraryBatchResponse response = newService(late, 30L).nearby(ISBN, LAT, LON, 0);
+        PublicLibraryBatchResponse response = newService(late, 30L).nearby(ISBN, LAT, LON, 0, null);
 
         assertThat(response.items()).extracting(PublicLibraryBatchItem::reason)
                 .containsOnly(LibraryCheckFailure.TIMEOUT);
@@ -378,7 +422,7 @@ class PublicLibraryBatchServiceTest {
             return libs(5);
         });
 
-        PublicLibraryBatchResponse response = newService(executor, 10L).nearby(ISBN, LAT, LON, 0);
+        PublicLibraryBatchResponse response = newService(executor, 10L).nearby(ISBN, LAT, LON, 0, null);
 
         assertThat(response.items()).extracting(PublicLibraryBatchItem::reason)
                 .containsOnly(LibraryCheckFailure.TIMEOUT);
@@ -399,7 +443,7 @@ class PublicLibraryBatchServiceTest {
             };
         });
 
-        PublicLibraryBatchResponse response = service.nearby(ISBN, LAT, LON, 0);
+        PublicLibraryBatchResponse response = service.nearby(ISBN, LAT, LON, 0, null);
 
         assertThat(response.items()).extracting(PublicLibraryBatchItem::reason).containsExactly(
                 LibraryCheckFailure.CIRCUIT_OPEN, LibraryCheckFailure.DAILY_LIMIT,
@@ -414,11 +458,11 @@ class PublicLibraryBatchServiceTest {
                 .thenReturn(LibraryAvailabilityResult.failed("L001", SnapshotFailureCause.CIRCUIT_OPEN));
         when(snapshotService.getAvailability(eq(ISBN), eq("L002")))
                 .thenReturn(new LibraryAvailabilityResult("L002", true, true, SnapshotSourceStatus.SUCCESS));
-        assertThat(service.nearby(ISBN, LAT, LON, 0).stopReason()).isEqualTo(BatchStopReason.CIRCUIT_OPEN);
+        assertThat(service.nearby(ISBN, LAT, LON, 0, null).stopReason()).isEqualTo(BatchStopReason.CIRCUIT_OPEN);
 
         when(snapshotService.getAvailability(eq(ISBN), eq("L001")))
                 .thenReturn(LibraryAvailabilityResult.failed("L001", SnapshotFailureCause.INVALID_RESPONSE));
-        assertThat(service.nearby(ISBN, LAT, LON, 0).stopReason()).isEqualTo(BatchStopReason.NONE);
+        assertThat(service.nearby(ISBN, LAT, LON, 0, null).stopReason()).isEqualTo(BatchStopReason.NONE);
     }
 
     @Test
@@ -426,7 +470,7 @@ class PublicLibraryBatchServiceTest {
         when(repository.findWithinRadius(LAT, LON, 10.0)).thenReturn(libs(2));
         stubState(false, false);
 
-        service.nearby(ISBN, LAT, LON, 0);
+        service.nearby(ISBN, LAT, LON, 0, null);
 
         assertThat(meterRegistry.get("library.batch").tag("mode", "NEARBY").tag("stop", "NONE").timer().count())
                 .isEqualTo(1);
@@ -443,7 +487,7 @@ class PublicLibraryBatchServiceTest {
         when(repository.findByLibCodeIn(anyCollection())).thenReturn(List.of(lib(1), lib(2), lib(3)));
         stubState(false, false);
 
-        PublicLibraryBatchResponse response = service.saved(ISBN, List.of("L003", "L001", "L003", "L002"));
+        PublicLibraryBatchResponse response = service.saved(ISBN, List.of("L003", "L001", "L003", "L002"), null);
 
         assertThat(response.items()).extracting(PublicLibraryBatchItem::libCode)
                 .containsExactly("L003", "L001", "L002");
@@ -456,7 +500,7 @@ class PublicLibraryBatchServiceTest {
 
     @Test
     void 저장_모드는_중복_제거_뒤_5곳을_넘으면_400() {
-        assertThatThrownBy(() -> service.saved(ISBN, List.of("A", "B", "C", "D", "E", "F")))
+        assertThatThrownBy(() -> service.saved(ISBN, List.of("A", "B", "C", "D", "E", "F"), null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.PUBLIC_LIBRARY_CODES_LIMIT_EXCEEDED);
         verifyNoInteractions(snapshotService);
@@ -468,7 +512,7 @@ class PublicLibraryBatchServiceTest {
         stubState(true, true);
 
         PublicLibraryBatchResponse response = service.saved(ISBN,
-                List.of("L001", "L002", "L003", "L004", "L005", "L001"));
+                List.of("L001", "L002", "L003", "L004", "L005", "L001"), null);
 
         assertThat(response.items()).hasSize(5);
     }
@@ -479,7 +523,7 @@ class PublicLibraryBatchServiceTest {
         closed.deactivate();
         when(repository.findByLibCodeIn(anyCollection())).thenReturn(List.of(lib(1), closed));
 
-        assertThatThrownBy(() -> service.saved(ISBN, List.of("L001", "L002")))
+        assertThatThrownBy(() -> service.saved(ISBN, List.of("L001", "L002"), null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.UNKNOWN_PUBLIC_LIBRARY);
         verifyNoInteractions(snapshotService);
@@ -489,7 +533,7 @@ class PublicLibraryBatchServiceTest {
     void 저장_모드에_모르는_코드가_있으면_400() {
         when(repository.findByLibCodeIn(anyCollection())).thenReturn(List.of(lib(1)));
 
-        assertThatThrownBy(() -> service.saved(ISBN, List.of("L001", "NOPE")))
+        assertThatThrownBy(() -> service.saved(ISBN, List.of("L001", "NOPE"), null))
                 .isInstanceOf(BusinessException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.UNKNOWN_PUBLIC_LIBRARY);
         verifyNoInteractions(snapshotService);

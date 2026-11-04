@@ -129,8 +129,11 @@ export function getNearbyLibraryBatch(
   origin: { lat: number; lon: number } | { referenceLibCode: string },
   offset: number,
   signal?: AbortSignal,
+  title?: string | null,
 ): Promise<PublicLibraryBatchResponse> {
   const params = new URLSearchParams({ isbn13, mode: 'NEARBY', offset: String(offset) })
+  // 제목을 보내면 서버가 도서관 사이트 검색 링크(searchLink)를 함께 준다
+  if (title) params.set('title', title.slice(0, 200))
   if ('referenceLibCode' in origin) {
     params.set('referenceLibCode', origin.referenceLibCode)
   } else {
@@ -145,8 +148,10 @@ export function getSavedLibraryBatch(
   isbn13: string,
   libCodes: string[],
   signal?: AbortSignal,
+  title?: string | null,
 ): Promise<PublicLibraryBatchResponse> {
   const params = new URLSearchParams({ isbn13, mode: 'SAVED', libraryCodes: libCodes.join(',') })
+  if (title) params.set('title', title.slice(0, 200))
   return get(`/api/public-libraries/availability/batch?${params}`, signal)
 }
 
