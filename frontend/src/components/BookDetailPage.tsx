@@ -298,9 +298,11 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
 
   // --- Helpers ---
 
-  function handleGetLocation() {
+  /** silent: 권한이 이미 있어 화면이 스스로 부른 요청 — 실패해도 누르지 않은 오류를 띄우지 않고 버튼만 남긴다 */
+  function handleGetLocation(options?: { silent?: boolean }) {
+    const silent = options?.silent === true
     if (!navigator.geolocation) {
-      setLocError('이 환경에서는 위치 검색을 지원하지 않습니다')
+      if (!silent) setLocError('이 환경에서는 위치 검색을 지원하지 않습니다')
       return
     }
     setLocLoading(true)
@@ -316,6 +318,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
       },
       (err) => {
         setLocLoading(false)
+        if (silent) return
         const msg =
           err.code === 1 ? '위치 권한이 거부되었습니다. 브라우저 설정에서 허용해주세요.' :
           err.code === 2 ? '위치 정보를 사용할 수 없습니다. 기기의 위치 서비스가 켜져 있는지 확인해주세요.' :
