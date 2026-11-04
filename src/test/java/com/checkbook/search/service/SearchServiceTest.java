@@ -367,7 +367,7 @@ class SearchServiceTest {
 
         assertStatus(r, SearchSection.SUBSCRIPTION, SearchSectionStatus.FAILED, SearchSectionReason.UNAVAILABLE);
         assertThat(r.subscription().searchLinks()).extracting(SubscriptionSearchLink::name)
-                .containsExactly("리디", "만권당", "크레마클럽");
+                .containsExactly("리디셀렉트", "만권당", "크레마클럽");
     }
 
     @Test
