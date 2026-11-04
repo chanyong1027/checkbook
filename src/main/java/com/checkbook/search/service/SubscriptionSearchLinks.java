@@ -36,7 +36,8 @@ public class SubscriptionSearchLinks {
         // 공백을 +가 아닌 %20으로 인코딩한다(UriUtils). 쿼리 밖에서도 공백으로 읽히는 쪽이 사이트별 해석 차이가 없다
         String keyword = UriUtils.encode(normalized, StandardCharsets.UTF_8);
         return List.of(
-                new SubscriptionSearchLink("리디", "https://ridibooks.com/search?q=" + keyword),
+                // 일반 리디 검색은 구매 전용 책이 섞이므로 구독 서비스인 셀렉트 검색으로 보낸다
+                new SubscriptionSearchLink("리디셀렉트", "https://select.ridibooks.com/search?q=" + keyword + "&type=Books"),
                 new SubscriptionSearchLink("만권당", "https://max.aladin.co.kr/search?searchWord=" + keyword),
                 new SubscriptionSearchLink("크레마클럽", "https://cremaclub.yes24.com/BookClub/Search?query=" + keyword));
     }
