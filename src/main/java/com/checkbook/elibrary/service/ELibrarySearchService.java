@@ -1,5 +1,6 @@
 package com.checkbook.elibrary.service;
 
+import com.checkbook.common.concurrent.AsyncSubmit;
 import com.checkbook.common.exception.BusinessException;
 import com.checkbook.common.exception.ErrorCode;
 import com.checkbook.common.matcher.BookMatcher;
@@ -37,7 +38,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -134,7 +134,9 @@ public class ELibrarySearchService {
             // 사이트 마감은 작업 안에서 지킨다(자리 대기 상한 + 수집기에 남은 시간). 제출 시각부터 재는 orTimeout을 두면
             // 큐에서 기다린 사이트가 시작하자마자 잘린다(T4 카드 11-1). 큐 대기까지 포함한 상한은 아래 전체 마감
             futureMap.put(id, new ScrapeTask(
-                    submitSafely(() -> searchWithinLimits(library, selected, responseDeadlineNanos)),
+                    // 풀 거절을 failedFuture로 흡수한다 — 없으면 제출 루프 밖으로 전파돼 요청 전체가 500.
+                    // 하류 toResult()가 FAILED로 분류하므로 해당 도서관만 실패 처리된다
+                    AsyncSubmit.submitSafely(() -> searchWithinLimits(library, selected, responseDeadlineNanos), eLibraryExecutor),
                     startedAt
             ));
         }
@@ -168,19 +170,6 @@ public class ELibrarySearchService {
                         failures
                 )
         );
-    }
-
-    /**
-     * eLibraryExecutor가 bounded(AbortPolicy)로 전환되어, 풀 거절 시 supplyAsync가 동기로 던지는
-     * RejectedExecutionException을 failedFuture로 흡수한다 — 없으면 제출 루프 밖으로 전파돼 요청 전체가 500.
-     * 하류 toResult()가 CompletionException을 FAILED로 분류하므로 해당 도서관만 실패 처리된다.
-     */
-    private CompletableFuture<ScrapeOutcome> submitSafely(Supplier<ScrapeOutcome> task) {
-        try {
-            return CompletableFuture.supplyAsync(task, eLibraryExecutor);
-        } catch (RejectedExecutionException e) {
-            return CompletableFuture.failedFuture(e);
-        }
     }
 
     /**
