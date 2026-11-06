@@ -13,6 +13,7 @@ on:
       - 'gradle/**'
       - 'gradlew'
       - '.github/workflows/ci-backend.yml'
+      - 'deploy/alloy/config.alloy' # TraceIdLoggingIT가 실제 level 추출 식을 읽는다
   push:
     branches: [main]
     paths:
@@ -22,6 +23,7 @@ on:
       - 'gradle/**'
       - 'gradlew'
       - '.github/workflows/ci-backend.yml'
+      - 'deploy/alloy/config.alloy'
   workflow_dispatch:
 
 concurrency:

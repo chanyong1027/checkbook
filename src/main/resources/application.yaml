@@ -199,6 +199,10 @@ management:
         "[library.batch]": 500ms,1s,2200ms
 
 logging:
+  pattern:
+    # 스레드 이름 뒤에 들어간다. 레벨 앞(logging.pattern.level)에 넣으면 deploy/alloy/config.alloy의 level 추출이 어긋나
+    # ERROR 로그 알림이 조용히 멈춘다(TraceIdLoggingIT). Micrometer Tracing 없이 쓴다. 찾기: Loki |= "traceId=abc123def456"
+    correlation: "[traceId=%X{traceId:-}] "
   level:
     com.checkbook: INFO
     com.checkbook.client: DEBUG

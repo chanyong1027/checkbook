@@ -33,6 +33,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.slf4j.MDC;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.net.SocketTimeoutException;
@@ -40,6 +43,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
 import static com.checkbook.search.service.SearchResponseConsistency.assertConsistent;
@@ -57,7 +61,7 @@ import static org.mockito.Mockito.when;
 /**
  * 계약 3절 섹션별 매핑표, 4절 JSON 예시 3종. 모든 응답에 일관성 assertion(2절)을 건다.
  */
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 @MockitoSettings(strictness = Strictness.LENIENT)
 class SearchServiceTest {
 
@@ -344,6 +348,63 @@ class SearchServiceTest {
 
         assertStatus(r, SearchSection.PUBLIC_LIBRARY, SearchSectionStatus.SKIPPED, SearchSectionReason.DAILY_LIMIT);
         assertThat(r.publicLibraries()).isEmpty();
+    }
+
+    // ===== 로그 =====
+
+    @Test
+    void 실패한_칸이_있으면_칸과_이유를_WARN_한_줄로_남긴다(CapturedOutput output) {
+        when(identificationService.identify(ISBN, null)).thenReturn(miss(Yes24Status.TIMEOUT, true));
+
+        searchService.search(ISBN, null, null, null);
+
+        assertThat(output).containsPattern(
+                "WARN .*통합 검색 일부 실패: code=" + ISBN + ", failed=\\[NEW_BOOK:TIMEOUT\\]");
+    }
+
+    @Test
+    void 실패한_칸이_여럿이면_모두_적고_SKIPPED는_적지_않는다(CapturedOutput output) {
+        when(identificationService.identify(ISBN, null)).thenReturn(new IdentificationResult(
+                Source.YES24, Yes24Status.TIMEOUT, true, YES24_BOOK, null, null));
+        when(millieBookService.findAvailability(any(), any())).thenThrow(new MillieClientException("밀리 HTTP 500"));
+
+        searchService.search(ISBN, null, null, null); // 좌표가 없어 공공도서관은 SKIPPED
+
+        assertThat(output).contains("failed=[NEW_BOOK:TIMEOUT, SUBSCRIPTION:UNAVAILABLE]");
+    }
+
+    @Test
+    void 실패한_칸이_없으면_요약_줄을_남기지_않는다(CapturedOutput output) {
+        when(identificationService.identify(ISBN, null)).thenReturn(found(13500, YES24_URL));
+
+        searchService.search(ISBN, null, null, null);
+
+        assertThat(output).doesNotContain("통합 검색 일부 실패");
+    }
+
+    @Test
+    void 풀로_넘긴_밀리와_공공도서관_작업에서도_요청의_ID가_보인다() {
+        when(identificationService.identify(ISBN, null)).thenReturn(found(13500, YES24_URL));
+        AtomicReference<String> millieId = new AtomicReference<>();
+        AtomicReference<String> libraryId = new AtomicReference<>();
+        when(millieBookService.findAvailability(any(), any())).thenAnswer(invocation -> {
+            millieId.set(MDC.get("traceId"));
+            return MillieAvailability.unavailable();
+        });
+        when(publicLibraryAvailabilityService.fetch(ISBN, LAT, LON, 0)).thenAnswer(invocation -> {
+            libraryId.set(MDC.get("traceId"));
+            return libraryPage();
+        });
+        MDC.put("traceId", "request-a");
+
+        try {
+            searchService.search(ISBN, LAT, LON, null);
+        } finally {
+            MDC.remove("traceId");
+        }
+
+        assertThat(millieId.get()).isEqualTo("request-a");
+        assertThat(libraryId.get()).isEqualTo("request-a");
     }
 
     @Test

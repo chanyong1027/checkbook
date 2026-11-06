@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.slf4j.MDC;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Clock;
@@ -34,6 +35,7 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -91,6 +93,26 @@ class ELibrarySearchServiceTest {
         assertThat(response.results()).extracting(ELibrarySearchResponse.ELibraryResult::status)
                 .containsExactly(ELibrarySearchStatus.DAILY_LIMIT, ELibrarySearchStatus.SUCCESS);
         verify(mockClient, times(1)).search(anyString(), anyString(), anyLong());
+    }
+
+    @Test
+    void 풀로_넘긴_사이트_수집에서도_요청의_ID가_보인다() {
+        when(eLibraryRepository.findAllById(List.of(1L))).thenReturn(List.of(activeLibrary(1L)));
+        when(clientResolver.resolve(VendorType.KYOBO)).thenReturn(mockClient);
+        AtomicReference<String> seen = new AtomicReference<>();
+        when(mockClient.search(anyString(), anyString(), anyLong())).thenAnswer(invocation -> {
+            seen.set(MDC.get("traceId"));
+            return List.of();
+        });
+        MDC.put("traceId", "request-a");
+
+        try {
+            service.search("자바의 정석", "남궁성", "1");
+        } finally {
+            MDC.remove("traceId");
+        }
+
+        assertThat(seen.get()).isEqualTo("request-a");
     }
 
     @Test

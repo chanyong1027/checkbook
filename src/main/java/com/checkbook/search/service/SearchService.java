@@ -140,6 +140,7 @@ public class SearchService {
         newBook.appendTo(SearchSection.NEW_BOOK, statuses, failures);
         millie.appendTo(SearchSection.SUBSCRIPTION, statuses, failures);
         countSections(statuses);
+        warnIfSectionsFailed(code, statuses);
 
         PublicLibraryAvailabilityPage publicPage = library.value();
         List<PublicLibraryInfo> publicResults = publicPage != null ? publicPage.libraries() : List.of();
@@ -222,6 +223,18 @@ public class SearchService {
 
         if (latPresent && (lat < -90 || lat > 90 || lon < -180 || lon > 180)) {
             throw new BusinessException(ErrorCode.INVALID_LOCATION);
+        }
+    }
+
+    // 지표는 비율만 알려 준다. 조사의 입구가 되는 줄 — 마감 초과·풀 거절은 어느 칸인지 남는 곳이 여기뿐이다.
+    // WARN은 알림으로 가지 않고(ERROR만) 섹션 실패 알림의 안내 grep에 걸린다(deploy/grafana/rules.py)
+    private static void warnIfSectionsFailed(String code, List<SearchResponse.SectionStatusDetail> statuses) {
+        List<String> failed = statuses.stream()
+                .filter(detail -> detail.status() == SearchSectionStatus.FAILED)
+                .map(detail -> detail.section() + ":" + detail.reason())
+                .toList();
+        if (!failed.isEmpty()) {
+            log.warn("통합 검색 일부 실패: code={}, failed={}", code, failed);
         }
     }
 
