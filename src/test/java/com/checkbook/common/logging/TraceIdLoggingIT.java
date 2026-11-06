@@ -53,7 +53,7 @@ class TraceIdLoggingIT {
         assertThat(alloyLevelOf(line)).isEqualTo("WARN");
 
         String id = traceId.group(1);
-        assertThat(response.getContentAsString()).doesNotContain(id);
+        assertThat(response.getContentAsString()).isNotBlank().doesNotContain(id);
         assertThat(response.getHeaderNames()).allSatisfy(
                 name -> assertThat(response.getHeaders(name)).noneMatch(value -> value.contains(id)));
     }
