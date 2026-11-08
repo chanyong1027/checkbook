@@ -230,6 +230,8 @@ resilience4j:
         randomized-wait-factor: 0.33
         retry-exceptions:
           - com.checkbook.client.yes24.Yes24TransientException
+  # 키 이름이 틀리면 Spring이 오류 없이 무시해 기본값으로 돈다(반열림 시험 호출이 10이었다, 2026-11-08 발견).
+  # Resilience4jPropertiesBindingTest가 라이브러리에 없는 키를 잡는다
   circuitbreaker:
     instances:
       # YES24가 멈추면 검색마다 약 1.6초(0.7 + 0.2 + 0.7)씩 기다리지 않게(T4 결정 카드 6). 실패로 세는 건 일시 오류뿐 — 429·4xx·검증 실패는 YES24가
@@ -239,7 +241,7 @@ resilience4j:
         minimum-number-of-calls: 10
         failure-rate-threshold: 50
         wait-duration-in-open-state: 30s
-        permitted-calls-in-half-open-state: 3
+        permitted-number-of-calls-in-half-open-state: 3
         record-exceptions:
           - com.checkbook.client.yes24.Yes24TransientException
         ignore-exception-predicate: com.checkbook.client.yes24.Yes24NotSentPredicate
@@ -249,7 +251,7 @@ resilience4j:
         minimum-number-of-calls: 10
         failure-rate-threshold: 50
         wait-duration-in-open-state: 30s
-        permitted-calls-in-half-open-state: 3
+        permitted-number-of-calls-in-half-open-state: 3
         record-exceptions:
           - com.checkbook.client.millie.MillieClientException
         ignore-exceptions:
@@ -260,7 +262,7 @@ resilience4j:
         minimum-number-of-calls: 10
         failure-rate-threshold: 50
         wait-duration-in-open-state: 30s
-        permitted-calls-in-half-open-state: 3
+        permitted-number-of-calls-in-half-open-state: 3
         ignore-exceptions:
           - com.checkbook.client.datanaru.DatanaruResponseException
           # 예산 소진은 호출을 안 한 것이라 정보나루 장애가 아니다 — 실패로 세면 서킷이 열린다

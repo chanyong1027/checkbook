@@ -67,7 +67,7 @@ resilience4j:
         minimum-number-of-calls: 2
         failure-rate-threshold: 50
         wait-duration-in-open-state: 1s
-        permitted-calls-in-half-open-state: 1
+        permitted-number-of-calls-in-half-open-state: 1
         ignore-exceptions:
           - com.checkbook.client.datanaru.DatanaruResponseException
           - com.checkbook.common.ratelimit.DailyBudgetExceededException

@@ -80,6 +80,8 @@ class Yes24ClientWiringTest {
         assertThat(config.getSlidingWindowSize()).isEqualTo(10);
         assertThat(config.getMinimumNumberOfCalls()).isEqualTo(10);
         assertThat(config.getFailureRateThreshold()).isEqualTo(50f);
+        // 실제 컨텍스트로 묶인 값. 키 이름이 틀려 기본값 10으로 돌던 것을 여기서 잡는다(2026-11-08)
+        assertThat(config.getPermittedNumberOfCallsInHalfOpenState()).isEqualTo(3);
         assertThat(config.getRecordExceptionPredicate().test(new Yes24TransientException(Kind.FAILED, "503"))).isTrue();
         assertThat(config.getRecordExceptionPredicate().test(new Yes24Exception(Kind.RATE_LIMITED, true, "RATE_001"))).isFalse();
         assertThat(config.getIgnoreExceptionPredicate().test(new Yes24Exception(Kind.DAILY_LIMIT, false, "예산"))).isTrue();
@@ -91,6 +93,7 @@ class Yes24ClientWiringTest {
         CircuitBreakerConfig config = circuitBreakerRegistry.circuitBreaker("millie").getCircuitBreakerConfig();
 
         assertThat(config.getSlidingWindowSize()).isEqualTo(10);
+        assertThat(config.getPermittedNumberOfCallsInHalfOpenState()).isEqualTo(3);
         assertThat(config.getRecordExceptionPredicate().test(new MillieClientException("밀리 HTTP 403"))).isTrue();
         assertThat(config.getIgnoreExceptionPredicate()
                 .test(new DailyBudgetExceededException(ExternalProvider.MILLIE, Duration.ofHours(1)))).isTrue();
