@@ -133,6 +133,9 @@ closed-loop(VU)은 시스템이 느려지면 유입도 줄어드는 coordinated 
 > ⚠️ T4 회복력 PR(10-21)부터 정보나루 타임아웃 2s → 1.2s, YES24 식별 재시도·서킷, 밀리 서킷이 붙었다. 지연 주입
 > (`inject-datanaru-delay.sh`) 결과는 그 전 측정과 직접 비교하지 않는다.
 
+> ⚠️ 11-08부터 서킷 반열림 시험 호출이 실제로 3번이다(그 전에는 설정 키 오타로 기본값 10이었다). 지연 주입 뒤 서킷
+> 회복 구간은 그 전 측정과 직접 비교하지 않는다.
+
 > ⚠️ D7-0(10-24)부터 조회한 도서관이 모두 실패하면 PUBLIC_LIBRARY가 SUCCESS가 아니라 FAILED다. 그 요청이 `public_library_incomplete`에서
 > `public_library_failed`로 옮겨 가므로(합은 같다) FAILED율은 그 전 측정과 직접 비교하지 않는다. 정보나루 실패 때 만료된 스냅샷 대체도 없어졌다.
 
