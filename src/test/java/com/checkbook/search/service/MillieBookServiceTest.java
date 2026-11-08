@@ -62,6 +62,7 @@ class MillieBookServiceTest {
             .minimumNumberOfCalls(10)
             .failureRateThreshold(50)
             .waitDurationInOpenState(Duration.ofSeconds(30))
+            .permittedNumberOfCallsInHalfOpenState(3)
             .recordExceptions(MillieClientException.class)
             .ignoreExceptions(DailyBudgetExceededException.class)
             .build();

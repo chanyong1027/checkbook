@@ -62,7 +62,7 @@ import static org.mockito.Mockito.when;
         "resilience4j.circuitbreaker.instances.datanaru.failure-rate-threshold=50",
         "resilience4j.circuitbreaker.instances.datanaru.wait-duration-in-open-state="
                 + LibraryAvailabilitySnapshotConcurrencyBenchmark.OPEN_WAIT,
-        "resilience4j.circuitbreaker.instances.datanaru.permitted-calls-in-half-open-state=3"
+        "resilience4j.circuitbreaker.instances.datanaru.permitted-number-of-calls-in-half-open-state=3"
 })
 class LibraryAvailabilitySnapshotConcurrencyBenchmark extends PostgresIntegrationTest {
 
