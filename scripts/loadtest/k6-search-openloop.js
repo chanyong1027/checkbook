@@ -8,8 +8,30 @@ const publicLibraryIncomplete = new Rate('public_library_incomplete');
 const subscriptionFailed = new Rate('subscription_failed');
 const identificationFailed = new Rate('identification_failed');
 const searchAvailable = new Rate('search_available');
+// 관측 전용(게이트 금지, 11-08 추가): YES24 초당 선제한(100ms당 1건) 때문에 식별을 보내지 않은 비율 — 10rps 근처에서 커진다
+const newBookRateLimited = new Rate('new_book_rate_limited');
+// 관측 전용: 책 정보가 YES24가 아닌 곳에서 온 비율(metadata.identification.source != YES24).
+// k6는 힌트를 보내므로(아래 HINT) YES24를 건너뛰거나 실패하면 대체는 HINT가 되고, 밀리 호출은 그대로 나간다
+const identificationFallback = new Rate('identification_fallback');
+// 힌트: 실제 화면처럼 후보 검색(카카오)에서 이미 가진 정보를 같이 보낸다(11-08 측정 준비 결정).
+// 힌트가 없으면 YES24를 건너뛴 요청(10rps 근처 선제한)은 식별이 NONE이 되어 밀리를 부르지 않는다 — 부하가 실제보다 가벼워진다.
+// 값은 합성이다. 밀리 스텁은 검색어와 무관하게 같은 응답을 주고 밀리 결과 캐시가 없어 고정값으로 충분하다.
+// 서버 계약(BookIdentificationService.validHint): 제목 필수, 글자 200자·표지 1,000자 이하, 표지는 http(s)만 쓴다
+const HINT = {
+  title: '부하 측정용 합성 도서',
+  author: '합성 저자',
+  publisher: '합성 출판사',
+  cover: 'https://example.invalid/loadtest-cover.jpg',
+};
+const HINT_QUERY = Object.keys(HINT).map((key) => `${key}=${encodeURIComponent(HINT[key])}`).join('&');
 if (!__ENV.RUN || !/^\d{1,2}$/.test(__ENV.RUN)) { throw new Error('RUN 필수(1~2자리 숫자)'); }
 const RUN = String(Number(__ENV.RUN)).padStart(2, '0');
+// 무작위 도착 근사(11-09, 방법론 리뷰 1차 지적 2): constant-arrival-rate는 반복을 같은 간격으로 시작해 몰림이 없다.
+// THIN이 있으면 RATE는 '시도율'이고 반복마다 확률 THIN으로만 요청을 보낸다(베르누이 솎아내기). 시도율이 높고 THIN이 작을수록
+// 도착이 포아송에 가까워진다(예: 15rps = RATE 150 × THIN 0.1, 시도 간격 6.7ms). 실제 도착 수는 이항분포라 rps가 흔들린다
+// (2분 15rps면 1800 ± 약 40건, 1σ) — 균일 도착용 ±2% 게이트 대신 ±3σ로 본다. THIN이 없으면 지금처럼 균일 도착
+const THIN = __ENV.THIN === undefined || __ENV.THIN === '' ? 1 : Number(__ENV.THIN);
+if (!(THIN > 0 && THIN <= 1)) { throw new Error('THIN은 0 초과 1 이하'); }
 export const options = {
   scenarios: {
     openloop: {
@@ -34,8 +56,11 @@ function uniqueIsbn13() {
   const sum = [...base].reduce((total, digit, index) => total + Number(digit) * (index % 2 === 0 ? 1 : 3), 0);
   return base + String((10 - sum % 10) % 10);
 }
+function sectionDetail(statuses, section) {
+  return statuses.find((s) => s && s.section === section) || null;
+}
 function sectionStatus(statuses, section) {
-  const found = statuses.find((s) => s && s.section === section);
+  const found = sectionDetail(statuses, section);
   return found ? found.status : null;
 }
 function addFailedIfAttempted(rate, status) {
@@ -44,7 +69,10 @@ function addFailedIfAttempted(rate, status) {
   }
 }
 export default function () {
-  const res = http.get(`http://localhost:8080/api/search?q=${uniqueIsbn13()}&lat=37.5665&lon=126.9780`);
+  if (THIN < 1 && Math.random() >= THIN) {
+    return; // 이번 시도는 요청하지 않는다(무작위 도착 근사). ISBN은 반복 번호로 만들어 건너뛰어도 겹치지 않는다
+  }
+  const res = http.get(`http://localhost:8080/api/search?q=${uniqueIsbn13()}&lat=37.5665&lon=126.9780&${HINT_QUERY}`);
   check(res, { 'status 200': (r) => r.status === 200 });
 
   let body = null;
@@ -81,7 +109,12 @@ export default function () {
   // subscription quality — SKIPPED(미시도)는 분모에서 제외. 중고 외부 조회 실패율은 PR-2에서 폐기.
   addFailedIfAttempted(subscriptionFailed, sectionStatus(statuses, 'SUBSCRIPTION'));
 
-  // availability 보조 — NEW_BOOK==FAILED = YES24 식별 호출이 나갔다가 실패(타임아웃·오류·429).
-  // 찾지 못함(NOT_FOUND)은 SUCCESS, 우리 쪽 선제한으로 안 보낸 경우는 SKIPPED라 여기 잡히지 않는다
-  identificationFailed.add(sectionStatus(statuses, 'NEW_BOOK') === 'FAILED');
+  // availability 보조 — NEW_BOOK==FAILED = YES24 식별 실패(타임아웃·오류·429, 그리고 서킷이 열려 보내지 않은 경우).
+  // 찾지 못함(NOT_FOUND)은 SUCCESS, 우리 쪽 선제한·하루 한도로 안 보낸 경우는 SKIPPED라 여기 잡히지 않는다
+  const newBook = sectionDetail(statuses, 'NEW_BOOK');
+  identificationFailed.add(newBook !== null && newBook.status === 'FAILED');
+  // 분모 = 모든 HTTP 200(위 지표와 같음). SKIPPED+RATE_LIMITED만 센다 — YES24 429(보냈다가 거절)는 FAILED+RATE_LIMITED라 위에 잡힌다
+  newBookRateLimited.add(newBook !== null && newBook.status === 'SKIPPED' && newBook.reason === 'RATE_LIMITED');
+  const identification = body.metadata && body.metadata.identification;
+  identificationFallback.add(!identification || identification.source !== 'YES24');
 }

@@ -10,6 +10,12 @@
       "x-ratelimit-remaining-day": "19999"
     },
     "body": "{\"success\":true,\"message\":\"성공\",\"errorCode\":null,\"data\":{\"items\":[{\"title\":\"부하테스트 도서 {{request.query.query}}\",\"author\":\"테스트\",\"publisher\":\"테스트출판\",\"isbn13\":\"{{request.query.query}}\",\"salePrice\":16800,\"link\":\"https://www.yes24.com/product/goods/123456\",\"cover\":\"https://example.com/cover.jpg\"}]}}",
-    "fixedDelayMilliseconds": 212
+    "delayDistribution": { "type": "lognormal", "median": 165, "sigma": 0.23 },
+    "transformers": ["tail-delay"],
+    "transformerParameters": { "tailProbability": 0.004, "tailMinMs": 1000, "tailMaxMs": 1400 }
+  },
+  "metadata": {
+    "delaySource": "OCI 오사카 탐침 2026-10-19, server(연결 후 첫 바이트) 첫 60회 p50 165/p95 240 (n=60, 1000회 표본은 같은 책 반복으로 YES24 쪽 캐시 효과 의심). sigma는 p95 240에 맞춤. notes/decisions/2026-10-19-T4-지연탐침-결정카드.md",
+    "tailSource": "같은 탐침 원자료 n=1,002 중 700ms 초과 4건(1042·1159·1358·3911) → 호출마다 독립으로 확률 0.004, 꼬리일 때 균등 1000~1400ms(몸통 lognormal 대신). 앱 타임아웃 700ms라 700 초과는 앱에서 모두 같은 타임아웃이므로 상한을 1400으로 묶음. 확장 scripts/loadtest/wiremock-ext, 근거 notes/decisions/2026-11-08-용량목표-재설정-결정카드.md '지연 꼬리 확인'"
   }
 }

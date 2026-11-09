@@ -68,3 +68,6 @@ __pycache__/
 
 ### TypeScript incremental build ###
 *.tsbuildinfo
+
+### loadtest WireMock 확장 빌드 결과 (scripts/loadtest/wiremock-ext/build.sh, 위 build/ 규칙과 겹치지만 명시) ###
+/scripts/loadtest/wiremock-ext/build/

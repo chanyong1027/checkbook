@@ -7,6 +7,12 @@
     "status": 200,
     "headers": { "Content-Type": "application/json" },
     "body": "{\"RESP_CD\":200,\"RESP_MSG\":\"성공\",\"RESP_DATA\":{\"content\":{\"list\":[],\"total\":0}}}",
-    "fixedDelayMilliseconds": 286
+    "delayDistribution": { "type": "lognormal", "median": 307, "sigma": 0.21 },
+    "transformers": ["tail-delay"],
+    "transformerParameters": { "tailProbability": 0.002, "tailMinMs": 750, "tailMaxMs": 1350 }
+  },
+  "metadata": {
+    "delaySource": "OCI 오사카 탐침 2026-10-19, server(연결 후 첫 바이트) p50 307/p95 435/p99 497/max 1304 (n=1000). sigma는 p95·p99에 맞춤. notes/decisions/2026-10-19-T4-지연탐침-결정카드.md",
+    "tailSource": "같은 탐침 원자료 n=1,002 중 600ms 초과 2건(783·1304) → 호출마다 독립으로 확률 0.002, 꼬리일 때 균등 750~1350ms(몸통 lognormal 대신). 확장 scripts/loadtest/wiremock-ext, 근거 notes/decisions/2026-11-08-용량목표-재설정-결정카드.md '지연 꼬리 확인'"
   }
 }
