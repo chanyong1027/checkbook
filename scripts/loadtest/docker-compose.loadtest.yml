@@ -1,4 +1,6 @@
-# 부하테스트 전용 격리 환경 — 운영/로컬 개발 DB와 완전 분리, 운영(t3.micro) 스펙 근사
+# 부하테스트 전용 격리 환경 — 운영/로컬 개발 DB와 완전 분리, 운영(OCI A1 2코어·12GB) 근사
+# 운영처럼 앱과 DB가 같은 2코어(cpuset 0,1)를 나눠 쓴다. wiremock은 2-5, k6는 `taskset -c 6-13`으로 다른 CPU에서 돌린다
+# 남는 차이: x86(로컬) vs ARM(운영), WSL2는 cpuset으로 성능 코어·효율 코어를 고를 수 없음, Nginx·Cloudflare 없음, 디스크 다름
 # 기동:   docker compose -f scripts/loadtest/docker-compose.loadtest.yml up -d --build
 # 종료:   docker compose -f scripts/loadtest/docker-compose.loadtest.yml down -v
 services:
@@ -19,12 +21,13 @@ services:
         condition: service_healthy
       wiremock:
         condition: service_started
-    cpus: 2          # t3.micro 2 vCPU 근사 (버스트 크레딧 소진 상태는 재현 불가 — 상대 비교 목적)
-    mem_limit: 1g    # t3.micro 1GB 근사. JVM 기본 MaxRAMPercentage(25%)로 운영과 동일 힙 조건
+    cpuset: "0,1"    # 운영 2코어 근사 — postgres와 같은 CPU를 나눠 씀
+    mem_limit: 12g   # 운영 메모리 12GB 근사(운영 컨테이너엔 제한 없음). JVM 기본 MaxRAMPercentage(25%)로 운영과 같은 힙 비율
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18.6-alpine  # 운영 deploy/compose.yaml과 같은 태그
     container_name: loadtest-postgres
+    cpuset: "0,1"    # 앱과 같은 2코어. 메모리 제한은 운영처럼 없음
     ports:
       - "5433:5432"  # 호스트 5433 — 로컬 개발 postgres(5432)와 충돌 방지. pgAdmin으로 확인 가능
     environment:
@@ -40,11 +43,17 @@ services:
   wiremock:
     image: wiremock/wiremock:3.13.0
     container_name: loadtest-wiremock
+    cpuset: "2-5"    # 측정 대상(0,1)과 겹치지 않게
     ports:
       - "8089:8080"  # 지연 주입 스크립트가 호스트에서 admin API(8089) 사용
     volumes:
       - ./wiremock:/home/wiremock
+      # 꼬리 지연 확장 jar(먼저 scripts/loadtest/wiremock-ext/build.sh). 이미지 진입점이 /var/wiremock/extensions/*를 클래스패스에 넣는다
+      - ./wiremock-ext/build:/var/wiremock/extensions:ro
     # container-threads: 기본값 10(문서 기준, 관측 Jetty 풀은 acceptor 포함 ~25)으로는 fan-out 동시성에서
-    # 하네스가 병목 — 동시 40건에서 명목 지연 0.36s가 실효 0.84s(2.4배)로 늘어남을 실측, 200스레드에서 0.42s로 정상화
+    # 하네스가 병목 — 2026-07 측정 당시(정보나루 명목 356ms 고정 지연) 동시 40건에서 0.36s가 실효 0.84s(2.4배)로
+    # 늘어났고 200스레드에서 0.42s로 정상화됐다(지금 지연 값과 다름, 기록으로만 둔다)
     # no-request-journal: 저널 무제한 누적(148k건/2.9GB 실측)이 런 순서에 따른 성능 드리프트를 유발
-    command: ["--global-response-templating", "--container-threads", "200", "--no-request-journal"]
+    # extensions: 명시 등록이라 jar가 없으면 ClassNotFoundException으로 기동이 멈춘다(조용히 몸통만 쓰지 않게)
+    command: ["--global-response-templating", "--container-threads", "200", "--no-request-journal",
+              "--extensions", "checkbook.loadtest.wiremock.TailDelayTransformer"]

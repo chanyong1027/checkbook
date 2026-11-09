@@ -112,6 +112,17 @@ python3 scripts/loadtest/plot-metrics.py scripts/loadtest/results/fault-<코드�
 
 ## Open-loop 절차 (시나리오명: openloop-<코드상태>)
 
+> ⚠️ 11-08부터 측정 환경이 운영(OCI A1 2코어·12GB) 근사로 바뀌었다. 이 변경 전 결과와 직접 비교하지 않는다.
+> - 앱·PostgreSQL이 같은 2코어(`cpuset: "0,1"`)를 나눠 쓴다(전에는 앱만 `cpus: 2`, PG 제한 없음). 앱 `mem_limit` 1g → 12g(힙 약 256MB → 약 3GB)
+> - PostgreSQL 16 → 18.6(운영과 같은 태그). WireMock은 CPU 2-5. k6는 Windows 호스트에서 `k6.exe`로 돈다(WSL 시계 점프 회피, 2026-11-09).
+>   CPU 분리는 없다(고부하 구간에서 k6/VM 코어 경합 가능성을 첫 고부하 런의 CPU로 확인)
+> - 가짜 API 지연: 7월 AWS 서울 고정값(정보나루 356·밀리 286·YES24 212ms) → 오사카 탐침 lognormal 몸통 + 꼬리 확장(아래)
+>
+> 꼬리 확장 준비(기동 전 한 번, 소스를 고쳤을 때도): `scripts/loadtest/wiremock-ext/build.sh` → `wiremock-ext/build/tail-delay.jar`(git 제외).
+> 확장이 실렸는지 기동 직후 확인한다: `docker logs loadtest-wiremock | grep '^extensions:'`에 `tail-delay`가 있어야 한다.
+> jar가 없으면 `--extensions`로 명시 등록한 클래스를 못 찾아 WireMock이 기동하지 못하고 멈춘다(`ClassNotFoundException`, `docker ps`에 없음).
+> 확장 없이 매핑만 실리면 매핑의 `"transformers": ["tail-delay"]`는 오류 없이 무시되어 몸통만 쓴다 — 그래서 명시 등록과 로그 확인을 둘 다 둔다.
+
 closed-loop(VU)은 시스템이 느려지면 유입도 줄어드는 coordinated omission이 있어,
 용량 초과 유입의 결론 수치는 고정 도착률로 별도 검증한다. 런 절차 전체(재시드→드레인
 확인→거절 스냅샷→k6+프로브·stats 병행→요약)가 스크립트로 승격되어 있다 — 한 줄이 전부다:
@@ -145,7 +156,13 @@ closed-loop(VU)은 시스템이 느려지면 유입도 줄어드는 coordinated 
 2. 과부하 런이면 **`섹션 FAILED 합 == searchExecutor 거절 증분` 항등식** — 일치하면 순수 거절
    레짐, 어긋나면 타임아웃 혼합 레짐(§6/§7의 레짐 구분 진단법).
 3. `public_library_failed`(셰딩률), p95 안정 여부(발산 없음), 5xx 0%, WireMock 프로브 med가
-   명목(356ms)과 일치.
+   정보나루 몸통 중앙값(400ms)과 일치. 프로브는 앱과 같은 `bookExist` 매핑을 찌르므로 꼬리 확장(0.5% 확률로
+   600~680ms) 때문에 max는 가끔 튈 수 있다 — med로 판단한다.
+
+관측 전용 출력(게이트 아님, 11-08 추가): `new_book_rate_limited`(YES24 초당 선제한으로 식별을 보내지 않은 비율 — 10rps 근처에서 커짐),
+`identification_fallback`(책 정보가 YES24가 아닌 비율. k6는 실제 화면처럼 합성 힌트(제목·저자·출판사·표지)를 보내므로 대체는 HINT가 되고 밀리 호출은 그대로 나간다),
+초당 PG 커밋(`pg_stat_database.xact_commit` 전후 차이), iowait 비율(`/proc/stat` 전체·cpu0·cpu1), 컨테이너 BlockIO(stats CSV 4번째 열),
+YES24 재시도(`resilience4j_retry_calls_total{name="yes24"}` kind별)·선제한(`yes24_rate_limited_total`) 증분.
 판정 임계 근처(게이트 ±1%p)의 통과/붕괴는 단일 런으로 확정하지 말 것 — 완만형 무릎은 반복
 합산 CI로 확정한다(§7의 14.5rps 4반복 선례). 절벽형(구간 낙차 큼)은 단일 런 허용.
 
@@ -161,7 +178,9 @@ bash /tmp/mel.sh 100    # 약 4~5분, API별 p50/p95/p99 요약 출력. 주간/�
 ## 주의
 
 - k6 스크립트가 요청마다 유일한 ISBN을 생성 → 스냅샷 캐시(24h TTL)를 우회해 매 요청이 fan-out(page-size 5건)을 실제 실행한다. **재실행 전 시드를 다시 돌려 스냅샷을 TRUNCATE할 것.**
-- WireMock의 datanaru 지연 분포는 `measure-external-latency.sh` 실측값 기준 (측정 전엔 임시 lognormal 400ms).
+- WireMock 지연은 OCI 오사카 서버 탐침(2026-10-19, 연결 후 첫 바이트, 약 1,000회) 기준이다. 몸통은 매핑의 lognormal
+  (정보나루 400/0.087, 밀리 307/0.21, YES24 165/0.23), 꼬리는 `tail-delay` 확장이 호출마다 독립으로 고른다(아래 절).
+  값과 근거는 각 매핑의 `metadata.delaySource`·`tailSource`에 있다. `measure-external-latency.sh`는 옛 EC2 경로용이다.
 - featured 워밍업이 기동 시 WireMock의 빈 응답 스텁에 부딪히는 것은 정상 (검색 부하와 무관).
 - 코드 상태를 바꿔 재측정할 때는 반드시 `--build`로 이미지 재빌드 + 커밋 해시 기록.
 - **시계도 하네스다**: open-loop rps의 분모는 벽시계라, 호스트 시계 표류(W32Time 꺼짐 등)가
@@ -179,6 +198,9 @@ bash /tmp/mel.sh 100    # 약 4~5분, API별 p50/p95/p99 요약 출력. 주간/�
   print("clock-ok" if ok else "clock-BAD: W32Time/호스트 시계 동기화부터 해결")
   EOF
   ```
+  2026-11-09 재발: WSL 안의 k6가 1rps 시험에서 rps 1.039·receiving min -283ms로 오염됐고, Windows `k6.exe`로 돌리면
+  rps 1.003·음수 없음이었다. 그래서 스윕 스크립트는 k6만 `k6.exe`로 돌린다. 스크립트가 WSL에서 재는 PG 초당 커밋·
+  `/proc/stat` CPU 비율은 여전히 WSL 시계 기준이라 참고용이다.
 - WireMock은 `--container-threads 200`(기본 25는 fan-out 동시성에서 하네스가 병목이 됨)과
   `--no-request-journal`(저널 무제한 누적이 런 순서 드리프트 유발)로 기동한다 —
   따라서 `__admin/requests` 기반 검증은 불가. 필요 시 compose에서 잠시
