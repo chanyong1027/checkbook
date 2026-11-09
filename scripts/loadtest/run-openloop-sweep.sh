@@ -175,21 +175,35 @@ EOF
 echo "--- DB 연결 풀 / 서킷 ---"
 python3 - "$RAW/metrics-r${RUN}.csv" <<'EOF'
 import sys
-act=[]; pend=[]; notclosed={}
+# 관측이 없는 초를 closed로 세지 않는다(PR #82 리뷰): 서킷별로 상태 행이 있는 초를 모으고,
+# 스크레이프가 성공했는데 상태 행이 없는 초와 스크레이프 실패 초는 "확인 불가"로 따로 센다
+act=[]; pend=[]; epochs=set(); failed=set(); seen={}; notclosed={}
 for l in open(sys.argv[1]):
     p=l.strip().split(',')
     if len(p)!=3 or p[0]=='epoch': continue
-    _,name,val=p
+    ts,name,val=p
+    epochs.add(ts)
+    if name=='scrape_failed': failed.add(ts); continue
     try: v=float(val)
     except ValueError: continue
     if name.startswith('hikaricp_connections_active'): act.append(v)
     elif name.startswith('hikaricp_connections_pending'): pend.append(v)
-    elif name.startswith('resilience4j_circuitbreaker_state') and 'state="closed"' not in name:
-        notclosed[name]=notclosed.get(name,0)+1
+    elif name.startswith('resilience4j_circuitbreaker_state'):
+        cb=name.split('name="')[1].split('"')[0] if 'name="' in name else name
+        seen.setdefault(cb,set()).add(ts)
+        if 'state="closed"' not in name: notclosed[name]=notclosed.get(name,0)+1
 if act: print(f"hikari active max={max(act):.0f}  pending max={max(pend) if pend else 0:.0f} (표본 {len(act)})")
 else: print("hikari 지표 없음(폴링 확인)")
-if notclosed:
+scraped=epochs-failed
+if not seen:
+    print("서킷: 관측 없음 — 확인 불가(폴링·지표 확인)")
+else:
     for k,n in sorted(notclosed.items()): print(f"서킷 closed 아님: {k} {n}초")
-else: print("서킷: 런 내내 closed")
+    missing={cb: len(scraped-s) for cb,s in seen.items()}
+    for cb,n in sorted(missing.items()):
+        if n: print(f"서킷 {cb}: 상태 행 없는 초 {n}초 — 확인 불가")
+    if failed: print(f"스크레이프 실패 {len(failed)}초 — 그 구간 서킷 상태는 확인 불가")
+    if not notclosed and not failed and not any(missing.values()):
+        print(f"서킷: 런 내내 closed (관측 {len(scraped)}초, 결측 0)")
 EOF
 echo "=== 완료: $OUT ==="
