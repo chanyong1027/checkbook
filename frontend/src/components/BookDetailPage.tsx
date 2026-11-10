@@ -520,7 +520,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
             </>
           )}
         </p>
-        <ul role="list" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+        <ul role="list" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
           {sites.map(site => {
             const status = elibSiteStatus(site)
             return (
@@ -646,7 +646,7 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
   function buyBody() {
     const newBook = result?.newBook
     return (
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
         <div className="rounded-xl border border-ink-100 p-4 flex flex-col gap-3">
           <div className="flex items-baseline justify-between gap-2">
             <span className="text-meta font-semibold text-ink-700">새 책 · YES24</span>
@@ -720,7 +720,9 @@ export function BookDetailPage({ isbn13, initialBook, onReset }: Props) {
           </div>
         )}
 
-        <div className="grid gap-6 lg:grid-cols-2 lg:gap-6 lg:items-start">
+        {/* grid-cols-1을 빼면 모바일 열이 내용의 최소 폭(한 줄 고정 주소 등)만큼 커져 화면 밖으로 잘린다.
+            grid-cols-1은 minmax(0, 1fr)라 열을 화면 폭 안에 묶는다 — 안쪽 grid(전자도서관·새 책 카드)도 같은 이유 */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-6 lg:items-start">
         <div className="space-y-4">
         {/* ==================== 빌리기 ==================== */}
         <GroupHeading title="빌리기" desc="무료로 빌릴 수 있는 곳" />

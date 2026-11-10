@@ -131,6 +131,15 @@ closed-loop(VU)은 시스템이 느려지면 유입도 줄어드는 coordinated 
 # <RATE> <TIMEUNIT> <RUN(고유)> <라벨(효과rps)> <코드상태>  — 소수 도착률은 TIMEUNIT으로: 14.5 = RATE 29/2s
 ./scripts/loadtest/run-openloop-sweep.sh 29 2s 81 14.5 pr2
 ```
+무작위 도착(2026-11-09 추가): `constant-arrival-rate`는 요청을 같은 간격으로 보내 몰림이 없다. 실제 사용자처럼 무작위로 도착시키려면
+6번째 인자 `THIN`을 준다 — `RATE`는 시도율, 시도마다 확률 `THIN`으로만 요청한다(베르누이 솎아내기, 포아송 근사).
+시도 간격이 거칠면 근사가 틀어지므로 시도율을 목표의 10배 이상으로 둔다(2rps는 `THIN 0.1`이면 간격 50ms라 부족 → `0.01`).
+```bash
+./scripts/loadtest/run-openloop-sweep.sh 150 1s 35 15 m1oci-poisson 0.1     # 무작위 15rps
+./scripts/loadtest/run-openloop-sweep.sh 200 1s 40 2 m1oci-poisson-fine 0.01 # 무작위 2rps
+```
+스윕 출력은 파일로 남지 않으므로(드레인·서킷 확인·거절 증분) `2>&1 | tee results/<코드상태>-raw/sweep-r<RUN>.log`로 함께 저장한다.
+
 `RUN`·코드상태가 같으면 기존 결과 JSON을 덮어쓴다 — 런마다 새 값을 쓸 것. 스크립트 자체 검사(ISBN 생성·가용성 판정)는
 `node --test scripts/loadtest/k6-search-openloop.test.cjs`로 돌린다(CI에 없음, k6 스크립트를 고치면 직접 실행).
 
@@ -152,7 +161,9 @@ closed-loop(VU)은 시스템이 느려지면 유입도 줄어드는 coordinated 
 
 런 직후 판정 게이트(스크립트 출력에서 순서대로 확인):
 1. **http rps ≈ 목표 도착률(±2%)** — 괴리 시 결과 폐기하고 하네스부터 의심(§7 시계 표류 사례:
-   -10% 괴리가 W32Time 문제의 첫 신호였다).
+   -10% 괴리가 W32Time 문제의 첫 신호였다). 무작위 도착(`THIN`) 런은 요청 수가 이항분포로 흔들리므로 요청 수가
+   N ± 3σ(N = 시도 수 × THIN, σ = √(시도 수 × THIN × (1−THIN)))이면 정상으로 보고, 시계 충실성은 결정적인 시도율
+   (`iterations` rate)이 목표의 ±2% 안인지로 확인한다(이항 게이트는 4% 왜곡을 못 잡는다). `dropped_iterations`는 항상 0이어야 한다.
 2. 과부하 런이면 **`섹션 FAILED 합 == searchExecutor 거절 증분` 항등식** — 일치하면 순수 거절
    레짐, 어긋나면 타임아웃 혼합 레짐(§6/§7의 레짐 구분 진단법).
 3. `public_library_failed`(셰딩률), p95 안정 여부(발산 없음), 5xx 0%, WireMock 프로브 med가
@@ -163,6 +174,10 @@ closed-loop(VU)은 시스템이 느려지면 유입도 줄어드는 coordinated 
 `identification_fallback`(책 정보가 YES24가 아닌 비율. k6는 실제 화면처럼 합성 힌트(제목·저자·출판사·표지)를 보내므로 대체는 HINT가 되고 밀리 호출은 그대로 나간다),
 초당 PG 커밋(`pg_stat_database.xact_commit` 전후 차이), iowait 비율(`/proc/stat` 전체·cpu0·cpu1), 컨테이너 BlockIO(stats CSV 4번째 열),
 YES24 재시도(`resilience4j_retry_calls_total{name="yes24"}` kind별)·선제한(`yes24_rate_limited_total`) 증분.
+콜드 스타트(2026-11-09): 스윕 스크립트는 2분 고정이고 요청별 시각을 남기지 않으므로 직접 돌린다. 재시드 → `docker restart loadtest-app` →
+`/actuator/health`가 UP이 되자마자 `k6.exe run -e RUN=<n> -e RATE=2 -e TIMEUNIT=1s --summary-export "$(wslpath -m <json>)" --out csv="$(wslpath -m <csv>)" scripts/loadtest/k6-search-openloop.js`
+(CSV 시각을 밀리초로 받으려면 `K6_CSV_TIME_FORMAT=unix_milli`를 `WSLENV`로 넘긴다). 처음 10초는 표본이 적어(2rps면 약 20건) 백분위를 비교하지 말고 중앙값·최댓값·실패만 본다.
+이 런은 거절·게이지 원시 파일이 없다. 앱을 재시작하므로 스윕 맨 마지막에 둔다(뒤에 런을 더 돌리면 그 전에 예열을 다시 한다).
 판정 임계 근처(게이트 ±1%p)의 통과/붕괴는 단일 런으로 확정하지 말 것 — 완만형 무릎은 반복
 합산 CI로 확정한다(§7의 14.5rps 4반복 선례). 절벽형(구간 낙차 큼)은 단일 런 허용.
 
