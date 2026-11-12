@@ -222,6 +222,18 @@ class KyoboELibClientTest {
     }
 
     @Test
+    void 목록_밖의_빈_결과_문구는_항목_태그_변경을_가리지_않는다() throws Exception {
+        // 숨긴 0건 안내 블록을 결과 화면에도 늘 넣는 사이트라도 B1을 놓치지 않게, 문구는 목록 안에서만 본다(PR #84 리뷰)
+        assertSearchFails("""
+                <div class="search_empty" style="display:none">검색 결과가 없습니다.</div>
+                <ul class="book_resultList">
+                  <div><ul><li class="tit"><a href="/d?id=1">재현용 도서</a></li></ul>
+                       <input type="button" name="brwBtn" value="대출"></div>
+                </ul>
+                """, ELibraryClientException.Kind.STRUCTURE_CHANGED);
+    }
+
+    @Test
     void 모든_항목에_대출_예약_버튼이_없으면_파싱_실패다() throws Exception {
         // B2: 버튼 이름이 바뀌면 예전에는 모든 책이 available=false("대출중")였다
         assertSearchFails("""

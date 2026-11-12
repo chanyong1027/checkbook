@@ -243,8 +243,9 @@ public class KyoboELibClient implements ELibClient {
         List<ELibrarySearchResponse.ELibraryBook> results = new ArrayList<>();
         Elements books = resultList.select("> li");
         // 목록 안에 무언가 있는데 li가 하나도 없으면 항목 태그가 바뀐 것이다 — 0권("없음")이 아니다(T5 재현 B1).
-        // 비어 있는 목록 태그나 그 안에 빈 결과 문구만 있는 화면은 0건으로 둔다(0건 화면 모양을 사이트마다 확인하지 못했다)
-        if (books.isEmpty() && !resultList.children().isEmpty() && !isEmptyResultPage(document)) {
+        // 비어 있는 목록 태그나 그 안에 빈 결과 문구만 있는 화면은 0건으로 둔다(0건 화면 모양을 사이트마다 확인하지 못했다).
+        // 문구는 목록 안에서만 본다 — 페이지 어딘가의 문구(숨긴 안내 블록 등)가 구조 변경을 '없음'으로 가리지 않게
+        if (books.isEmpty() && !resultList.children().isEmpty() && !hasEmptyResultMarker(resultList)) {
             throw new ELibraryClientException(ELibraryClientException.Kind.STRUCTURE_CHANGED, "교보 검색 결과 항목 태그가 바뀌었습니다.");
         }
 
@@ -281,7 +282,11 @@ public class KyoboELibClient implements ELibClient {
     }
 
     private boolean isEmptyResultPage(Document document) {
-        String text = document.text();
+        return hasEmptyResultMarker(document);
+    }
+
+    private static boolean hasEmptyResultMarker(Element element) {
+        String text = element.text();
         return EMPTY_RESULT_MARKERS.stream().anyMatch(text::contains);
     }
 
