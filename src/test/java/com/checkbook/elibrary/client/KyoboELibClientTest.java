@@ -214,6 +214,14 @@ class KyoboELibClientTest {
     }
 
     @Test
+    void 목록_태그_안에_빈_결과_문구만_있으면_0건이다() throws Exception {
+        // 0건 문구를 목록 태그 안에 그리는 사이트가 있어도 구조 변경으로 오판하지 않는다(10-20 전수조사 0건 68곳의 모양은 기록 없음)
+        assertThat(searchHtml("""
+                <ul class="book_resultList"><p>"재현용 도서" 에 대한 검색 결과가 없습니다.</p></ul>
+                """)).isEmpty();
+    }
+
+    @Test
     void 모든_항목에_대출_예약_버튼이_없으면_파싱_실패다() throws Exception {
         // B2: 버튼 이름이 바뀌면 예전에는 모든 책이 available=false("대출중")였다
         assertSearchFails("""

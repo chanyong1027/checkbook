@@ -243,8 +243,8 @@ public class KyoboELibClient implements ELibClient {
         List<ELibrarySearchResponse.ELibraryBook> results = new ArrayList<>();
         Elements books = resultList.select("> li");
         // 목록 안에 무언가 있는데 li가 하나도 없으면 항목 태그가 바뀐 것이다 — 0권("없음")이 아니다(T5 재현 B1).
-        // 비어 있는 목록 태그는 지금처럼 0건으로 둔다(실제 0건 화면이 이 모양인 사이트가 없다고 확인하지 못했다)
-        if (books.isEmpty() && !resultList.children().isEmpty()) {
+        // 비어 있는 목록 태그나 그 안에 빈 결과 문구만 있는 화면은 0건으로 둔다(0건 화면 모양을 사이트마다 확인하지 못했다)
+        if (books.isEmpty() && !resultList.children().isEmpty() && !isEmptyResultPage(document)) {
             throw new ELibraryClientException(ELibraryClientException.Kind.STRUCTURE_CHANGED, "교보 검색 결과 항목 태그가 바뀌었습니다.");
         }
 

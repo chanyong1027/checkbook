@@ -84,7 +84,7 @@ public class MillieClient {
         }
         List<MillieBookItem> items = response.respData().content().list();
         // 항목 필드 이름이 바뀌면 모든 항목이 같은 필드를 잃어 매칭이 안 되거나 '이용 불가'로 읽혀 "없어요"가 된다.
-        // 항목 하나만 빠진 건 정상일 수 있어 '하나도 없을 때'만 실패로 본다(MillieContractTest의 anySatisfy와 같은 기준)
+        // 항목 하나만 빠진 건 정상일 수 있어 '하나도 없을 때'만 실패로 본다(MillieContractTest의 anySatisfy와 같은 방식 — 필드는 판정에 쓰는 4개만, 계약 시험은 author·book_brand까지 본다)
         if (!items.isEmpty() && items.stream().noneMatch(MillieClient::hasRequiredFields)) {
             throw new MillieClientException("밀리 응답 항목 필드 누락");
         }

@@ -13,9 +13,9 @@ public class ELibraryClientException extends RuntimeException {
      * 뒤의 셋은 그 업체 사이트가 한꺼번에 깨지고 코드를 고쳐야 한다. 지표 elibrary.scrape의 outcome 태그로 나간다
      */
     public enum Kind {
-        /** 결과 목록 DOM도, 빈 결과 문구도 없음 */
+        /** 결과 목록 DOM도 빈 결과 문구도 없음, 또는 목록 안에 무언가 있는데 책 항목 태그가 없음 */
         STRUCTURE_CHANGED,
-        /** 책 항목은 있는데 하나도 못 읽음 */
+        /** 책 항목은 있는데 하나도 못 읽음, 또는 읽은 책 모두에 대출 상태(대출·예약 버튼)가 없음 */
         PARSE_FAILED,
         /** 검색 주소가 404 — 업체가 경로를 바꾸면 그 업체 사이트 전부가 이렇게 된다 */
         ENDPOINT_NOT_FOUND,
