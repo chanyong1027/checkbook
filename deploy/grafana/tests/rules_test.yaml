@@ -139,19 +139,36 @@ tests:
   - name: 1초 넘는 호출이 절반이면 공급자별로 울린다
     interval: 1m
     input_series:
-      - series: 'http_client_requests_seconds_count{job="checkbook-app", slot="blue", client_name="apis.yes24.com", outcome="SUCCESS"}'
+      - series: 'http_client_requests_seconds_count{job="checkbook-app", slot="blue", client_name="live-api.millie.co.kr", outcome="SUCCESS"}'
         values: '0x10 0+2x60'
-      - series: 'http_client_requests_seconds_bucket{job="checkbook-app", slot="blue", client_name="apis.yes24.com", outcome="SUCCESS", le="1.073741824"}'
+      - series: 'http_client_requests_seconds_bucket{job="checkbook-app", slot="blue", client_name="live-api.millie.co.kr", outcome="SUCCESS", le="1.073741824"}'
         values: '0x10 0+1x60'
-      - series: 'http_client_requests_seconds_count{job="checkbook-app", slot="blue", client_name="dapi.kakao.com", outcome="SUCCESS"}'
+      - series: 'http_client_requests_seconds_count{job="checkbook-app", slot="blue", client_name="data4library.kr", outcome="SUCCESS"}'
         values: '0x10 0+2x60'
-      - series: 'http_client_requests_seconds_bucket{job="checkbook-app", slot="blue", client_name="dapi.kakao.com", outcome="SUCCESS", le="1.073741824"}'
+      - series: 'http_client_requests_seconds_bucket{job="checkbook-app", slot="blue", client_name="data4library.kr", outcome="SUCCESS", le="1.073741824"}'
         values: '0x10 0+2x60'
     alert_rule_test:
       - eval_time: 70m
         alertname: cb-client-slow-burn
         exp_alerts:
-          - exp_labels: {tier: info, client_name: apis.yes24.com}
+          - exp_labels: {tier: info, client_name: live-api.millie.co.kr}
+
+  # YES24·카카오는 우리 상한(0.7초·1초)이 1.07초 구간 아래라 대상에서 뺐다 — 합성으로 넘겨도 울리지 않는다
+  - name: YES24·카카오는 외부 호출 느림 대상이 아니다
+    interval: 1m
+    input_series:
+      - series: 'http_client_requests_seconds_count{job="checkbook-app", slot="blue", client_name="apis.yes24.com", outcome="SUCCESS"}'
+        values: '0x10 0+2x60'
+      - series: 'http_client_requests_seconds_bucket{job="checkbook-app", slot="blue", client_name="apis.yes24.com", outcome="SUCCESS", le="1.073741824"}'
+        values: '0x10 0+0x60'
+      - series: 'http_client_requests_seconds_count{job="checkbook-app", slot="blue", client_name="dapi.kakao.com", outcome="SUCCESS"}'
+        values: '0x10 0+2x60'
+      - series: 'http_client_requests_seconds_bucket{job="checkbook-app", slot="blue", client_name="dapi.kakao.com", outcome="SUCCESS", le="1.073741824"}'
+        values: '0x10 0+0x60'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: cb-client-slow-burn
+        exp_alerts: []
 
   # ---------- 예산 ----------
   - name: 예산 게이지는 칸끼리 더하지 않는다(각 칸이 이미 전체 사용량)
