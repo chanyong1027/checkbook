@@ -82,7 +82,22 @@ public class MillieClient {
                 || response.respData().content().list() == null) {
             throw new MillieClientException("밀리 응답 구조 누락");
         }
-        return response.respData().content().list();
+        List<MillieBookItem> items = response.respData().content().list();
+        // 항목 필드 이름이 바뀌면 모든 항목이 같은 필드를 잃어 매칭이 안 되거나 '이용 불가'로 읽혀 "없어요"가 된다.
+        // 항목 하나만 빠진 건 정상일 수 있어 '하나도 없을 때'만 실패로 본다(MillieContractTest의 anySatisfy와 같은 기준)
+        if (!items.isEmpty() && items.stream().noneMatch(MillieClient::hasRequiredFields)) {
+            throw new MillieClientException("밀리 응답 항목 필드 누락");
+        }
+        return items;
+    }
+
+    // 실제 응답 표본(10-15, 항목 201개)에서 이 넷이 빠진 항목은 0개였다(결정 2026-11-10 카드 2)
+    private static boolean hasRequiredFields(MillieBookItem item) {
+        return item != null
+                && item.bookSeq() != null && !item.bookSeq().isBlank()
+                && item.contentName() != null && !item.contentName().isBlank()
+                && item.isService() != null
+                && item.isEbookRent() != null;
     }
 
     private static Throwable rootCause(Throwable e) {
