@@ -353,13 +353,13 @@ class SearchServiceTest {
     // ===== 로그 =====
 
     @Test
-    void 실패한_칸이_있으면_칸과_이유를_WARN_한_줄로_남긴다(CapturedOutput output) {
+    void 실패한_칸이_있으면_칸과_이유와_원인_문구를_WARN_한_줄로_남긴다(CapturedOutput output) {
         when(identificationService.identify(ISBN, null)).thenReturn(miss(Yes24Status.TIMEOUT, true));
 
         searchService.search(ISBN, null, null, null);
 
         assertThat(output).containsPattern(
-                "WARN .*통합 검색 일부 실패: code=" + ISBN + ", failed=\\[NEW_BOOK:TIMEOUT\\]");
+                "WARN .*통합 검색 일부 실패: code=" + ISBN + ", failed=\\[NEW_BOOK:TIMEOUT\\(타임아웃\\)\\]");
     }
 
     @Test
@@ -370,7 +370,19 @@ class SearchServiceTest {
 
         searchService.search(ISBN, null, null, null); // 좌표가 없어 공공도서관은 SKIPPED
 
-        assertThat(output).contains("failed=[NEW_BOOK:TIMEOUT, SUBSCRIPTION:UNAVAILABLE]");
+        assertThat(output).contains("failed=[NEW_BOOK:TIMEOUT(타임아웃), SUBSCRIPTION:UNAVAILABLE(밀리 HTTP 500)]");
+    }
+
+    // 응답 검증 실패(밀리 형식 변경 등)는 클라이언트가 로그를 남기지 않는다 — 원인 문구가 요약 줄에만 남는다(T5 재현, 카드 4).
+    // 예상 못 한 예외 문구의 줄바꿈은 한 줄로 펴서 로그 줄이 쪼개지거나 위조되지 않게 한다
+    @Test
+    void 원인_문구의_줄바꿈은_한_줄로_편다(CapturedOutput output) {
+        when(identificationService.identify(ISBN, null)).thenReturn(found(13500, YES24_URL));
+        when(millieBookService.findAvailability(any(), any())).thenThrow(new MillieClientException("첫 줄\r\nWARN 가짜 줄"));
+
+        searchService.search(ISBN, null, null, null);
+
+        assertThat(output).contains("failed=[SUBSCRIPTION:UNAVAILABLE(첫 줄  WARN 가짜 줄)]");
     }
 
     @Test

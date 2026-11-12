@@ -33,6 +33,7 @@ public enum ErrorCode {
     RATE_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "요청이 너무 많습니다. 잠시 후 다시 시도해주세요."),
     DAILY_REQUEST_LIMIT_EXCEEDED(HttpStatus.TOO_MANY_REQUESTS, "오늘 조회 한도를 모두 사용했어요. 자정 이후 다시 시도해 주세요."),
     PROVIDER_DAILY_LIMIT(HttpStatus.SERVICE_UNAVAILABLE, "오늘은 이용량이 많아 이 정보를 더 불러올 수 없어요. 내일 다시 시도해 주세요."),
+    BOOK_SEARCH_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "지금은 책을 찾을 수 없어요. 잠시 후 다시 시도해 주세요."),
 
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "일시적인 오류가 발생했습니다.");
 

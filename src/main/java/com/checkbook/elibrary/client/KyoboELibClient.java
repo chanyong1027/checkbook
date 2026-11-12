@@ -242,10 +242,20 @@ public class KyoboELibClient implements ELibClient {
 
         List<ELibrarySearchResponse.ELibraryBook> results = new ArrayList<>();
         Elements books = resultList.select("> li");
+        // 목록 안에 무언가 있는데 li가 하나도 없으면 항목 태그가 바뀐 것이다 — 0권("없음")이 아니다(T5 재현 B1).
+        // 비어 있는 목록 태그나 그 안에 빈 결과 문구만 있는 화면은 0건으로 둔다(0건 화면 모양을 사이트마다 확인하지 못했다).
+        // 문구는 목록 안에서만 본다 — 페이지 어딘가의 문구(숨긴 안내 블록 등)가 구조 변경을 '없음'으로 가리지 않게
+        if (books.isEmpty() && !resultList.children().isEmpty() && !hasEmptyResultMarker(resultList)) {
+            throw new ELibraryClientException(ELibraryClientException.Kind.STRUCTURE_CHANGED, "교보 검색 결과 항목 태그가 바뀌었습니다.");
+        }
 
+        int withoutLoanButtons = 0;
         for (Element book : books) {
             try {
                 results.add(parseBook(book, baseUrl));
+                if (!hasLoanButton(book)) {
+                    withoutLoanButtons++;
+                }
             } catch (Exception e) {
                 log.warn("교보 도서 파싱 실패, 건너뜀", e);
             }
@@ -254,12 +264,29 @@ public class KyoboELibClient implements ELibClient {
         if (!books.isEmpty() && results.isEmpty()) {
             throw new ELibraryClientException(ELibraryClientException.Kind.PARSE_FAILED, "교보 검색 결과를 파싱하지 못했습니다.");
         }
+        // 대출·예약 버튼이 모든 책에서 사라졌으면 버튼 이름이 바뀐 것이다 — 전부 "대출중"으로 답하지 않는다(T5 재현 B2).
+        // 일부만 없으면 그 책을 버리지 않고(버리면 매칭에서 빠져 도서관이 "없음"이 된다) 지금처럼 대출 불가로 둔다
+        if (!results.isEmpty() && withoutLoanButtons == results.size()) {
+            throw new ELibraryClientException(ELibraryClientException.Kind.PARSE_FAILED, "교보 대출 상태 버튼을 찾지 못했습니다.");
+        }
+        if (withoutLoanButtons > 0) {
+            log.warn("교보 대출 상태 버튼 없는 항목: {}, {}/{}권 — 대출 불가로 표시", baseUrl, withoutLoanButtons, results.size());
+        }
 
         return results;
     }
 
+    // 실제 교보: 빌릴 수 있으면 brwBtn("대출"), 다 빌려 갔으면 reveBtn("예약")만 있다(10-15 표본 18권 모두 둘 중 하나)
+    private static boolean hasLoanButton(Element book) {
+        return !book.select("input[name=brwBtn], input[name=reveBtn]").isEmpty();
+    }
+
     private boolean isEmptyResultPage(Document document) {
-        String text = document.text();
+        return hasEmptyResultMarker(document);
+    }
+
+    private static boolean hasEmptyResultMarker(Element element) {
+        String text = element.text();
         return EMPTY_RESULT_MARKERS.stream().anyMatch(text::contains);
     }
 

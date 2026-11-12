@@ -292,7 +292,7 @@ class MillieClientTest {
     }
 
     // Jackson 3 회귀: 값이 빠진 필드가 원시형이면 파싱 전체가 실패한다(FAIL_ON_NULL_FOR_PRIMITIVES).
-    // 항목의 선택 필드가 빠져도 항목을 버리지 않는다 (응답 코드 누락은 이제 구조 오류 — 위 테스트)
+    // 항목 하나의 필드가 빠져도 그 항목을 버리지 않는다. 필수 필드를 다 가진 항목이 하나라도 있으면 정상 응답이다
     @Test
     void parsesResponseWithMissingItemFlagsInsteadOfDroppingIt() throws Exception {
         server = new MockWebServer();
@@ -304,6 +304,7 @@ class MillieClientTest {
                           "RESP_DATA": {
                             "content": {
                               "list": [
+                                { "book_seq": "X0", "content_name": "온전한 도서", "is_service": true, "is_ebook_rent": true },
                                 { "book_seq": "X1", "content_name": "플래그 누락 도서", "is_service": true }
                               ]
                             }
@@ -314,8 +315,30 @@ class MillieClientTest {
 
         List<MillieBookItem> result = newClient().searchByTitle("플래그 누락 도서");
 
-        assertThat(result).hasSize(1);
-        assertThat(result.get(0).isEbookRent()).isNull();
-        assertThat(result.get(0).isAvailable()).isFalse();
+        assertThat(result).hasSize(2);
+        assertThat(result.get(1).isEbookRent()).isNull();
+        assertThat(result.get(1).isAvailable()).isFalse();
+    }
+
+    // 밀리가 항목 필드 이름을 바꾸면 모든 항목이 같은 필드를 잃는다. 그때 '밀리에는 없어요'(SUCCESS)가 아니라
+    // 실패로 올린다(T5 형식 변경 재현 B, 결정 2026-11-10 카드 2). 필수 4개: 매칭(제목)·이용 가능 판정(두 플래그)·링크(book_seq)
+    @ParameterizedTest(name = "[{index}] {0}")
+    @ValueSource(strings = {
+            "{ \"bookId\": \"A1\", \"content_name\": \"책\", \"is_service\": true, \"is_ebook_rent\": true }",
+            "{ \"book_seq\": \"A1\", \"title\": \"책\", \"is_service\": true, \"is_ebook_rent\": true }",
+            "{ \"book_seq\": \"A1\", \"content_name\": \"책\", \"service\": true, \"is_ebook_rent\": true }",
+            "{ \"book_seq\": \"A1\", \"content_name\": \"책\", \"is_service\": true, \"ebook_rent\": true }",
+            "{ \"book_seq\": \"\", \"content_name\": \"책\", \"is_service\": true, \"is_ebook_rent\": true }"
+    })
+    void throwsWhenNoItemHasAllRequiredFields(String item) throws Exception {
+        server = new MockWebServer();
+        server.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"RESP_CD\": 200, \"RESP_DATA\": {\"content\": {\"list\": [" + item + ", " + item + "]}}}"));
+        server.start();
+
+        assertThatThrownBy(() -> newClient().searchByTitle("책"))
+                .isInstanceOf(MillieClientException.class)
+                .hasMessage("밀리 응답 항목 필드 누락");
     }
 }

@@ -27,6 +27,29 @@ class BookSearchServiceTest {
         bookSearchService = new BookSearchService(kakaoBookClient);
     }
 
+    // 카카오 책 검색은 page 1~50만 받는다. 넘는 쪽은 부르지 않고 '목록 끝'으로 답한다 — 카카오 거절이 이제 503(장애)이라
+    // 그대로 부르면 '더 보기' 51번째가 장애 문구가 되고, 외부 요청만으로 5xx 알림을 켤 수 있다
+    @Test
+    void 쉰째_쪽은_카카오가_더_있다고_해도_마지막_쪽이다() {
+        when(kakaoBookClient.searchBooks("혼모노", 50, 10)).thenReturn(new KakaoBookResponse(
+                new KakaoBookResponse.Meta(1234, 1000, false), List.of()));
+
+        BookCandidateResponse response = bookSearchService.searchCandidates("혼모노", 50, 10);
+
+        assertThat(response.pagination().isEnd()).isTrue();
+        assertThat(response.pagination().totalCount()).isEqualTo(1234);
+    }
+
+    @Test
+    void 카카오가_받지_않는_51쪽부터는_부르지_않고_목록_끝으로_답한다() {
+        BookCandidateResponse response = bookSearchService.searchCandidates("혼모노", 51, 10);
+
+        assertThat(response.items()).isEmpty();
+        assertThat(response.pagination().page()).isEqualTo(51);
+        assertThat(response.pagination().isEnd()).isTrue();
+        org.mockito.Mockito.verifyNoInteractions(kakaoBookClient);
+    }
+
     @Test
     void searchCandidatesReturnsMappedItems() {
         when(kakaoBookClient.searchBooks("혼모노", 1, 10))
