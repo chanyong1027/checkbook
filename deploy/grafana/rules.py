@@ -181,9 +181,11 @@ def build_rules():
             runbook=[
                 "어느 경로인지: Explore `sum by (uri, status) (increase(http_server_requests_seconds_count"
                 f"{{{five_xx}}}[1h]))`",
-                "원인 로그: " + APP_LOGS + " | grep -A20 -E ' ERROR |카카오 도서 검색'",
-                "/api/books/search의 503이면 카카오 장애(BOOK_SEARCH_UNAVAILABLE, 원인 줄은 WARN `카카오 도서 검색 실패`) — "
-                "검색창 후보 목록만 막히고 대응은 기다림",
+                "원인 로그: " + APP_LOGS + " | grep -A20 -E ' ERROR |카카오 도서 검색|공급자 하루 예산 소진'",
+                "/api/books/search의 503은 검색창 검색이 막힌 것(추천 목록·공유 링크는 됨). 로그로 가른다 — "
+                "`카카오 도서 검색 실패`면 카카오 실패(스택이 4xx면 키·차단이라 기다려도 안 나음, 5xx·시간 초과면 기다림), "
+                "`응답 구조 누락`이면 응답 형식이 바뀐 것(코드를 고칠 일), "
+                "`공급자 하루 예산 소진: KAKAO`면 우리 예산이 다 찬 것(자정까지, '예산 차단선' 알림이 같이 옴)",
                 "배포 직후면 되돌리기 검토(deploy/README.md '되돌리기')",
             ]),
         Rule(
@@ -203,8 +205,9 @@ def build_rules():
             expr=increase("yes24_rate_limited_total", f'{APP}, by="remote", kind="day"', "10m") + " > 0",
             summary="YES24가 하루 한도 초과(RATE_002)를 돌려줬습니다 — 우리 셈의 차단선보다 먼저 막힘",
             runbook=[
-                "우리가 실제로 보낸 수: Explore `sum(increase(http_client_requests_seconds_count{" + APP
-                + ", client_name=\"apis.yes24.com\"}[24h]))` — 하루 한도(20,000)보다 한참 아래면 키가 다른 곳에서 "
+                "우리가 오늘 실제로 보낸 수: Explore 시간 범위를 오늘 0시(KST)부터 지금까지로 두고 Instant 질의로 "
+                "`sum(increase(http_client_requests_seconds_count{" + APP
+                + ", client_name=\"apis.yes24.com\"}[$__range]))` — 하루 한도(20,000)보다 한참 아래면 키가 다른 곳에서 "
                 "쓰이는 것, YES24 키 교체 검토",
                 "`external_budget_used`는 비교에 못 쓴다 — YES24가 준 잔량 0 헤더가 우리 셈을 한도까지 덮어쓴다"
                 "(그래서 '예산 차단선' 알림이 같이 온다)",
@@ -239,12 +242,14 @@ def build_rules():
                 "이유별: Explore `sum by (reason) (increase(search_section_total{section=\"{{ $labels.section }}\", "
                 "status=\"FAILED\"}[1h]))`",
                 "원인: " + APP_LOGS + " | grep '통합 검색 일부 실패' — 칸마다 원인 문구가 붙어 있다. 더 보려면 그 줄의 "
-                "traceId로 다시 grep(INFO 원인 줄까지). YES24는 문구가 'YES24 오류'뿐이라 같은 traceId의 `YES24 식별 실패` 줄을 본다",
-                "TIMEOUT은 공급자가 느린 것 — 대응은 기다림(서킷이 열리면 UNAVAILABLE로 바뀜). 섹션은 실패로 표시되고 나머지 결과는 나간다",
+                "traceId로 다시 grep(INFO 원인 줄까지). YES24는 문구가 'YES24 오류'뿐이라 같은 traceId의 `YES24 식별` 줄(실패·생략(서킷 열림)·예상 못 한 오류)을 본다",
+                "TIMEOUT은 대개 공급자가 느린 것 — 대응은 기다림(서킷이 열리면 UNAVAILABLE로 바뀜). 섹션은 실패로 표시되고 "
+                "나머지 결과는 나간다. 외부 호출 p99가 정상인데 TIMEOUT이면 우리 검색 풀에서 기다리다 마감을 넘긴 것(우리 쪽 혼잡)",
                 "UNAVAILABLE은 외부 오류·응답 형식 이상·서킷 열림·검색 풀 포화를 다 뜻한다 — 원인 문구로 가른다. "
                 "4xx(401·403)면 키·계약·차단이라 기다려도 안 낫는다: Explore `sum by (client_name, status) "
                 "(increase(http_client_requests_seconds_count{" + APP + "}[1h]))`",
-                "원인이 '호출 실패'(응답 없음)면 연결 거부·이름 찾기 실패·리셋을 로그로 못 가른다 — 서버에서 "
+                "YES24 원인이 '호출 실패'(응답 없음)면 연결 거부·이름 찾기 실패·리셋을 로그로 못 가른다(밀리·정보나루는 "
+                "WARN 줄의 cause=에 나온다) — 서버에서 "
                 "`curl -sS -o /dev/null -w '%{http_code} %{time_total}\\n' https://<공급자 호스트>/`",
                 "FAILED RATE_LIMITED는 YES24가 초당 한도로 거절한 것(우리 트래픽이 몰림, 공급자 장애 아님). "
                 "'서킷 열림'이 안 왔다고 공급자가 멀쩡한 건 아니다 — YES24는 4xx·429를 서킷 실패로 세지 않는다",
@@ -260,7 +265,8 @@ def build_rules():
             runbook=[
                 "분포: Explore `histogram_quantile(0.99, sum by (le) (rate(http_client_requests_seconds_bucket"
                 "{client_name=\"{{ $labels.client_name }}\"}[30m])))`",
-                "실패도 같이 늘었는지 '검색 섹션 실패 소진율' 알림 확인. 공급자 쪽이면 대응은 기다림",
+                "실패도 같이 늘었는지: 밀리는 '검색 섹션 실패 소진율', 정보나루는 '공공도서관 확인 못 함 비율' 알림 확인"
+                "(새 화면은 통합 검색의 도서관 칸이 늘 SKIPPED라 섹션 실패에 안 잡힌다). 공급자 쪽이면 대응은 기다림",
             ],
             lazy_metrics=("http_client_requests_seconds_count", "http_client_requests_seconds_bucket")),
         Rule(
