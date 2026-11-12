@@ -1,5 +1,6 @@
 package com.checkbook.common.exception;
 
+import com.checkbook.client.kakao.KakaoSearchUnavailableException;
 import com.checkbook.common.ratelimit.ClientDailyLimitExceededException;
 import com.checkbook.common.ratelimit.DailyBudgetExceededException;
 import jakarta.validation.ConstraintViolationException;
@@ -38,6 +39,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleProviderDailyLimit(DailyBudgetExceededException exception) {
         log.warn("공급자 하루 예산 소진: {}", exception.provider());
         return withRetryAfter(ErrorCode.PROVIDER_DAILY_LIMIT, exception.retryAfter());
+    }
+
+    // 후보 검색의 카카오 실패. 원인은 클라이언트가 WARN으로 남겼다. 빈 목록 대신 503이라 화면은 안내 문구를,
+    // 운영은 '서버 5xx' 알림을 본다. 언제 풀릴지 몰라 Retry-After는 붙이지 않는다
+    @ExceptionHandler(KakaoSearchUnavailableException.class)
+    public ResponseEntity<ErrorResponse> handleBookSearchUnavailable(KakaoSearchUnavailableException exception) {
+        return ResponseEntity.status(ErrorCode.BOOK_SEARCH_UNAVAILABLE.getHttpStatus())
+                .body(ErrorResponse.of(ErrorCode.BOOK_SEARCH_UNAVAILABLE));
     }
 
     private static ResponseEntity<ErrorResponse> withRetryAfter(ErrorCode errorCode, Duration retryAfter) {

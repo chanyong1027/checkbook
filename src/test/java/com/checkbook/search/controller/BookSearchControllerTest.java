@@ -1,5 +1,7 @@
 package com.checkbook.search.controller;
 
+import com.checkbook.client.kakao.KakaoSearchUnavailableException;
+import com.checkbook.common.exception.ErrorCode;
 import com.checkbook.common.exception.GlobalExceptionHandler;
 import com.checkbook.common.ratelimit.DailyBudgetExceededException;
 import com.checkbook.common.ratelimit.ExternalProvider;
@@ -50,6 +52,17 @@ class BookSearchControllerTest {
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(header().string("Retry-After", "60"))
                 .andExpect(jsonPath("$.code").value("PROVIDER_DAILY_LIMIT"));
+    }
+
+    @Test
+    void 카카오_호출이_실패하면_503과_안내_문구() throws Exception {
+        when(bookSearchService.searchCandidates("혼모노", 1, 10))
+                .thenThrow(new KakaoSearchUnavailableException(new RuntimeException("401")));
+
+        mockMvc.perform(get("/api/books/search").param("q", "혼모노"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value("BOOK_SEARCH_UNAVAILABLE"))
+                .andExpect(jsonPath("$.message").value(ErrorCode.BOOK_SEARCH_UNAVAILABLE.getMessage()));
     }
 
     @Test

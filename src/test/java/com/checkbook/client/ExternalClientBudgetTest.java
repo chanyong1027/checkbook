@@ -89,7 +89,7 @@ class ExternalClientBudgetTest {
     void 카카오는_예산_소진이면_빈_결과로_삼키지_않고_던진다() {
         KakaoBookClient client = new KakaoBookClient(RestClient.builder(), new KakaoBookProperties(baseUrl(), "test-key", 1000), budget);
 
-        // 다른 실패는 빈 결과로 삼키지만, 예산 소진은 사용자에게 이유를 보여야 한다
+        // 예산 소진은 호출 실패(KakaoSearchUnavailableException)와 다른 예외로 올라가 '내일 다시' 문구를 보인다
         assertThatThrownBy(() -> client.searchBooks("소년이 온다", 1, 10))
                 .isInstanceOf(DailyBudgetExceededException.class);
         assertThat(server.getRequestCount()).isZero();

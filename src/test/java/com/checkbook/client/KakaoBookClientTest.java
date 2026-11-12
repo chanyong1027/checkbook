@@ -2,6 +2,7 @@ package com.checkbook.client;
 
 import com.checkbook.client.kakao.KakaoBookClient;
 import com.checkbook.client.kakao.KakaoBookProperties;
+import com.checkbook.client.kakao.KakaoSearchUnavailableException;
 import com.checkbook.client.kakao.dto.KakaoBookResponse;
 import com.checkbook.common.ratelimit.ExternalCallBudget;
 import okhttp3.mockwebserver.MockResponse;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClient;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class KakaoBookClientTest {
 
@@ -49,6 +51,51 @@ class KakaoBookClientTest {
         assertThat(response.documents()).hasSize(1);
         assertThat(response.meta().totalCount()).isEqualTo(1);
         assertThat(response.meta().isEnd()).isNull();
+    }
+
+    // 카카오가 실패하면 '결과 없음'이 아니라 실패를 올린다 — 예전에는 빈 목록으로 삼켜 화면이 "검색 결과가 없어요"였다
+    @Test
+    void throwsWhenKakaoRespondsWithError() throws Exception {
+        server = new MockWebServer();
+        server.enqueue(new MockResponse().setResponseCode(401).setBody("{\"errorType\":\"AccessDeniedError\"}"));
+        server.start();
+
+        assertThatThrownBy(() -> client().searchBooks("혼모노", 1, 10))
+                .isInstanceOf(KakaoSearchUnavailableException.class);
+    }
+
+    @Test
+    void throwsWhenKakaoRespondsWithEmptyBody() throws Exception {
+        server = new MockWebServer();
+        server.enqueue(new MockResponse().setResponseCode(200).setHeader("Content-Type", "application/json"));
+        server.start();
+
+        assertThatThrownBy(() -> client().searchBooks("혼모노", 1, 10))
+                .isInstanceOf(KakaoSearchUnavailableException.class);
+    }
+
+    // 실제 0건은 그대로 빈 목록 — 실패와 섞이지 않는다
+    @Test
+    void returnsEmptyListWhenKakaoFindsNothing() throws Exception {
+        server = new MockWebServer();
+        server.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("""
+                        { "meta": { "total_count": 0, "pageable_count": 0, "is_end": true }, "documents": [] }
+                        """));
+        server.start();
+
+        KakaoBookResponse response = client().searchBooks("없는책제목", 1, 10);
+
+        assertThat(response.documents()).isEmpty();
+        assertThat(response.meta().totalCount()).isZero();
+    }
+
+    private KakaoBookClient client() {
+        return new KakaoBookClient(
+                RestClient.builder(),
+                new KakaoBookProperties(server.url("/").toString().replaceAll("/$", ""), "test-key", 1000),
+                ExternalCallBudget.unlimited());
     }
 
     @Test
