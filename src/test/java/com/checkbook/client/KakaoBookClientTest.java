@@ -64,10 +64,16 @@ class KakaoBookClientTest {
                 .isInstanceOf(KakaoSearchUnavailableException.class);
     }
 
-    @Test
-    void throwsWhenKakaoRespondsWithEmptyBody() throws Exception {
+    // 0건도 meta와 documents([])를 모두 준다 — 본문이 비거나 둘 중 하나가 빠지면 형식 변경이지 '없음'이 아니다
+    @org.junit.jupiter.params.ParameterizedTest(name = "[{index}] {0}")
+    @org.junit.jupiter.params.provider.ValueSource(strings = {
+            "",
+            "{\"documents\": []}",
+            "{\"meta\": {\"total_count\": 0, \"is_end\": true}}"
+    })
+    void throwsWhenKakaoBodyIsEmptyOrMissingStructure(String body) throws Exception {
         server = new MockWebServer();
-        server.enqueue(new MockResponse().setResponseCode(200).setHeader("Content-Type", "application/json"));
+        server.enqueue(new MockResponse().setResponseCode(200).setHeader("Content-Type", "application/json").setBody(body));
         server.start();
 
         assertThatThrownBy(() -> client().searchBooks("혼모노", 1, 10))
