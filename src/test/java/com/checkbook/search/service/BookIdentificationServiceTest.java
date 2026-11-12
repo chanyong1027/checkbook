@@ -341,6 +341,28 @@ class BookIdentificationServiceTest {
         assertThat(yes24CircuitBreaker().getState()).isEqualTo(CircuitBreaker.State.CLOSED);
     }
 
+    // 보낸 요청이 실패한 것(401·응답 검증 실패 등)만 WARN — 통합 검색 요약 줄의 YES24 칸 문구는 "YES24 오류"뿐이라
+    // 원인이 이 줄에만 있다(T5 재현, 결정 2026-11-10 카드 4). 한도·선제한(우리 쪽 생략·정상 흐름 제어)은 INFO 그대로
+    @ParameterizedTest(name = "[{index}] {0} sent={1} → {2}")
+    @MethodSource("identificationFailureLogLevels")
+    @org.junit.jupiter.api.extension.ExtendWith(org.springframework.boot.test.system.OutputCaptureExtension.class)
+    void sentFailuresAreLoggedAtWarn(Kind kind, boolean sent, String level,
+                                     org.springframework.boot.test.system.CapturedOutput output) {
+        when(yes24Client.lookupByIsbn(ISBN)).thenThrow(new Yes24Exception(kind, sent, "원인 문구"));
+
+        service.identify(ISBN, null);
+
+        assertThat(output).containsPattern(level + " .*YES24 식별 실패: .*kind=" + kind + ", sent=" + sent + ", message=원인 문구");
+    }
+
+    static Stream<Arguments> identificationFailureLogLevels() {
+        return Stream.of(
+                Arguments.of(Kind.FAILED, true, "WARN"),
+                Arguments.of(Kind.FAILED, false, "INFO"),
+                Arguments.of(Kind.RATE_LIMITED, true, "INFO"),
+                Arguments.of(Kind.DAILY_LIMIT, false, "INFO"));
+    }
+
     // YES24가 답을 준 실패(429·4xx·응답 검증 실패)는 YES24가 살아 있다는 뜻이라 실패로 세지 않는다
     @Test
     void answeredFailuresDoNotOpenCircuit() {

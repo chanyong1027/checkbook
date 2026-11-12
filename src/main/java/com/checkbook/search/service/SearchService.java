@@ -29,7 +29,9 @@ import java.net.http.HttpTimeoutException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -140,7 +142,7 @@ public class SearchService {
         newBook.appendTo(SearchSection.NEW_BOOK, statuses, failures);
         millie.appendTo(SearchSection.SUBSCRIPTION, statuses, failures);
         countSections(statuses);
-        warnIfSectionsFailed(code, statuses);
+        warnIfSectionsFailed(code, statuses, failures);
 
         PublicLibraryAvailabilityPage publicPage = library.value();
         List<PublicLibraryInfo> publicResults = publicPage != null ? publicPage.libraries() : List.of();
@@ -227,15 +229,25 @@ public class SearchService {
     }
 
     // 지표는 비율만 알려 준다. 조사의 입구가 되는 줄 — 마감 초과·풀 거절은 어느 칸인지 남는 곳이 여기뿐이다.
-    // WARN은 알림으로 가지 않고(ERROR만) 섹션 실패 알림의 안내 grep에 걸린다(deploy/grafana/rules.py)
-    private static void warnIfSectionsFailed(String code, List<SearchResponse.SectionStatusDetail> statuses) {
+    // WARN은 알림으로 가지 않고(ERROR만) 섹션 실패 알림의 안내 grep에 걸린다(deploy/grafana/rules.py).
+    // 칸마다 원인 문구(failures[].reason)를 붙인다 — 밀리 응답 검증 실패처럼 클라이언트가 로그를 안 남기는 실패는
+    // 원인이 응답 본문에만 있었다(T5 재현, 결정 2026-11-10 카드 4). 이미 응답으로 나가는 문구라 새로 드러나는 정보는 없다
+    private static void warnIfSectionsFailed(String code, List<SearchResponse.SectionStatusDetail> statuses,
+                                             List<SearchResponse.FailureDetail> failures) {
+        Map<SearchSection, String> causes = new EnumMap<>(SearchSection.class);
+        failures.forEach(failure -> causes.put(failure.section(), failure.reason()));
         List<String> failed = statuses.stream()
                 .filter(detail -> detail.status() == SearchSectionStatus.FAILED)
-                .map(detail -> detail.section() + ":" + detail.reason())
+                .map(detail -> detail.section() + ":" + detail.reason() + "(" + oneLine(causes.get(detail.section())) + ")")
                 .toList();
         if (!failed.isEmpty()) {
             log.warn("통합 검색 일부 실패: code={}, failed={}", code, failed);
         }
+    }
+
+    // 예상 못 한 예외의 문구는 줄바꿈을 품을 수 있다 — 로그 한 줄이 쪼개지거나 가짜 줄이 생기지 않게 편다
+    private static String oneLine(String text) {
+        return text == null ? "" : text.replace('\r', ' ').replace('\n', ' ');
     }
 
     /**

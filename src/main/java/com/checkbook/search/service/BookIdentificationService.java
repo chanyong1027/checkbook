@@ -16,6 +16,7 @@ import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryRegistry;
 import io.micrometer.core.instrument.MeterRegistry;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.event.Level;
 import org.springframework.stereotype.Service;
 
 import java.util.Locale;
@@ -78,7 +79,10 @@ public class BookIdentificationService {
                 case FAILED -> Yes24Status.FAILED;
             };
             sent = e.sent();
-            log.info("YES24 식별 실패: isbn={}, kind={}, sent={}, message={}{}", isbn13, e.kind(), sent, e.getMessage(),
+            // 보낸 요청이 실패한 것(401·응답 검증 실패 등)은 WARN — 통합 검색 요약 줄의 YES24 칸 문구는 "YES24 오류"뿐이라
+            // 원인이 이 줄에만 있다(결정 2026-11-10 카드 4). 시간 초과·한도·선제한은 흐름 제어나 다른 줄이 원인을 말해 INFO
+            Level level = sent && e.kind() == Yes24Exception.Kind.FAILED ? Level.WARN : Level.INFO;
+            log.atLevel(level).log("YES24 식별 실패: isbn={}, kind={}, sent={}, message={}{}", isbn13, e.kind(), sent, e.getMessage(),
                     e.getSuppressed().length > 0 ? " (재시도 못 보냄: " + e.getSuppressed()[0].getMessage() + ")" : "");
         } catch (RuntimeException e) {
             // 예상 못 한 예외도 검색 전체를 실패시키지 않는다. 요청이 나갔는지 알 수 없어 '보냄'으로 본다(FAILED)
