@@ -101,6 +101,15 @@ BASELINES = {
     "slow": {"datanaru": (10, 1000), "millie": (10, 1000), "kakao": (10, 1000), "yes24": (12, 1000)},
 }
 
+# '외부 호출 느림'(1.07초 넘는 호출 비율)의 대상. YES24·카카오는 뺀다(T5 재현, 11-10 사용자 결정 (a)):
+#  우리가 YES24는 0.7초(읽기 상한)에서, 카카오는 연결·읽기 각 1초에서 끊어 1.07초 구간에 닿지 않는다.
+#  실측: YES24 1,000ms 지연에서 4번 모두 약 0.705초, 카카오 1,500ms 지연에서 최대 1.0095초 — 둘 다 le=1.073741824 안.
+#  카카오는 연결도 느리고 읽기도 끝까지 걸려야만 넘을 수 있어 거의 울리지 않는다.
+#  두 곳의 느림은 다른 알림이 본다: YES24 식별은 섹션 실패(TIMEOUT), 카카오는 후보 검색 503(서버 5xx).
+#  잃는 것: YES24 추천 배치(categoryList, 읽기 상한 3초)는 1.07초를 넘을 수 있었는데 이제 이 알림으로는 안 본다
+#  (사용자 요청이 아니고, 실패하면 'featured 갱신 실패' 알림이 있다)
+SLOW_TARGETS = {p: v for p, v in BASELINES["slow"].items() if p not in ("yes24", "kakao")}
+
 # 검색 섹션 → 기대는 공급자. USED_BOOK은 링크만 만들어 실패하지 않으므로 뺀다
 SECTIONS = {
     "PUBLIC_LIBRARY": BASELINES["failure"]["datanaru"],
@@ -121,8 +130,8 @@ RULES = [
     ("server_5xx_slow", "urgent", SLOW, "6h", {"server": None}),
     ("section_failed_fast", "info", FAST, "1h", SECTIONS),
     ("section_failed_slow", "info", SLOW, "6h", SECTIONS),
-    ("client_slow_fast", "info", FAST, "1h", BASELINES["slow"]),
-    ("client_slow_slow", "info", SLOW, "6h", BASELINES["slow"]),
+    ("client_slow_fast", "info", FAST, "1h", SLOW_TARGETS),
+    ("client_slow_slow", "info", SLOW, "6h", SLOW_TARGETS),
 ]
 
 

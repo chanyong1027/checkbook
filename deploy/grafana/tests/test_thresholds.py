@@ -54,8 +54,8 @@ class MinimumCountTest(unittest.TestCase):
             self.assertGreaterEqual(suffix[n_min - 1], budget, "하나 작은 값도 예산 안이면 최소가 아니다")
 
     def test_오탐_예산은_등급_전체를_알림원_수로_나눈다(self):
-        # 즉시: 5xx 1h·6h, 낮: 섹션 3 × 2 + 공급자 4 × 2
-        self.assertEqual(thresholds.sources_per_tier(), {"urgent": 2, "info": 14})
+        # 즉시: 5xx 1h·6h, 낮: 섹션 3 × 2 + 느림 대상 2(정보나루·밀리) × 2
+        self.assertEqual(thresholds.sources_per_tier(), {"urgent": 2, "info": 10})
 
     def test_결정_카드에_적은_값(self):
         # 이 값이 바뀌면(기준선·예산·SLO 변경) 결정 카드 'SLO' 절도 같이 고친다
@@ -63,9 +63,10 @@ class MinimumCountTest(unittest.TestCase):
             "server_5xx_fast": {"server": 14},
             "server_5xx_slow": {"server": 34},
             "section_failed_fast": {"PUBLIC_LIBRARY": 14, "NEW_BOOK": 28, "SUBSCRIPTION": 14},
-            "section_failed_slow": {"PUBLIC_LIBRARY": 34, "NEW_BOOK": 184, "SUBSCRIPTION": 34},
-            "client_slow_fast": {"datanaru": 21, "millie": 21, "kakao": 21, "yes24": 21},
-            "client_slow_slow": {"datanaru": 67, "millie": 67, "kakao": 67, "yes24": 84},
+            # 새 책 6h 184 → 151: 느림 대상에서 YES24·카카오를 빼 낮 등급 알림원이 14 → 10이 되며 몫이 커짐(11-12 사용자 수용)
+            "section_failed_slow": {"PUBLIC_LIBRARY": 34, "NEW_BOOK": 151, "SUBSCRIPTION": 34},
+            "client_slow_fast": {"datanaru": 21, "millie": 21},
+            "client_slow_slow": {"datanaru": 67, "millie": 67},
         })
 
 
