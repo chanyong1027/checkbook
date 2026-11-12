@@ -200,6 +200,75 @@ class KyoboELibClientTest {
         }
     }
 
+    // ---- 안쪽 구조 변경(T5 형식 변경 재현 B1·B2, 결정 2026-11-10 카드 3). 합성 HTML, 교보 템플릿 구조만 흉내 ----
+
+    @Test
+    void 목록_태그_안에_항목이_li가_아니면_구조_변경이다() throws Exception {
+        // B1: 예전에는 '> li'가 0이라 0권(SUCCESS) — 모든 도서관이 "없음"으로 보였다
+        assertSearchFails("""
+                <ul class="book_resultList">
+                  <div><ul><li class="tit"><a href="/d?id=1">재현용 도서</a></li></ul>
+                       <input type="button" name="brwBtn" value="대출"></div>
+                </ul>
+                """, ELibraryClientException.Kind.STRUCTURE_CHANGED);
+    }
+
+    @Test
+    void 모든_항목에_대출_예약_버튼이_없으면_파싱_실패다() throws Exception {
+        // B2: 버튼 이름이 바뀌면 예전에는 모든 책이 available=false("대출중")였다
+        assertSearchFails("""
+                <ul class="book_resultList">
+                  <li><ul><li class="tit"><a href="/d?id=1">재현용 도서</a></li></ul>
+                      <input type="button" name="loanBtn" value="대출"></li>
+                  <li><ul><li class="tit"><a href="/d?id=2">재현용 도서 2</a></li></ul>
+                      <input type="button" name="loanBtn" value="예약"></li>
+                </ul>
+                """, ELibraryClientException.Kind.PARSE_FAILED);
+    }
+
+    @Test
+    void 대출중인_책은_예약_버튼만_있어도_정상이다() throws Exception {
+        // 실제 교보: 다 빌려 간 책은 brwBtn이 없고 reveBtn("예약")만 있다(10-15 표본 18권 중 9권)
+        var books = searchHtml("""
+                <ul class="book_resultList">
+                  <li><ul><li class="tit"><a href="/d?id=1">재현용 도서</a></li></ul>
+                      <input type="button" name="reveBtn" value="예약"></li>
+                </ul>
+                """);
+
+        assertThat(books).singleElement().satisfies(book -> assertThat(book.available()).isFalse());
+    }
+
+    @Test
+    void 버튼_없는_항목이_일부면_지금처럼_대출_불가로_둔다() throws Exception {
+        // 항목 단위로 버리면 그 책이 매칭에서 빠져 도서관이 "없음"이 된다 — 페이지 전체일 때만 실패
+        var books = searchHtml("""
+                <ul class="book_resultList">
+                  <li><ul><li class="tit"><a href="/d?id=1">대출 가능 도서</a></li></ul>
+                      <input type="button" name="brwBtn" value="대출"></li>
+                  <li><ul><li class="tit"><a href="/d?id=2">버튼 없는 도서</a></li></ul></li>
+                </ul>
+                """);
+
+        assertThat(books).extracting(b -> b.available()).containsExactly(true, false);
+    }
+
+    private java.util.List<com.checkbook.elibrary.dto.ELibrarySearchResponse.ELibraryBook> searchHtml(String resultList)
+            throws Exception {
+        try (MockWebServer server = new MockWebServer()) {
+            server.enqueue(new MockResponse()
+                    .setHeader("Content-Type", "text/html; charset=UTF-8")
+                    .setBody("<html><body>" + resultList + "</body></html>"));
+            server.start();
+            return client.search(base(server), "재현용 도서");
+        }
+    }
+
+    private void assertSearchFails(String resultList, ELibraryClientException.Kind kind) {
+        assertThatThrownBy(() -> searchHtml(resultList))
+                .isInstanceOfSatisfying(ELibraryClientException.class, e -> assertThat(e.kind()).isEqualTo(kind));
+    }
+
     @Test
     void searchNoResultMessageWithoutResultListReturnsEmptyList() throws Exception {
         try (MockWebServer server = new MockWebServer()) {
