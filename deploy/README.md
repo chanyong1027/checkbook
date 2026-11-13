@@ -243,6 +243,22 @@ python3 deploy/grafana/apply-alerts.py --yes    # 반영 + 확인. --yes가 없�
 - 알림의 `Value: A=…, B=…`: A는 질의 값(규칙마다 비율·사용량·건수 등), B는 조건 결과(울렸으면 늘 1). 요약 첫 줄에도 A를 백분율·정수로 넣었다.
 - Explore에서 ERROR 로그 질의가 No data면 대개 그 시간에 앱 로그가 없어서다(트래픽이 없으면 앱이 거의 찍지 않는다). `sum by (level) (count_over_time({job="checkbook/journal"}[1h]))`를 24시간 범위로 보면 라벨·전송이 살아 있는지 알 수 있다.
 
+## 첫 주 지표 (`report/first_week_report.py`)
+공개 첫 주에 매일 한 번 서버에서 돌려 하루(KST) 사용량·예산·제한·밀리 매칭을 한 번에 본다. 읽기만 한다(DB는 읽기 전용 트랜잭션으로만 붙는다). 표준 라이브러리만 쓰므로 설치할 것은 없다.
+
+```bash
+sudo git -C /opt/checkbook/app pull --ff-only                                   # 처음 한 번, 또는 스크립트가 바뀌었을 때
+sudo python3 /opt/checkbook/app/deploy/report/first_week_report.py               # 어제(KST)
+sudo python3 /opt/checkbook/app/deploy/report/first_week_report.py --date 2026-11-15
+```
+
+- 원천: Nginx `access.log*`·`error.log*`(회전된 `.1`·`.gz`까지), journald 앱 컨테이너 로그, DB `external_call_budget`(서비스 중인 릴리스 `/opt/checkbook/current/deploy`의 compose로 붙는다), 두 칸의 `/actuator/prometheus`. `sudo`가 필요한 이유는 docker·journald·Nginx 로그 읽기다.
+- 건수는 로그 줄 수와 DB 값으로 센다. Grafana의 `increase()`는 처음 생긴 카운터의 첫 값을 0으로 계산해, 하루 1~2건인 사건이 사라질 수 있다. 액추에이터 값은 "앱이 뜬 뒤 합계"라 따로 표시한다(배포하면 0부터).
+- 원천마다 먼저 살아 있는지 본다. 그날 접근 로그가 한 줄도 없거나(외부 헬스 체크 줄도 없음), 앱 로그가 0줄이거나, 예산 행이 없고 그 뒤 사용량 기록도 없거나, 두 칸 모두 응답이 없으면 그 값 대신 `수집 안 됨`과 이유를 찍고 종료 코드 1로 끝난다. 나머지 원천 값은 그대로 낸다. 예산 행은 있어도 자정 뒤 DB 기록이 없고, 앱이 오늘 쓴 양(`external_budget_used`)이 있거나 동기화 실패가 있으면 `미확정`을 붙인다(그날 몫 일부가 DB에 안 들어갔을 수 있다). 오늘 쓴 양이 0이면 아침에 기록이 없는 것이 정상이라 붙이지 않는다(`updated_at`은 사용량을 쓸 때만 오르고, 새벽 예약 호출은 월·목에만 있다).
+- 상세 조회·검색·IP별 분포는 2xx 응답만 센다(429·스캐너 4xx가 1인당 조회 수를 부풀리지 않게). 우리 하루 한도 거절은 IP당 하루 첫 거절만 로그에 남아 "거절된 IP 수"로 보이고, 횟수는 액추에이터 합계로 따로 보인다.
+- IP는 개수와 분포만 찍고 원문은 출력·저장하지 않는다.
+- 출력 끝의 표 한 행을 재가동 기록에 붙인다. 정보나루 적중률은 `1 - bookExist 호출 ÷ 배치 응답 기관 수`(앱이 뜬 뒤 합계)로 낸 근사다.
+
 ## 요청 제한 dry run
 `checkbook.conf`의 `limit_req_dry_run`은 10-18에 `off`로 바꿨다(실제로 막는다). 근거: 사용자가 없을 때는 "실제 사용자가 걸리는지" 관찰할 수 없어 숫자로 판단했다. 사람이 책 한 권을 볼 때는 짧은 시간에 3~4회 요청이라 `/api/` 5r/s(burst 20)에 걸리지 않고, 10-18 access.log 바깥 요청(거의 전부 스캐너)에서도 `/api/`를 IP·초당 5회 넘게 보낸 경우가 0건이었다. 하루 총량과 공급자 예산은 앱 안 요청 제한(`application.yaml`의 `rate-limit`)이 지킨다.
 
