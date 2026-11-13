@@ -46,14 +46,14 @@ class Yes24ClientWiringTest {
         assertThat(yes24Client).isNotNull();
     }
 
-    // 계약 6절: 100ms마다 1건, 대기 0
+    // 계약 6절: 100ms마다 1건. 허가는 최대 200ms 기다린다(결정 2026-11-13 카드 3)
     @Test
     void selfRateLimiterMatchesContract() {
         RateLimiterConfig config = rateLimiterRegistry.rateLimiter(Yes24ClientConfig.RATE_LIMITER_NAME).getRateLimiterConfig();
 
         assertThat(config.getLimitRefreshPeriod()).isEqualTo(Duration.ofMillis(100));
         assertThat(config.getLimitForPeriod()).isEqualTo(1);
-        assertThat(config.getTimeoutDuration()).isEqualTo(Duration.ZERO);
+        assertThat(config.getTimeoutDuration()).isEqualTo(Duration.ofMillis(200));
     }
 
     // ---- 회복력 설정이 application.yaml에서 읽히는가 (T4 결정 카드 2·6, 규칙 2·3) ----

@@ -11,6 +11,7 @@ import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -42,7 +43,8 @@ import java.util.concurrent.atomic.AtomicReference;
  *   <li>그 밖의 결과는 {@link Yes24Exception}: 타임아웃, 한도(초당·일일), 오류·응답 검증 실패</li>
  * </ul>
  * 우리 쪽 선제한(100ms당 1건)과 일일 중단은 이 클라이언트 경계에 둔다. 식별과 추천 배치가 같은 한도를 나눠 쓰기 때문이다.
- * 식별은 허가를 기다리지 않고, 배치(목록)만 최대 {@link #LIST_PERMIT_MAX_WAIT} 기다린다(PR-3 결정 카드 3).
+ * 허가가 바로 없으면 다음 빈 주기를 예약하고 설정 상한(timeout-duration)까지 기다린다(결정 2026-11-13).
+ * 배치(목록)는 그 위에 약 {@link #LIST_PERMIT_MAX_WAIT}까지 다시 시도한다(PR-3 결정 카드 3, 마지막 예약 대기만큼 넘을 수 있다).
  */
 @Slf4j
 public class Yes24Client {
@@ -65,6 +67,9 @@ public class Yes24Client {
     private final ExternalCallBudget budget;
     private final Duration callDeadline;
     private final Duration listCallDeadline;
+    // 식별이 허가를 받기까지 기다린 시간(거절은 yes24.rate.limited{by=self,kind=second}가 센다).
+    // 라이브러리의 waiting_threads는 라이브러리가 직접 재울 때만 올라 이 경로에서는 늘 0이다
+    private final Timer permitWait;
     private final Yes24DailyStop dailyStop = new Yes24DailyStop();
     // 마지막 응답 시점의 관측치. 재시작 직후에는 값이 없다(NaN)
     private final AtomicReference<Double> remainingDay = new AtomicReference<>(Double.NaN);
@@ -103,6 +108,9 @@ public class Yes24Client {
         this.meterRegistry = meterRegistry;
         this.clock = clock;
         this.budget = budget;
+        this.permitWait = Timer.builder("yes24.permit.wait")
+                .description("YES24 식별이 선제한 허가를 받기까지 기다린 시간")
+                .register(meterRegistry);
 
         Gauge.builder("yes24.remaining.day", remainingDay, AtomicReference::get)
                 .description("YES24 일일 호출 잔량 (마지막 응답 헤더 관측치)")
@@ -123,9 +131,13 @@ public class Yes24Client {
         if (budget.isExhausted(ExternalProvider.YES24)) {
             throw budgetExhausted();
         }
-        if (!rateLimiter.acquirePermission()) {
+        long waitStarted = System.nanoTime();
+        if (!acquirePermit()) {
             throw selfRateLimited();
         }
+        permitWait.record(System.nanoTime() - waitStarted, TimeUnit.NANOSECONDS);
+        // 기다리는 동안 먼저 나간 식별 요청이 RATE_002를 받았을 수 있다 — 허가를 얻었어도 보내지 않는다(배치와 같은 규칙)
+        checkDailyStop();
         acquireBudget();
 
         Instant sentAt = clock.instant();
@@ -136,7 +148,7 @@ public class Yes24Client {
     }
 
     /**
-     * 메인 추천 배치용 카테고리 목록. 식별과 같은 선제한·일일 중단을 쓰되 허가는 최대 1초 기다린다.
+     * 메인 추천 배치용 카테고리 목록. 식별과 같은 선제한·일일 중단을 쓰되 허가는 약 1초(+ 마지막 예약 대기 최대 상한) 기다린다.
      * 항목 단위 검증은 하지 않는다(ISBN 없는 굿즈가 섞여 온다) — 호출자가 거른다.
      */
     public List<Yes24CategoryListResponse.Item> categoryList(Yes24CategoryList list, String categoryId, int pageSize) {
@@ -196,11 +208,33 @@ public class Yes24Client {
         return new Yes24Exception(Kind.RATE_LIMITED, false, "YES24 선제한 거절");
     }
 
-    // 같은 제한기에서 100ms 간격으로 허가를 다시 시도한다. 식별 경로의 '대기 0'은 그대로 둔다
+    /**
+     * 다음 빈 주기를 예약하고 그때까지 잔다. 설정 상한 안에 못 받으면 예약하지 않고 기다리지 않은 채 false.
+     * {@code acquirePermission()}은 못 받을 걸 알면서도 상한만큼 잔 뒤 false라 쓰지 않는다(결정 2026-11-13 F3).
+     * 예약은 도착 순서대로 다음 주기를 받으므로 뒤에 온 요청이 끼어들지 못하고, 기다리는 수는 상한 ÷ 주기로 묶인다.
+     * 자는 중 인터럽트면 보내지 않는다 — 예약한 한 칸은 돌려받을 수 없어 버린다
+     */
+    private boolean acquirePermit() {
+        long waitNanos = rateLimiter.reservePermission();
+        if (waitNanos < 0) {
+            return false;
+        }
+        if (waitNanos > 0) {
+            try {
+                Thread.sleep(Duration.ofNanos(waitNanos));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // 같은 제한기에서 100ms 간격으로 허가를 다시 시도한다. 식별은 설정 상한까지만 기다린다
     private void acquireForList() {
         long deadlineNanos = System.nanoTime() + LIST_PERMIT_MAX_WAIT.toNanos();
-        while (!rateLimiter.acquirePermission()) {
-            if (System.nanoTime() >= deadlineNanos) {
+        while (!acquirePermit()) {
+            if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadlineNanos) {
                 throw selfRateLimited();
             }
             try {

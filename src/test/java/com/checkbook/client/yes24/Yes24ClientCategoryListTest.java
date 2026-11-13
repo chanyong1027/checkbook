@@ -184,9 +184,30 @@ class Yes24ClientCategoryListTest {
         assertThat(counter("self", "second")).isEqualTo(1.0);
     }
 
-    // 식별 경로는 지금처럼 대기 0 — 배치용 대기가 사용자 요청으로 새지 않는다
+    // 운영 상한(200ms)을 둔 제한기에서도 배치는 약 1초 동안 다시 시도하고, 못 받으면 보내지 않는다(1차 리뷰 4a).
+    // 최악은 1초 + 마지막 예약 대기(상한)이다
     @Test
-    void identificationStillRejectsImmediately() {
+    void givesUpAfterMaxWaitWithProductionPermitTimeout() {
+        RateLimiter limiter = RateLimiter.of("yes24-test", RateLimiterConfig.custom()
+                .limitForPeriod(1)
+                .limitRefreshPeriod(Duration.ofMinutes(1))
+                .timeoutDuration(Duration.ofMillis(200))
+                .build());
+        Yes24Client client = newClient(limiter);
+        server.enqueue(json(404, errorBody("GOODS_002")));
+        client.lookupByIsbn(ISBN);
+
+        long started = System.nanoTime();
+        assertFails(client, Kind.RATE_LIMITED, false);
+        long waitedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+
+        assertThat(waitedMs).isBetween(900L, 2_000L);
+        assertThat(server.getRequestCount()).isEqualTo(1);
+    }
+
+    // 식별은 설정 상한(여기서 0)까지만 기다린다 — 배치용 1초 대기가 사용자 요청으로 새지 않는다
+    @Test
+    void identificationDoesNotUseListWait() {
         RateLimiter limiter = limiter(1, Duration.ofMinutes(1));
         Yes24Client client = newClient(limiter);
         server.enqueue(json(200, listBody()));
@@ -239,11 +260,12 @@ class Yes24ClientCategoryListTest {
         CountDownLatch listWaiting = new CountDownLatch(1);
         CountDownLatch lookupFinished = new CountDownLatch(1);
         RateLimiter limiter = mock(RateLimiter.class);
-        when(limiter.acquirePermission())
-                .thenReturn(true)                                   // 식별 요청
+        // reservePermission: 0 = 바로 허가, -1 = 상한 안에 못 받음
+        when(limiter.reservePermission())
+                .thenReturn(0L)                                     // 식별 요청
                 .thenAnswer(invocation -> {                         // 목록 호출: 첫 확인은 이미 통과한 상태
                     listWaiting.countDown();
-                    return lookupFinished.await(5, TimeUnit.SECONDS);
+                    return lookupFinished.await(5, TimeUnit.SECONDS) ? 0L : -1L;
                 });
         // 식별 마감(기본 300ms)은 전송부터 재므로, 바쁜 CI에서 래치 순서가 끝나기 전에 넘지 않게 넉넉히
         Yes24Client client = newClient(limiter, Duration.ofSeconds(2));
@@ -275,7 +297,7 @@ class Yes24ClientCategoryListTest {
         assertThat(lookupFailure.get().sent()).isTrue();
         assertThat(server.getRequestCount()).isEqualTo(1);
         // 두 번째 확인까지 왔음(목록 호출이 허가를 받은 뒤 막혔음)을 보장
-        verify(limiter, times(2)).acquirePermission();
+        verify(limiter, times(2)).reservePermission();
     }
 
     @Test

@@ -7,6 +7,7 @@ import com.checkbook.common.ratelimit.ExternalProvider;
 import com.checkbook.common.ratelimit.RateLimitProperties;
 import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RateLimiterConfig;
+import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
@@ -16,6 +17,7 @@ import okhttp3.mockwebserver.SocketPolicy;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.web.client.RestClient;
@@ -26,13 +28,21 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class Yes24ClientTest {
 
@@ -434,6 +444,173 @@ class Yes24ClientTest {
         assertThat(counter("self", "second")).isEqualTo(1.0);
     }
 
+    // ---- 선제한 대기: 다음 빈 주기를 예약하고 상한(설정 timeout-duration)까지 기다린다(결정 2026-11-13) ----
+
+    @Test
+    void 허가가_비어_있으면_기다리지_않고_보낸다() {
+        Yes24Client client = newClient(waitingLimiter(Duration.ofMinutes(1), Duration.ofMillis(200)));
+        server.enqueue(json(404, errorBody("GOODS_002")));
+
+        assertThat(client.lookupByIsbn(ISBN)).isEmpty();
+
+        assertThat(permitWait().count()).isEqualTo(1);
+        assertThat(permitWait().max(TimeUnit.MILLISECONDS)).isLessThan(50.0);
+    }
+
+    @Test
+    void 다음_주기_허가를_예약해_기다렸다가_보낸다() {
+        Yes24Client client = newClient(waitingLimiter(Duration.ofMillis(200), Duration.ofMillis(500)));
+        for (int i = 0; i < 3; i++) {
+            server.enqueue(json(404, errorBody("GOODS_002")));
+        }
+
+        long started = System.nanoTime();
+        for (int i = 0; i < 3; i++) {
+            assertThat(client.lookupByIsbn(ISBN)).isEmpty();
+        }
+
+        // 첫 건은 이번 주기, 둘째·셋째는 다음 주기들을 예약한다 → 셋째는 거의 한 주기(200ms)를 통째로 기다린다
+        assertThat(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)).isGreaterThanOrEqualTo(190L);
+        assertThat(server.getRequestCount()).isEqualTo(3);
+        assertThat(counter("self", "second")).isZero();
+        assertThat(permitWait().count()).isEqualTo(3);
+        assertThat(permitWait().max(TimeUnit.MILLISECONDS)).isGreaterThanOrEqualTo(100.0);
+    }
+
+    // [직접 작성] 핵심 시험. 라이브러리의 acquirePermission()은 허가가 상한 안에 오지 않을 걸 알면서도
+    // 상한만큼 잔 뒤 거절한다(결정 카드 F3). 우리 코드에 그 함정이 없는지 확인한다
+    @Test
+    void 대기가_상한을_넘으면_기다리지_않고_바로_거절한다() {
+        // 1분에 1건, 상한 200ms: 첫 호출이 이번 주기 허가를 쓰면 다음 허가까지 약 1분이라 상한을 넘는다
+        Yes24Client client = newClient(waitingLimiter(Duration.ofMinutes(1), Duration.ofMillis(200)));
+        server.enqueue(json(404, errorBody("GOODS_002")));
+        client.lookupByIsbn(ISBN);
+
+        // TODO(직접): 두 번째 호출이 '선제한 거절·보내지 않음'으로 끝나는지, 그리고 그게 '기다리지 않고' 일어났는지 확인한다
+        //  - 거절 확인은 아래 assertFails(client, kind, sent)를 쓸 수 있다
+        //  - "기다리지 않았다"를 무엇으로, 어떤 기준값으로 확인할지 정한다(이 파일과 Yes24ClientCategoryListTest의 시간 재는 시험 참고)
+        long started = System.nanoTime();
+        assertFails(client, Kind.RATE_LIMITED, false);
+        long tookMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+        assertThat(tookMs).isLessThan(50L);
+
+        assertThat(server.getRequestCount()).isEqualTo(1);
+        assertThat(counter("self", "second")).isEqualTo(1.0);
+    }
+
+    @Test
+    @Timeout(5)   // 인터럽트 처리가 깨지면 실패 대신 1분을 자므로 멈추지 않게 끊는다
+    void 대기_중_인터럽트되면_보내지_않고_인터럽트_표시를_남긴다() {
+        // 다음 허가까지 약 1분, 상한 2분 → 두 번째 호출은 예약하고 잠들려 한다
+        Yes24Client client = newClient(waitingLimiter(Duration.ofMinutes(1), Duration.ofMinutes(2)));
+        server.enqueue(json(404, errorBody("GOODS_002")));
+        client.lookupByIsbn(ISBN);
+
+        Thread.currentThread().interrupt();
+        try {
+            assertFails(client, Kind.RATE_LIMITED, false);
+            assertThat(Thread.currentThread().isInterrupted()).as("인터럽트 표시를 되살린다").isTrue();
+        } finally {
+            Thread.interrupted();   // 다음 시험에 새지 않게 지운다
+        }
+        assertThat(server.getRequestCount()).isEqualTo(1);
+        assertThat(counter("self", "second")).isEqualTo(1.0);
+    }
+
+    // 운영 설정(100ms마다 1건, 상한 200ms)에서 5명이 한꺼번에 오면 이번 주기 1건 + 다음 두 주기 예약 2건이 나가고
+    // (경계가 끼면 1건 더) 나머지는 기다리지 않고 바로 거절된다. 받은 요청은 주기마다 1건이라 대기는 0·d·d+100ms 꼴이다
+    @Test
+    @Timeout(10)
+    void 동시에_몰리면_주기마다_한_건씩_나가고_넘친_요청은_바로_거절된다() throws Exception {
+        Yes24Client client = newClient(waitingLimiter(Duration.ofMillis(100), Duration.ofMillis(200)));
+        server.setDispatcher(new Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) {
+                return json(404, errorBody("GOODS_002"));
+            }
+        });
+        int callers = 5;
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService pool = Executors.newFixedThreadPool(callers);
+        List<Future<Long>> rejectedAfterMs = new ArrayList<>();
+        try {
+            for (int i = 0; i < callers; i++) {
+                rejectedAfterMs.add(pool.submit(() -> {
+                    start.await();
+                    long started = System.nanoTime();
+                    try {
+                        client.lookupByIsbn(ISBN);
+                        return -1L;   // 보냄
+                    } catch (Yes24Exception e) {
+                        assertThat(e.kind()).isEqualTo(Kind.RATE_LIMITED);
+                        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+                    }
+                }));
+            }
+            start.countDown();
+            List<Long> rejected = new ArrayList<>();
+            for (Future<Long> f : rejectedAfterMs) {
+                long ms = f.get(5, TimeUnit.SECONDS);
+                if (ms >= 0) {
+                    rejected.add(ms);
+                }
+            }
+
+            int sent = server.getRequestCount();
+            assertThat(sent).isBetween(3, 4);
+            assertThat(rejected).hasSize(callers - sent);
+            assertThat(rejected).allSatisfy(ms -> assertThat(ms).as("넘친 요청은 기다리지 않는다").isLessThan(100L));
+            assertThat(counter("self", "second")).isEqualTo(callers - sent);
+            assertThat(permitWait().count()).isEqualTo(sent);
+            // 셋째 예약은 이번 주기 뒤 두 번째 주기 시작이라 적어도 한 주기(100ms) 가까이 기다린다
+            assertThat(permitWait().max(TimeUnit.MILLISECONDS)).isGreaterThanOrEqualTo(90.0);
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    // 허가를 기다리는 동안 먼저 나간 식별 요청이 RATE_002를 받으면, 허가를 얻은 뒤에도 보내지 않는다(1차 리뷰 1).
+    // 순서를 시간이 아니라 래치로 고정한다: A 전송 → B가 허가를 기다림 → 서버가 A에 RATE_002 → 중단 시작 → B에 허가
+    @Test
+    void 허가를_기다리는_동안_일일_중단이_시작되면_보내지_않는다() throws Exception {
+        CountDownLatch secondWaiting = new CountDownLatch(1);
+        CountDownLatch firstFinished = new CountDownLatch(1);
+        RateLimiter limiter = mock(RateLimiter.class);
+        when(limiter.reservePermission())
+                .thenReturn(0L)                                     // A: 바로 허가
+                .thenAnswer(invocation -> {                         // B: 첫 일일 중단 확인은 이미 통과한 상태
+                    secondWaiting.countDown();
+                    return firstFinished.await(5, TimeUnit.SECONDS) ? 0L : -1L;
+                });
+        // 읽기 마감은 전송부터 재므로, 바쁜 CI에서 래치 순서가 끝나기 전에 넘지 않게 넉넉히
+        Yes24Client client = newClient(limiter, Duration.ofSeconds(2));
+        server.setDispatcher(new Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
+                secondWaiting.await(5, TimeUnit.SECONDS);
+                return json(429, errorBody("RATE_002"));
+            }
+        });
+
+        AtomicReference<Yes24Exception> firstFailure = new AtomicReference<>();
+        Thread first = new Thread(() -> {
+            try {
+                firstFailure.set(catchThrowableOfType(Yes24Exception.class, () -> client.lookupByIsbn(ISBN)));
+            } finally {
+                firstFinished.countDown();
+            }
+        });
+        first.start();
+        assertThat(server.takeRequest(1, TimeUnit.SECONDS)).as("A가 먼저 나감").isNotNull();
+
+        assertFails(client, Kind.DAILY_LIMIT, false);
+
+        first.join(5_000);
+        assertThat(firstFailure.get()).isNotNull();
+        assertThat(firstFailure.get().kind()).isEqualTo(Kind.DAILY_LIMIT);
+        assertThat(server.getRequestCount()).isEqualTo(1);
+    }
+
     // ---- 잔량 게이지 ----
 
     @Test
@@ -528,12 +705,29 @@ class Yes24ClientTest {
                 .build()));
     }
 
+    // 주기마다 1건, 허가를 최대 timeout까지 기다리는 제한기(운영은 100ms·200ms)
+    private static RateLimiter waitingLimiter(Duration period, Duration timeout) {
+        return RateLimiter.of("yes24-wait", RateLimiterConfig.custom()
+                .limitForPeriod(1)
+                .limitRefreshPeriod(period)
+                .timeoutDuration(timeout)
+                .build());
+    }
+
+    private Timer permitWait() {
+        return meterRegistry.get("yes24.permit.wait").timer();
+    }
+
     private Yes24Client newClient(RateLimiter rateLimiter) {
+        return newClient(rateLimiter, Duration.ofMillis(300));
+    }
+
+    private Yes24Client newClient(RateLimiter rateLimiter, Duration readTimeout) {
         Yes24Properties properties = new Yes24Properties(
                 server.url("/").toString().replaceAll("/$", ""),
                 "test-key",
                 Duration.ofMillis(200),
-                Duration.ofMillis(300),
+                readTimeout,
                 Duration.ofSeconds(3));
         return new Yes24Client(RestClient.builder(), properties, rateLimiter, meterRegistry, clock, budget);
     }
