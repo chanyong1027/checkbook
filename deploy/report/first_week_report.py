@@ -355,6 +355,7 @@ class Report:
     budget: BudgetSummary = None
     metrics: MetricsSummary = None
     missing: dict = dataclasses.field(default_factory=dict)  # 원천 → 이유
+    partial: dict = dataclasses.field(default_factory=dict)  # 원천 → 못 읽은 파일(값이 실제보다 적을 수 있음)
 
 
 def build_report(day, sources):
@@ -368,11 +369,19 @@ def build_report(day, sources):
             rep.missing[name] = f"{type(e).__name__}: {e}"
             return None
 
-    rep.access = collect("Nginx 접근 로그", lambda: summarize_access(sources.access_lines(), start, end))
+    def read(name, fn):
+        lines, failed = fn(start)
+        if failed:
+            rep.partial[name] = ", ".join(failed)
+        return lines
+
+    rep.access = collect("Nginx 접근 로그",
+                         lambda: summarize_access(read("Nginx 접근 로그", sources.access_lines), start, end))
     if rep.access and not rep.access.alive:
         rep.missing["Nginx 접근 로그"] = "그날 줄이 하나도 없음(헬스 체크 줄도 없음)"
     rep.limits = collect("Nginx 오류 로그",
-                         lambda: summarize_nginx_limits(sources.error_lines(), start, end, sources.server_tz()))
+                         lambda: summarize_nginx_limits(read("Nginx 오류 로그", sources.error_lines), start, end,
+                                                        sources.server_tz()))
     rep.app = collect("앱 로그", lambda: summarize_app_log(sources.app_lines(start, end)))
     if rep.app and not rep.app.alive:
         rep.missing["앱 로그"] = "그날 앱 로그 0줄(매일 도는 스케줄 로그도 없음)"
@@ -382,15 +391,26 @@ def build_report(day, sources):
     rep.metrics = collect("액추에이터", lambda: summarize_metrics(sources.prometheus()))
     if rep.metrics and not rep.metrics.alive:
         rep.missing["액추에이터"] = "블루·그린 두 칸 모두 응답 없음"
-    _confirm_budget(rep)
+    _check_budget(rep)
     return rep
 
 
-def _confirm_budget(rep):
-    """'미확정'은 자정 뒤 DB 기록이 없을 때 붙는다. 그런데 아침에는 사용자 호출이 없고 새벽 예약 호출도 월·목에만 있어
-    정상이어도 기록이 없다. 앱이 오늘 쓴 양이 0이고 동기화 실패도 없으면, 아직 DB에 안 쓴 그날 몫도 있을 수 없으니 확정으로 본다"""
+def _check_budget(rep):
+    """그날 예산 값을 확정으로 볼지 정한다.
+    - 동기화는 행마다 저장하다 처음 실패에서 멈추고 나머지 증가분을 메모리로 되돌린다(ExternalCallBudgetSyncer.sync).
+      그래서 테이블 전체의 마지막 갱신이 자정 뒤여도 어떤 공급자 몫은 빠졌을 수 있다 → 동기화 실패가 없음을 액추에이터로
+      확인해야 확정이다. 실패 수는 '앱이 뜬 뒤 합계'라 예전 실패도 미확정으로 잡는다(보수적, 시각은 journald로 본다).
+    - 자정 뒤 기록이 없어도, 앱이 오늘 쓴 양이 0이고 실패도 없으면 아직 DB에 안 쓴 그날 몫이 있을 수 없어 확정이다
+      (아침에는 사용자 호출이 없고 새벽 예약 호출은 월·목에만 있어, 이 규칙이 없으면 화~일 아침마다 거짓으로 뜬다)."""
     b, m = rep.budget, rep.metrics
-    if b and b.alive and b.note.startswith("미확정") and m and m.alive and m.today_used == 0 and m.sync_failures == 0:
+    if not (b and b.alive):
+        return
+    if not (m and m.alive):
+        b.note = "미확정 — 액추에이터가 없어 동기화 실패 여부를 못 봄"
+    elif m.sync_failures:
+        b.note = (f"미확정 — 앱이 뜬 뒤 예산 DB 동기화 실패 {m.sync_failures}회, 일부 공급자 몫이 빠졌을 수 있음"
+                  "(journald '공급자 예산 DB 동기화 실패'·'복구' 시각 확인)")
+    elif b.note.startswith("미확정") and m.today_used == 0:
         b.note = ""
 
 
@@ -448,7 +468,7 @@ def markdown_row(rep):
         f"{lim.rejected} ({lim.unique_clients})" if l_ok else MISSING,
         f"{app.millie_failed}/{app.millie_zero}" if app_ok else MISSING,
         (", ".join(f"{k} {v}" for k, v in sorted(app.section_failed.items())) or "0") if app_ok else MISSING,
-        ", ".join(rep.missing) or "-",
+        ", ".join([*rep.missing, *(f"{n}(일부)" for n in rep.partial if n not in rep.missing)]) or "-",
     ]
     return "| " + " | ".join(cells) + " |"
 
@@ -458,7 +478,12 @@ def render(rep):
     out = [f"CheckBook 첫 주 지표 — {rep.day.isoformat()} (KST 00:00~24:00, UTC {start:%m-%d %H:%M}~{end:%m-%d %H:%M})", ""]
     out.append("[원천]")
     for name in SOURCES:
-        out.append(f"  {name}: {'정상' if _ok(rep, name) else MISSING + ' — ' + rep.missing[name]}")
+        if not _ok(rep, name):
+            out.append(f"  {name}: {MISSING} — {rep.missing[name]}")
+        elif name in rep.partial:
+            out.append(f"  {name}: 일부만 — 못 읽은 파일 {rep.partial[name]}, 값이 실제보다 적을 수 있음")
+        else:
+            out.append(f"  {name}: 정상")
     out.append("")
 
     out.append("[얼마나 썼나] Nginx 접근 로그, 헬스 체크 제외, 사람·봇 구분 없음")
@@ -541,34 +566,41 @@ def render(rep):
 
 # ---------- 실제 서버 원천 ----------
 
-def _read_logs(pattern):
-    """회전된 파일(.1, .2.gz …)까지 읽는다. 하나도 없으면 실패"""
+def _read_logs(pattern, since):
+    """회전된 파일(.1, .2.gz …)까지 읽는다. (줄, 못 읽은 파일 이름)을 돌려준다. 하나도 못 읽으면 실패.
+    못 읽은 파일 하나가 나머지까지 버리게 하지 않되, 그 파일에 창의 줄이 있었을 수 있으면(마지막 수정이 창 시작 뒤)
+    숨기지 않고 돌려준다 — 값이 실제보다 적을 수 있다는 표시가 된다. 창 전에 끝난 파일은 어차피 세지 않으니 뺀다"""
     paths = sorted(glob.glob(pattern))
     if not paths:
         raise FileNotFoundError(f"{pattern} 없음")
-    lines, read = [], 0
+    lines, read, failed = [], 0, []
     for path in paths:
         opener = gzip.open if path.endswith(".gz") else open
         try:
             with opener(path, "rt", encoding="utf-8", errors="replace") as f:
                 lines.extend(f.read().splitlines())
             read += 1
-        except (OSError, EOFError):
-            continue  # 잘린 .gz 하나가 나머지 파일까지 버리게 하지 않는다(회전 직후 오늘 파일이 대개 멀쩡하다)
+        except (OSError, EOFError) as e:
+            try:
+                relevant = os.path.getmtime(path) >= since.timestamp()
+            except OSError:
+                relevant = True
+            if relevant:
+                failed.append(f"{os.path.basename(path)}({type(e).__name__})")
     if not read:
         raise OSError(f"{pattern} 하나도 못 읽음")
-    return lines
+    return lines, failed
 
 
 class ServerSources:
     def __init__(self, nginx_dir, env_file, deploy_dir):
         self.nginx_dir, self.env_file, self.deploy_dir = nginx_dir, env_file, deploy_dir
 
-    def access_lines(self):
-        return _read_logs(os.path.join(self.nginx_dir, "access.log*"))
+    def access_lines(self, start):
+        return _read_logs(os.path.join(self.nginx_dir, "access.log*"), start)
 
-    def error_lines(self):
-        return _read_logs(os.path.join(self.nginx_dir, "error.log*"))
+    def error_lines(self, start):
+        return _read_logs(os.path.join(self.nginx_dir, "error.log*"), start)
 
     def server_tz(self):
         return dt.datetime.now().astimezone().tzinfo
@@ -625,7 +657,7 @@ def main(argv=None):
     day = args.date or (dt.datetime.now(KST).date() - dt.timedelta(days=1))
     rep = build_report(day, ServerSources(args.nginx_log_dir, args.env_file, args.deploy_dir))
     print(render(rep))
-    return 1 if rep.missing else 0
+    return 1 if rep.missing or rep.partial else 0
 
 
 if __name__ == "__main__":

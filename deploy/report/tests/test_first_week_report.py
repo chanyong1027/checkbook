@@ -257,19 +257,33 @@ class ReadLogsTest(unittest.TestCase):
                 f.write("x" * 1000)
             with open(os.path.join(d, "access.log.2.gz"), "r+b") as f:
                 f.truncate(30)
-            self.assertEqual(r._read_logs(os.path.join(d, "access.log*")), ["오늘 줄"])
+            an_hour_ago = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=1)
+            lines, failed = r._read_logs(os.path.join(d, "access.log*"), an_hour_ago)
+            self.assertEqual(lines, ["오늘 줄"])
+            self.assertEqual(failed, ["access.log.2.gz(EOFError)"])  # 창 시작 뒤에 수정된 파일이라 창의 줄이 있었을 수 있다
+
+    def test_창_전에_끝난_파일은_못_읽어도_일부로_치지_않는다(self):
+        with tempfile.TemporaryDirectory() as d:
+            with open(os.path.join(d, "access.log"), "w") as f:
+                f.write("오늘 줄\n")
+            old = os.path.join(d, "access.log.9.gz")
+            with open(old, "wb") as f:
+                f.write(b"not gzip")
+            os.utime(old, (START.timestamp() - 86400, START.timestamp() - 86400))
+            self.assertEqual(r._read_logs(os.path.join(d, "access.log*"), START)[1], [])
 
     def test_하나도_못_읽으면_실패(self):
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaises(OSError):
-                r._read_logs(os.path.join(d, "access.log*"))
+                r._read_logs(os.path.join(d, "access.log*"), START)
 
 
 class FakeSources:
     """원천 하나씩 죽여 볼 수 있는 가짜"""
 
-    def __init__(self, budget_last=None, prom=PROM, **dead):
+    def __init__(self, budget_last=None, prom=PROM, partial_files=(), **dead):
         self.dead = dead
+        self.partial_files = list(partial_files)
         self.budget_last = END.timestamp() + 30 if budget_last is None else budget_last
         self.prom = prom
 
@@ -277,15 +291,18 @@ class FakeSources:
         if self.dead.get(name):
             raise OSError(f"{name} 읽기 실패(시험)")
 
-    def access_lines(self):
+    def access_lines(self, start):
         self._check("access")
+        return self.access_list(), self.partial_files
+
+    def access_list(self):
         return [access("203.0.113.1", utc(1), "/api/search?code=1"),
                 access("203.0.113.1", utc(2), "/api/search?code=2"),
                 access("198.51.100.9", utc(3), "/api/health")]
 
-    def error_lines(self):
+    def error_lines(self, start):
         self._check("error")
-        return []
+        return [], []
 
     def server_tz(self):
         return dt.timezone.utc
@@ -347,6 +364,22 @@ class ReportTest(unittest.TestCase):
         rep = r.build_report(DAY, FakeSources(budget_last=END.timestamp() - 600,
                                               prom=PROM + 'external_budget_used{provider="yes24"} 12.0\n'))
         self.assertIn("미확정", r.markdown_row(rep))
+
+    def test_일부_파일을_못_읽으면_정상이_아니라_일부로_표시한다(self):
+        rep = r.build_report(DAY, FakeSources(partial_files=["access.log.1(PermissionError)"]))
+        self.assertIn("Nginx 접근 로그: 일부만", r.render(rep))
+        self.assertIn("Nginx 접근 로그(일부)", r.markdown_row(rep))
+
+    def test_자정_뒤_기록이_있어도_동기화_실패가_있으면_미확정(self):
+        # 행마다 저장하다 첫 실패에서 멈추므로 다른 공급자 행만 자정 뒤에 쓰였을 수 있다
+        prom = PROM.replace("external_budget_sync_failures_total 0.0", "external_budget_sync_failures_total 2.0")
+        rep = r.build_report(DAY, FakeSources(prom=prom))
+        self.assertIn("미확정", r.markdown_row(rep))
+        self.assertIn("동기화 실패 2회", r.render(rep))
+
+    def test_액추에이터가_없으면_예산은_미확정(self):
+        rep = r.build_report(DAY, FakeSources(actuator=True))
+        self.assertIn("950 미확정", r.render(rep))
 
     def test_IP_원문은_출력에_나오지_않는다(self):
         rep = r.build_report(DAY, FakeSources())
