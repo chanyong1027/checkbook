@@ -1,0 +1,39 @@
+name: CI Deploy Tools
+
+# 서버에서 사람이 돌리는 운영 도구(deploy/report)를 고치는 PR에서 합성 데이터 시험을 돌린다.
+# 서버·DB·외부 서비스에는 닿지 않고 비밀값도 쓰지 않는다. 사용법은 deploy/README.md '첫 주 지표'
+on:
+  pull_request:
+    paths:
+      - 'deploy/report/**'
+      - '.github/workflows/ci-deploy-tools.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/report/**'
+      - '.github/workflows/ci-deploy-tools.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v4
+
+      # 서버 python3 버전에 가깝게 둔다(표준 라이브러리만 씀)
+      - name: Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 첫 주 지표 보고 시험
+        run: python3 -m unittest discover -s deploy/report/tests -v
