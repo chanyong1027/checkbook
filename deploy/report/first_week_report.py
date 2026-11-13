@@ -449,6 +449,8 @@ def _check_budget(rep):
         reason = f"그날 0시 뒤 동기화 실패·종료 때 미반영 로그 {failures}줄, 일부 공급자 몫이 빠졌을 수 있음"
     elif not (m and m.alive):
         reason = "액추에이터가 없어 동기화 상태를 못 봄"
+    elif m.note:
+        reason = m.note  # 지표가 빠진 칸은 시작 시각도 실패 수도 모른다
     elif (starts := _count(rep.sync_events, (APP_START_MARKER,))) == 0 and m.started_at > start:
         reason = "지금 앱은 0시 뒤에 떴는데 시작 로그가 없음(앱 로그가 빠졌을 수 있음)"
     elif (stops := _count(rep.sync_events, GRACEFUL_MARKERS)) < starts + 1 - len(m.slots):

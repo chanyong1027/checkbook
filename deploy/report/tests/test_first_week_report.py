@@ -237,7 +237,19 @@ class MetricsTest(unittest.TestCase):
             def prometheus(self):
                 return prom
         rep = r.build_report(DAY, TwoSlots())
-        self.assertIn("응답에 동기화 실패 지표가 없음", rep.budget.note)
+        self.assertIn("미확정 — 칸 green 응답에 지표 없음", rep.budget.note)
+
+    def test_0시_뒤에_뜬_칸이_정상이어도_다른_칸이_깨졌으면_예산은_미확정(self):
+        # CodeRabbit #87 후속: 깨진 칸은 시작 시각을 몰라 로그만으로 판정할 수 없다
+        late = PROM.replace("process_start_time_seconds 1.7631504E9",
+                            f"process_start_time_seconds {START.timestamp() + 3600}")
+        prom = {"blue": r.parse_prometheus(late), "green": r.parse_prometheus("<html>error</html>")}
+
+        class TwoSlots(FakeSources):
+            def prometheus(self):
+                return prom
+        rep = r.build_report(DAY, TwoSlots(sync_events=["Started CheckbookApplication in 20 seconds"]))
+        self.assertIn("칸 green 응답에 지표 없음", rep.budget.note)
 
     def test_동기화_지표가_없으면_0이_아니라_모름이다(self):
         m = r.summarize_metrics({"blue": r.parse_prometheus("process_start_time_seconds 1.7E9\n")})
