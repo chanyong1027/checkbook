@@ -269,7 +269,7 @@ def summarize_metrics(by_slot):
     m = MetricsSummary(True, sorted(by_slot))
     starts, wait_count, wait_sum, wait_max = [], 0, 0.0, 0.0
     rate_limited, section, rejected = collections.Counter(), {}, collections.Counter()
-    for samples in by_slot.values():
+    for samples in by_slot.values():  # 칸이 둘이면(전환 중) 더한다
         for name, labels, value in samples:
             if name == "process_start_time_seconds":
                 starts.append(value)
@@ -303,6 +303,15 @@ def summarize_metrics(by_slot):
     if not starts:
         # 응답은 왔지만 JVM이면 늘 있는 지표조차 없다(Prometheus 형식이 아닌 오류 페이지 등) → 값을 믿지 않는다
         return MetricsSummary(False, sorted(by_slot), note="응답에 지표가 없음(Prometheus 형식이 아님?)")
+    # 칸마다 따로 본다. 한 칸만 지표가 빠져도 합계는 그 칸 몫을 모르는 값이라 '모름'으로 둔다(다른 칸 값만으로 0을 믿지 않게)
+    names = {slot: {name for name, _, _ in samples} for slot, samples in by_slot.items()}
+    broken = sorted(slot for slot, n in names.items() if "process_start_time_seconds" not in n)
+    if broken:
+        m.note = f"칸 {', '.join(broken)} 응답에 지표 없음 — 그 칸 몫은 모름"
+    if any("external_budget_sync_failures_total" not in n for n in names.values()):
+        m.sync_failures = None
+    if any("external_budget_used" not in n for n in names.values()):
+        m.today_used = None
     m.started_at = dt.datetime.fromtimestamp(min(starts), dt.timezone.utc)
     if wait_count:
         m.permit_wait = (wait_count, wait_sum / wait_count, wait_max)
@@ -360,7 +369,7 @@ class Report:
     metrics: MetricsSummary = None
     missing: dict = dataclasses.field(default_factory=dict)  # 원천 → 이유
     partial: dict = dataclasses.field(default_factory=dict)  # 원천 → 못 읽은 파일(값이 실제보다 적을 수 있음)
-    sync_events: list = None  # 그날 0시부터 지금까지 예산 동기화 실패·종료 때 미반영 로그. None이면 못 읽음
+    sync_events: list = None  # 그날 0시부터 지금까지 동기화 실패·종료 때 미반영·앱 시작·정상 종료 로그. None이면 못 읽음
     sync_events_error: str = ""
 
 
@@ -406,6 +415,14 @@ def build_report(day, sources):
 
 
 SYNC_EVENT_MARKERS = ("공급자 예산 DB 동기화 실패", "종료 때 쓰지 않음")
+APP_START_MARKER = "Started CheckbookApplication in"
+# Spring Boot 4.1 tomcat GracefulShutdown의 문구(jar에서 확인, 11-14). aborted도 그 뒤 빈 정리(@PreDestroy flush)는 돈다
+GRACEFUL_MARKERS = ("Graceful shutdown complete", "Graceful shutdown aborted")
+LIFECYCLE_MARKERS = SYNC_EVENT_MARKERS + (APP_START_MARKER,) + GRACEFUL_MARKERS
+
+
+def _count(lines, markers):
+    return sum(1 for line in lines if any(k in line for k in markers))
 
 
 def _check_budget(rep):
@@ -416,6 +433,10 @@ def _check_budget(rep):
     로그는 실패가 시작될 때(한 번)와 ②일 때 남는다. 그래서 그날 0시부터 지금까지 이 로그가 없고
     - 지금 프로세스가 0시 뒤에 떴으면: 그 전 프로세스의 실패는 ② 로그로, 이후 실패는 시작 로그로 범위 안에 남았을 것 → 확정
     - 0시 전에 떴으면: 0시 전에 시작해 이어진 실패는 범위 밖에 로그가 있다 → 액추에이터 실패 카운터(앱이 뜬 뒤 합계)로 본다
+    ③ 강제 종료(SIGKILL·OOM·재부팅)면 종료 정리(@PreDestroy)가 안 돌아 ② 로그도 없이 증가분을 잃는다(실패가 없어도
+       마지막 동기화 뒤 최대 10초치). 정상 종료는 Spring이 'Graceful shutdown complete'를 남기므로, 그날 0시부터 지금까지
+       앱 시작 수보다 정상 종료 수가 모자라면 강제 종료가 있었다고 본다. 칸 하나는 늘 떠 있으니 끝난 프로세스 수 ≈
+       시작 수 + 1 - 지금 떠 있는 칸 수(0시에 앱이 꺼져 있었으면 과하게 잡지만 드물다).
     자정 뒤 기록이 없어도 앱이 오늘 쓴 양이 0이면 아직 DB에 안 쓴 그날 몫이 없어 확정이다(새벽 예약 호출은 월·목에만 있다)."""
     b, m = rep.budget, rep.metrics
     if not (b and b.alive):
@@ -424,10 +445,15 @@ def _check_budget(rep):
     reason = None
     if rep.sync_events is None:
         reason = f"앱 로그로 동기화 실패를 확인 못 함({rep.sync_events_error})"
-    elif rep.sync_events:
-        reason = f"그날 0시 뒤 동기화 실패·종료 때 미반영 로그 {len(rep.sync_events)}줄, 일부 공급자 몫이 빠졌을 수 있음"
+    elif failures := _count(rep.sync_events, SYNC_EVENT_MARKERS):
+        reason = f"그날 0시 뒤 동기화 실패·종료 때 미반영 로그 {failures}줄, 일부 공급자 몫이 빠졌을 수 있음"
     elif not (m and m.alive):
         reason = "액추에이터가 없어 동기화 상태를 못 봄"
+    elif (starts := _count(rep.sync_events, (APP_START_MARKER,))) == 0 and m.started_at > start:
+        reason = "지금 앱은 0시 뒤에 떴는데 시작 로그가 없음(앱 로그가 빠졌을 수 있음)"
+    elif (stops := _count(rep.sync_events, GRACEFUL_MARKERS)) < starts + 1 - len(m.slots):
+        reason = (f"그날 0시 뒤 앱 시작 {starts}회에 정상 종료 {stops}회 — 강제 종료(OOM·재부팅 등)로 "
+                  "아직 DB에 안 쓴 증가분을 잃었을 수 있음")
     elif m.started_at <= start:
         if m.sync_failures is None:
             reason = "응답에 동기화 실패 지표가 없음"
@@ -568,7 +594,8 @@ def render(rep):
     out.append("[앱이 뜬 뒤 합계] 액추에이터 — 하루 값이 아님, 배포하면 0부터")
     if _ok(rep, "액추에이터"):
         m = rep.metrics
-        out.append(f"  칸 {', '.join(m.slots)}, 시작 {_kst(m.started_at) if m.started_at else '모름'}")
+        out.append(f"  칸 {', '.join(m.slots)}, 시작 {_kst(m.started_at) if m.started_at else '모름'}"
+                   + (f" ({m.note})" if m.note else ""))
         if m.permit_wait:
             c, avg, mx = m.permit_wait
             out.append(f"  YES24 허가 대기 {c}건 평균 {avg * 1000:.1f}ms, 최근 최대 {mx * 1000:.0f}ms")
@@ -642,7 +669,7 @@ class ServerSources:
 
     def budget_sync_events(self, start):
         now = dt.datetime.now(dt.timezone.utc)
-        return [line for line in self.app_lines(start, now) if any(k in line for k in SYNC_EVENT_MARKERS)]
+        return [line for line in self.app_lines(start, now) if any(k in line for k in LIFECYCLE_MARKERS)]
 
     def budget(self, day):
         sql = (f"SELECT budget_key, used FROM external_call_budget WHERE usage_date = DATE '{day.isoformat()}';\n"

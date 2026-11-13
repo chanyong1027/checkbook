@@ -221,6 +221,24 @@ class MetricsTest(unittest.TestCase):
         self.assertFalse(m.alive)
         self.assertIn("지표가 없음", m.note)
 
+    def test_한_칸만_지표가_빠져도_합계는_모름이다(self):
+        # CodeRabbit #87: blue 정상 + green 오류 페이지면 blue 값만으로 실패 0을 믿으면 안 된다
+        m = r.summarize_metrics({"blue": r.parse_prometheus(PROM + 'external_budget_used{provider="yes24"} 0\n'),
+                                 "green": r.parse_prometheus("<html>error</html>")})
+        self.assertTrue(m.alive)
+        self.assertIsNone(m.sync_failures)
+        self.assertIsNone(m.today_used)
+        self.assertIn("칸 green 응답에 지표 없음", m.note)
+
+    def test_한_칸만_지표가_빠지면_예산은_미확정(self):
+        prom = {"blue": r.parse_prometheus(PROM), "green": r.parse_prometheus("<html>error</html>")}
+
+        class TwoSlots(FakeSources):
+            def prometheus(self):
+                return prom
+        rep = r.build_report(DAY, TwoSlots())
+        self.assertIn("응답에 동기화 실패 지표가 없음", rep.budget.note)
+
     def test_동기화_지표가_없으면_0이_아니라_모름이다(self):
         m = r.summarize_metrics({"blue": r.parse_prometheus("process_start_time_seconds 1.7E9\n")})
         self.assertIsNone(m.sync_failures)
@@ -412,11 +430,37 @@ class ReportTest(unittest.TestCase):
         self.assertIn("미확정", r.markdown_row(rep))
         self.assertIn("종료 때 미반영 로그 1줄", rep.budget.note)
 
-    def test_0시_뒤에_뜬_프로세스는_그날_로그에_실패가_없으면_확정(self):
-        # 카운터만으로 보면 배포한 날마다 거짓 미확정이 된다 — 그 전 프로세스의 실패는 종료 로그로 남는다
+    def test_0시_뒤_정상_배포는_확정(self):
+        # 카운터만으로 보면 배포한 날마다 거짓 미확정이 된다 — 새 칸 시작 + 옛 칸 정상 종료면 빠진 몫이 없다
+        restarted = PROM.replace("process_start_time_seconds 1.7631504E9",
+                                 f"process_start_time_seconds {START.timestamp() + 3600}")
+        rep = r.build_report(DAY, FakeSources(prom=restarted, sync_events=[
+            "... INFO ... Started CheckbookApplication in 21.3 seconds (process running for 23.0)",
+            "... INFO ... Graceful shutdown complete"]))
+        self.assertEqual(rep.budget.note, "")
+
+    def test_0시_뒤_강제_종료가_있었으면_미확정(self):
+        # CodeRabbit #87: 실패가 0시 전에 시작되고 SIGKILL로 끝나면 종료 로그도 없이 증가분을 잃는다
+        restarted = PROM.replace("process_start_time_seconds 1.7631504E9",
+                                 f"process_start_time_seconds {START.timestamp() + 3600}")
+        rep = r.build_report(DAY, FakeSources(prom=restarted, sync_events=[
+            "... INFO ... Started CheckbookApplication in 21.3 seconds (process running for 23.0)"]))
+        self.assertIn("앱 시작 1회에 정상 종료 0회", rep.budget.note)
+
+    def test_0시_뒤에_떴는데_시작_로그가_없으면_미확정(self):
         restarted = PROM.replace("process_start_time_seconds 1.7631504E9",
                                  f"process_start_time_seconds {START.timestamp() + 3600}")
         rep = r.build_report(DAY, FakeSources(prom=restarted))
+        self.assertIn("시작 로그가 없음", rep.budget.note)
+
+    def test_전환_중이라_두_칸이_떠_있으면_옛_칸_종료는_아직_없어도_된다(self):
+        both = {"blue": r.parse_prometheus(PROM),
+                "green": r.parse_prometheus(PROM.replace("process_start_time_seconds 1.7631504E9",
+                                                         f"process_start_time_seconds {START.timestamp() + 3600}"))}
+        rep = r.Report(DAY, budget=r.summarize_budget([("YES24", 1)], END.timestamp() + 60, END),
+                       metrics=r.summarize_metrics(both),
+                       sync_events=["Started CheckbookApplication in 20 seconds"])
+        r._check_budget(rep)
         self.assertEqual(rep.budget.note, "")
 
     def test_동기화_로그를_못_읽으면_예산은_미확정(self):
