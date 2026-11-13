@@ -207,12 +207,24 @@ class MetricsTest(unittest.TestCase):
 
     def test_NaN_게이지에_멈추지_않는다(self):
         m = r.summarize_metrics({"blue": r.parse_prometheus(
-            'external_budget_limit{kind="block",provider="yes24"} NaN\nratelimit_client_rejected_total 7.0\n')})
+            'process_start_time_seconds 1.7E9\nexternal_budget_limit{kind="block",provider="yes24"} NaN\n'
+            'ratelimit_client_rejected_total 7.0\n')})
         self.assertEqual(m.block_limits, {"yes24": 0})
         self.assertEqual(m.client_rejected_total, 7)
 
     def test_배치가_없으면_적중률은_없다(self):
-        self.assertIsNone(r.summarize_metrics({"blue": r.parse_prometheus("library_batch_items_total{state=\"AVAILABLE\"} 0\n")}).hit_rate)
+        text = "process_start_time_seconds 1.7E9\nlibrary_batch_items_total{state=\"AVAILABLE\"} 0\n"
+        self.assertIsNone(r.summarize_metrics({"blue": r.parse_prometheus(text)}).hit_rate)
+
+    def test_지표가_하나도_없는_응답은_수집_안_됨(self):
+        m = r.summarize_metrics({"blue": r.parse_prometheus("<html>502 Bad Gateway</html>")})
+        self.assertFalse(m.alive)
+        self.assertIn("지표가 없음", m.note)
+
+    def test_동기화_지표가_없으면_0이_아니라_모름이다(self):
+        m = r.summarize_metrics({"blue": r.parse_prometheus("process_start_time_seconds 1.7E9\n")})
+        self.assertIsNone(m.sync_failures)
+        self.assertIsNone(m.today_used)
 
     def test_칸이_하나도_없으면_수집_안_됨(self):
         self.assertFalse(r.summarize_metrics({}).alive)
@@ -281,8 +293,9 @@ class ReadLogsTest(unittest.TestCase):
 class FakeSources:
     """원천 하나씩 죽여 볼 수 있는 가짜"""
 
-    def __init__(self, budget_last=None, prom=PROM, partial_files=(), **dead):
+    def __init__(self, budget_last=None, prom=PROM, partial_files=(), sync_events=(), **dead):
         self.dead = dead
+        self.sync_events = list(sync_events)
         self.partial_files = list(partial_files)
         self.budget_last = END.timestamp() + 30 if budget_last is None else budget_last
         self.prom = prom
@@ -314,6 +327,10 @@ class FakeSources:
     def budget(self, day):
         self._check("db")
         return [("YES24", 950), ("DATANARU", 100)], self.budget_last
+
+    def budget_sync_events(self, start):
+        self._check("sync_log")
+        return self.sync_events
 
     def prometheus(self):
         self._check("actuator")
@@ -380,6 +397,31 @@ class ReportTest(unittest.TestCase):
     def test_액추에이터가_없으면_예산은_미확정(self):
         rep = r.build_report(DAY, FakeSources(actuator=True))
         self.assertIn("950 미확정", r.render(rep))
+
+    def test_동기화_지표가_응답에_없으면_예산은_미확정(self):
+        prom = PROM.replace("external_budget_sync_failures_total 0.0\n", "")
+        rep = r.build_report(DAY, FakeSources(prom=prom))
+        self.assertIn("응답에 동기화 실패 지표가 없음", rep.budget.note)
+
+    def test_전날_실패_중_재시작해_카운터가_0이어도_종료_로그로_미확정(self):
+        # CodeRabbit #87: 실패 중 종료하면 증가분을 버리고, 새 프로세스의 카운터는 0부터다
+        restarted = PROM.replace("process_start_time_seconds 1.7631504E9",
+                                 f"process_start_time_seconds {END.timestamp() + 3600}")
+        rep = r.build_report(DAY, FakeSources(prom=restarted, sync_events=[
+            "... WARN ... 공급자 예산 DB 동기화가 실패 중이라 종료 때 쓰지 않음 — 이번 칸의 미반영 증가분은 잃는다"]))
+        self.assertIn("미확정", r.markdown_row(rep))
+        self.assertIn("종료 때 미반영 로그 1줄", rep.budget.note)
+
+    def test_0시_뒤에_뜬_프로세스는_그날_로그에_실패가_없으면_확정(self):
+        # 카운터만으로 보면 배포한 날마다 거짓 미확정이 된다 — 그 전 프로세스의 실패는 종료 로그로 남는다
+        restarted = PROM.replace("process_start_time_seconds 1.7631504E9",
+                                 f"process_start_time_seconds {START.timestamp() + 3600}")
+        rep = r.build_report(DAY, FakeSources(prom=restarted))
+        self.assertEqual(rep.budget.note, "")
+
+    def test_동기화_로그를_못_읽으면_예산은_미확정(self):
+        rep = r.build_report(DAY, FakeSources(sync_log=True))
+        self.assertIn("앱 로그로 동기화 실패를 확인 못 함", rep.budget.note)
 
     def test_IP_원문은_출력에_나오지_않는다(self):
         rep = r.build_report(DAY, FakeSources())

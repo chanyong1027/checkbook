@@ -251,9 +251,11 @@ class MetricsSummary:
     book_exist_calls: int = 0
     block_limits: dict = dataclasses.field(default_factory=dict)
     budget_rejected: dict = dataclasses.field(default_factory=dict)
-    sync_failures: int = 0
+    # 아래 둘은 응답에 지표가 없으면 None으로 둔다 — 없는 값을 0으로 읽어 예산을 확정하지 않게
+    sync_failures: int = None
     client_rejected_total: int = 0
-    today_used: int = 0  # external_budget_used 게이지 합(오늘 KST, 공급자 4곳 — 전자도서관 제외)
+    today_used: int = None  # external_budget_used 게이지 합(오늘 KST, 공급자 4곳 — 전자도서관 제외)
+    note: str = ""
 
 
 def _int(value):
@@ -289,17 +291,19 @@ def summarize_metrics(by_slot):
                   and labels.get("uri", "").split("?", 1)[0].endswith("/bookExist")):
                 m.book_exist_calls += _int(value)
             elif name == "external_budget_used":
-                m.today_used += _int(value)
+                m.today_used = (m.today_used or 0) + _int(value)
             elif name == "external_budget_limit" and labels.get("kind") == "block":
                 m.block_limits[labels.get("provider")] = _int(value)
             elif name == "external_budget_rejected_total" and value:
                 rejected[labels.get("provider")] += _int(value)
             elif name == "external_budget_sync_failures_total":
-                m.sync_failures += _int(value)
+                m.sync_failures = (m.sync_failures or 0) + _int(value)
             elif name == "ratelimit_client_rejected_total":
                 m.client_rejected_total += _int(value)
-    if starts:
-        m.started_at = dt.datetime.fromtimestamp(min(starts), dt.timezone.utc)
+    if not starts:
+        # 응답은 왔지만 JVM이면 늘 있는 지표조차 없다(Prometheus 형식이 아닌 오류 페이지 등) → 값을 믿지 않는다
+        return MetricsSummary(False, sorted(by_slot), note="응답에 지표가 없음(Prometheus 형식이 아님?)")
+    m.started_at = dt.datetime.fromtimestamp(min(starts), dt.timezone.utc)
     if wait_count:
         m.permit_wait = (wait_count, wait_sum / wait_count, wait_max)
     m.yes24_rate_limited = dict(rate_limited)
@@ -356,6 +360,8 @@ class Report:
     metrics: MetricsSummary = None
     missing: dict = dataclasses.field(default_factory=dict)  # 원천 → 이유
     partial: dict = dataclasses.field(default_factory=dict)  # 원천 → 못 읽은 파일(값이 실제보다 적을 수 있음)
+    sync_events: list = None  # 그날 0시부터 지금까지 예산 동기화 실패·종료 때 미반영 로그. None이면 못 읽음
+    sync_events_error: str = ""
 
 
 def build_report(day, sources):
@@ -390,27 +396,46 @@ def build_report(day, sources):
         rep.missing["DB"] = rep.budget.note
     rep.metrics = collect("액추에이터", lambda: summarize_metrics(sources.prometheus()))
     if rep.metrics and not rep.metrics.alive:
-        rep.missing["액추에이터"] = "블루·그린 두 칸 모두 응답 없음"
+        rep.missing["액추에이터"] = rep.metrics.note or "블루·그린 두 칸 모두 응답 없음"
+    try:
+        rep.sync_events = sources.budget_sync_events(start)
+    except Exception as e:
+        rep.sync_events, rep.sync_events_error = None, f"{type(e).__name__}: {e}"
     _check_budget(rep)
     return rep
 
 
+SYNC_EVENT_MARKERS = ("공급자 예산 DB 동기화 실패", "종료 때 쓰지 않음")
+
+
 def _check_budget(rep):
-    """그날 예산 값을 확정으로 볼지 정한다.
-    - 동기화는 행마다 저장하다 처음 실패에서 멈추고 나머지 증가분을 메모리로 되돌린다(ExternalCallBudgetSyncer.sync).
-      그래서 테이블 전체의 마지막 갱신이 자정 뒤여도 어떤 공급자 몫은 빠졌을 수 있다 → 동기화 실패가 없음을 액추에이터로
-      확인해야 확정이다. 실패 수는 '앱이 뜬 뒤 합계'라 예전 실패도 미확정으로 잡는다(보수적, 시각은 journald로 본다).
-    - 자정 뒤 기록이 없어도, 앱이 오늘 쓴 양이 0이고 실패도 없으면 아직 DB에 안 쓴 그날 몫이 있을 수 없어 확정이다
-      (아침에는 사용자 호출이 없고 새벽 예약 호출은 월·목에만 있어, 이 규칙이 없으면 화~일 아침마다 거짓으로 뜬다)."""
+    """그날 예산 값을 확정으로 볼지 정한다. 빠질 수 있는 길은 둘이다(ExternalCallBudgetSyncer).
+    ① 동기화는 행마다 저장하다 첫 실패에서 멈추고 나머지를 메모리로 되돌린다 → 테이블의 마지막 갱신이 자정 뒤여도
+       어떤 공급자 몫은 아직 안 들어갔을 수 있다.
+    ② 실패 중에 앱이 내려가면 남은 증가분을 버리고 '종료 때 쓰지 않음'을 남긴다. 새 프로세스의 실패 카운터는 0부터다.
+    로그는 실패가 시작될 때(한 번)와 ②일 때 남는다. 그래서 그날 0시부터 지금까지 이 로그가 없고
+    - 지금 프로세스가 0시 뒤에 떴으면: 그 전 프로세스의 실패는 ② 로그로, 이후 실패는 시작 로그로 범위 안에 남았을 것 → 확정
+    - 0시 전에 떴으면: 0시 전에 시작해 이어진 실패는 범위 밖에 로그가 있다 → 액추에이터 실패 카운터(앱이 뜬 뒤 합계)로 본다
+    자정 뒤 기록이 없어도 앱이 오늘 쓴 양이 0이면 아직 DB에 안 쓴 그날 몫이 없어 확정이다(새벽 예약 호출은 월·목에만 있다)."""
     b, m = rep.budget, rep.metrics
     if not (b and b.alive):
         return
-    if not (m and m.alive):
-        b.note = "미확정 — 액추에이터가 없어 동기화 실패 여부를 못 봄"
-    elif m.sync_failures:
-        b.note = (f"미확정 — 앱이 뜬 뒤 예산 DB 동기화 실패 {m.sync_failures}회, 일부 공급자 몫이 빠졌을 수 있음"
-                  "(journald '공급자 예산 DB 동기화 실패'·'복구' 시각 확인)")
-    elif b.note.startswith("미확정") and m.today_used == 0:
+    start, _ = day_window(rep.day)
+    reason = None
+    if rep.sync_events is None:
+        reason = f"앱 로그로 동기화 실패를 확인 못 함({rep.sync_events_error})"
+    elif rep.sync_events:
+        reason = f"그날 0시 뒤 동기화 실패·종료 때 미반영 로그 {len(rep.sync_events)}줄, 일부 공급자 몫이 빠졌을 수 있음"
+    elif not (m and m.alive):
+        reason = "액추에이터가 없어 동기화 상태를 못 봄"
+    elif m.started_at <= start:
+        if m.sync_failures is None:
+            reason = "응답에 동기화 실패 지표가 없음"
+        elif m.sync_failures:
+            reason = f"앱이 뜬 뒤 동기화 실패 {m.sync_failures}회(0시 전에 시작해 이어진 실패일 수 있음)"
+    if reason:
+        b.note = f"미확정 — {reason} (journald '공급자 예산 DB 동기화' 줄의 시각 확인)"
+    elif b.note.startswith("미확정") and m and m.alive and m.today_used == 0:
         b.note = ""
 
 
@@ -511,8 +536,9 @@ def render(rep):
             out.append(f"  ({b.note})")
     else:
         out.append(f"  {MISSING}")
-    out.append("  예산 DB 동기화 실패(앱이 뜬 뒤): " + (str(rep.metrics.sync_failures) if _ok(rep, "액추에이터")
-                                                 else f"{MISSING}(액추에이터)"))
+    out.append("  예산 DB 동기화 실패(앱이 뜬 뒤): " + (
+        (MISSING + "(지표 없음)" if rep.metrics.sync_failures is None else str(rep.metrics.sync_failures))
+        if _ok(rep, "액추에이터") else f"{MISSING}(액추에이터)"))
     if _ok(rep, "앱 로그"):
         out.append(f"  80% 경고 {', '.join(rep.app.budget_warned) or '없음'}, 차단선 도달 {', '.join(rep.app.budget_blocked) or '없음'}")
     out.append("")
@@ -613,6 +639,10 @@ class ServerSources:
         if res.returncode != 0:
             raise RuntimeError(res.stderr.strip() or f"journalctl 종료 코드 {res.returncode}")
         return res.stdout.splitlines()
+
+    def budget_sync_events(self, start):
+        now = dt.datetime.now(dt.timezone.utc)
+        return [line for line in self.app_lines(start, now) if any(k in line for k in SYNC_EVENT_MARKERS)]
 
     def budget(self, day):
         sql = (f"SELECT budget_key, used FROM external_call_budget WHERE usage_date = DATE '{day.isoformat()}';\n"
