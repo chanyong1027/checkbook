@@ -30,7 +30,8 @@ import java.util.function.Supplier;
  * <p>
  * YES24 호출은 Retry(서킷(클라이언트))로 감싼다(T4 결정 카드 2·6, 설정 resilience4j.*.instances.yes24):
  * 일시 오류({@link Yes24TransientException})만 1회 재시도하고, 일시 오류가 쌓이면 서킷이 열려 부르지 않는다.
- * 식별은 fan-out 전 순차라 재시도 시간이 응답 시간에 그대로 더해진다(최악 약 0.7 + 0.2 + 0.7초).
+ * 식별은 fan-out 전 순차라 허가 대기·재시도 시간이 응답 시간에 그대로 더해진다(최악 약 0.2 + 0.7 + 0.2 + 0.2 + 0.7초 —
+ * 허가 대기 상한, 읽기 상한, 재시도 대기, 허가 대기 상한, 읽기 상한).
  */
 @Slf4j
 @Service

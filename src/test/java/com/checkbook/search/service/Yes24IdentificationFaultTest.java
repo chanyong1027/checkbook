@@ -107,8 +107,8 @@ class Yes24IdentificationFaultTest {
         assertThat(after.elapsedMs().subList(5, 12)).allSatisfy(ms -> assertThat(ms).isLessThan(150L));
     }
 
-    // 운영 선제한(100ms당 1건, 대기 0)에서 빨리 오는 실패(503) 뒤 재시도가 같은 주기 허가에 막히지 않아야 한다(1차 리뷰 1).
-    // 대기가 주기보다 짧으면(5~95ms) 재시도가 '보내지 못함'으로 끝나 첫 실패가 그대로 사용자에게 간다
+    // 운영 선제한(100ms당 1건, 허가 대기 최대 200ms)에서 빨리 오는 실패(503) 뒤 재시도가 같은 주기 허가에 막히지 않아야 한다(1차 리뷰 1).
+    // 허가 대기가 0이던 때는 재시도 대기가 주기보다 짧으면(5~95ms) 재시도가 '보내지 못함'으로 끝나 첫 실패가 그대로 사용자에게 갔다
     @Test
     void retryAfterFastFailureIsNotBlockedBySelfRateLimit() {
         AtomicBoolean failNext = new AtomicBoolean();
@@ -123,7 +123,7 @@ class Yes24IdentificationFaultTest {
         for (int i = 0; i < 20; i++) {
             failNext.set(true);
             RateLimiter productionLimiter = RateLimiter.of("yes24-fast-" + i, RateLimiterConfig.custom()
-                    .limitForPeriod(1).limitRefreshPeriod(Duration.ofMillis(100)).timeoutDuration(Duration.ZERO).build());
+                    .limitForPeriod(1).limitRefreshPeriod(Duration.ofMillis(100)).timeoutDuration(Duration.ofMillis(200)).build());
             // 읽기 상한은 넉넉히(1s) — 이 시험이 볼 것은 선제한이지 가짜 서버의 느린 응답이 아니다(2차 리뷰)
             BookIdentificationService service = new BookIdentificationService(newClient(productionLimiter, Duration.ofSeconds(1)),
                     new SimpleMeterRegistry(), CircuitBreakerRegistry.of(NO_CIRCUIT), RetryRegistry.of(PRODUCTION_RETRY));
@@ -134,6 +134,34 @@ class Yes24IdentificationFaultTest {
 
         System.out.printf("[T4 전후] 빠른 실패(503) 뒤 재시도, 운영 선제한 | 구한 검색 %d/20%n", recovered);
         assertThat(recovered).as("빠른 503 뒤 재시도가 선제한에 막히지 않고 모두 구해져야 한다").isEqualTo(20);
+    }
+
+    // 재시도도 허가를 기다린다(결정 2026-11-13 카드 2 고정용). 주기(300ms)가 재시도 대기(100~200ms)보다 길어 재시도는 대개
+    // 첫 시도와 같은 주기에 걸린다 — 허가 대기가 0이면 '보내지 못함'으로 끝나고, 대기가 있으면 다음 주기를 예약해 나간다.
+    // 이 시험이 가르는 것은 코드가 아니라 설정(대기 0 vs 0보다 큼)이다 — 옛 코드도 대기 있는 제한기면 통과한다
+    @Test
+    void retryWaitsForNextPermitInsteadOfGivingUp() {
+        AtomicBoolean failNext = new AtomicBoolean();
+        server.setDispatcher(new Dispatcher() {
+            @Override
+            public MockResponse dispatch(RecordedRequest request) {
+                return failNext.getAndSet(false) ? new MockResponse().setResponseCode(503) : found();
+            }
+        });
+
+        int recovered = 0;
+        for (int i = 0; i < 10; i++) {
+            failNext.set(true);
+            RateLimiter slowLimiter = RateLimiter.of("yes24-retry-wait-" + i, RateLimiterConfig.custom()
+                    .limitForPeriod(1).limitRefreshPeriod(Duration.ofMillis(300)).timeoutDuration(Duration.ofMillis(400)).build());
+            BookIdentificationService service = new BookIdentificationService(newClient(slowLimiter, Duration.ofSeconds(1)),
+                    new SimpleMeterRegistry(), CircuitBreakerRegistry.of(NO_CIRCUIT), RetryRegistry.of(PRODUCTION_RETRY));
+            if (service.identify(ISBN, null).yes24() == Yes24Status.FOUND) {
+                recovered++;
+            }
+        }
+
+        assertThat(recovered).as("재시도가 허가를 기다려 모두 구해져야 한다").isEqualTo(10);
     }
 
     // 본문 수신 중 연결이 끊긴 응답도 일시 오류로 재시도되고 서킷에 실패로 세어져야 한다(외부 리뷰 P2).
