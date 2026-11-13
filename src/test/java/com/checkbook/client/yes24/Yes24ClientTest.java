@@ -42,6 +42,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class Yes24ClientTest {
@@ -486,9 +488,7 @@ class Yes24ClientTest {
         server.enqueue(json(404, errorBody("GOODS_002")));
         client.lookupByIsbn(ISBN);
 
-        // TODO(직접): 두 번째 호출이 '선제한 거절·보내지 않음'으로 끝나는지, 그리고 그게 '기다리지 않고' 일어났는지 확인한다
-        //  - 거절 확인은 아래 assertFails(client, kind, sent)를 쓸 수 있다
-        //  - "기다리지 않았다"를 무엇으로, 어떤 기준값으로 확인할지 정한다(이 파일과 Yes24ClientCategoryListTest의 시간 재는 시험 참고)
+        // 두 번째 호출은 '선제한 거절·보내지 않음'이어야 하고, 상한(200ms)만큼 자지 않고 바로 끝나야 한다(옛 코드는 약 200ms 뒤 거절)
         long started = System.nanoTime();
         assertFails(client, Kind.RATE_LIMITED, false);
         long tookMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
@@ -522,7 +522,8 @@ class Yes24ClientTest {
     @Test
     @Timeout(10)
     void 동시에_몰리면_주기마다_한_건씩_나가고_넘친_요청은_바로_거절된다() throws Exception {
-        Yes24Client client = newClient(waitingLimiter(Duration.ofMillis(100), Duration.ofMillis(200)));
+        // 읽기 마감은 넉넉히 — 바쁜 CI에서 보낸 요청이 시간 초과로 끝나면 이 시험이 볼 것(선제한)과 다른 이유로 깨진다
+        Yes24Client client = newClient(waitingLimiter(Duration.ofMillis(100), Duration.ofMillis(200)), Duration.ofSeconds(2));
         server.setDispatcher(new Dispatcher() {
             @Override
             public MockResponse dispatch(RecordedRequest request) {
@@ -530,12 +531,15 @@ class Yes24ClientTest {
             }
         });
         int callers = 5;
+        // 모든 스레드가 출발선에 선 뒤에 출발시킨다 — 스레드 생성이 늦어 도착이 두 주기 경계를 넘게 퍼지지 않게
+        CountDownLatch ready = new CountDownLatch(callers);
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService pool = Executors.newFixedThreadPool(callers);
         List<Future<Long>> rejectedAfterMs = new ArrayList<>();
         try {
             for (int i = 0; i < callers; i++) {
                 rejectedAfterMs.add(pool.submit(() -> {
+                    ready.countDown();
                     start.await();
                     long started = System.nanoTime();
                     try {
@@ -547,6 +551,7 @@ class Yes24ClientTest {
                     }
                 }));
             }
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
             start.countDown();
             List<Long> rejected = new ArrayList<>();
             for (Future<Long> f : rejectedAfterMs) {
@@ -606,9 +611,12 @@ class Yes24ClientTest {
         assertFails(client, Kind.DAILY_LIMIT, false);
 
         first.join(5_000);
+        assertThat(first.isAlive()).isFalse();
         assertThat(firstFailure.get()).isNotNull();
         assertThat(firstFailure.get().kind()).isEqualTo(Kind.DAILY_LIMIT);
         assertThat(server.getRequestCount()).isEqualTo(1);
+        // B가 허가를 받은 뒤에 막혔음(첫 확인이 아니라 재확인에서)을 보장
+        verify(limiter, times(2)).reservePermission();
     }
 
     // ---- 잔량 게이지 ----

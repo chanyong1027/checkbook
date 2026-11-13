@@ -44,7 +44,9 @@ import java.util.concurrent.atomic.AtomicReference;
  * </ul>
  * 우리 쪽 선제한(100ms당 1건)과 일일 중단은 이 클라이언트 경계에 둔다. 식별과 추천 배치가 같은 한도를 나눠 쓰기 때문이다.
  * 허가가 바로 없으면 다음 빈 주기를 예약하고 설정 상한(timeout-duration)까지 기다린다(결정 2026-11-13).
- * 배치(목록)는 그 위에 약 {@link #LIST_PERMIT_MAX_WAIT}까지 다시 시도한다(PR-3 결정 카드 3, 마지막 예약 대기만큼 넘을 수 있다).
+ * 배치(목록)는 그 위에 약 {@link #LIST_PERMIT_MAX_WAIT}까지 다시 시도한다(PR-3 결정 카드 3, 최악 약 1.3초 = 1초 + 쉬는 간격 + 예약 상한).
+ * 배치도 미래 주기를 도착 순서대로 예약하므로 식별과 같은 순위로 줄을 선다 — 배치 예약 한 칸이 뒤에 온 사용자 요청을
+ * 거절로 밀 수 있지만, 배치는 주 2회 새벽에 순차로 돌고 한 번에 한 칸만 잡아 영향은 무시할 만하다.
  */
 @Slf4j
 public class Yes24Client {
@@ -67,7 +69,8 @@ public class Yes24Client {
     private final ExternalCallBudget budget;
     private final Duration callDeadline;
     private final Duration listCallDeadline;
-    // 식별이 허가를 받기까지 기다린 시간(거절은 yes24.rate.limited{by=self,kind=second}가 센다).
+    // 식별이 허가를 받기까지 기다린 시간(거절은 yes24.rate.limited{by=self,kind=second}가 센다). 허가를 받은 뒤 일일 중단·예산으로
+    // 보내지 않은 시도도 기록되므로 count는 보낸 수와 다를 수 있다.
     // 라이브러리의 waiting_threads는 라이브러리가 직접 재울 때만 올라 이 경로에서는 늘 0이다
     private final Timer permitWait;
     private final Yes24DailyStop dailyStop = new Yes24DailyStop();
@@ -148,7 +151,7 @@ public class Yes24Client {
     }
 
     /**
-     * 메인 추천 배치용 카테고리 목록. 식별과 같은 선제한·일일 중단을 쓰되 허가는 약 1초(+ 마지막 예약 대기 최대 상한) 기다린다.
+     * 메인 추천 배치용 카테고리 목록. 식별과 같은 선제한·일일 중단을 쓰되 허가는 최대 약 1.3초(1초 + 쉬는 간격 + 예약 상한) 기다린다.
      * 항목 단위 검증은 하지 않는다(ISBN 없는 굿즈가 섞여 온다) — 호출자가 거른다.
      */
     public List<Yes24CategoryListResponse.Item> categoryList(Yes24CategoryList list, String categoryId, int pageSize) {
