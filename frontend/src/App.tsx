@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { BookCandidate } from './types'
 import { BookSearchStep } from './components/BookSearchStep'
 import { BookDetailPage } from './components/BookDetailPage'
-import { BookIcon, ChevronLeftIcon, SettingsIcon } from './components/shared/icons'
+import { ChevronLeftIcon, SettingsIcon } from './components/shared/icons'
 import { PreferencesProvider, usePreferences } from './preferences/PreferencesContext'
 
 const SEARCH_CACHE_KEY = 'cb_search_cache'
@@ -174,9 +174,8 @@ function AppShell() {
             className="flex items-center gap-2 min-h-11 cursor-pointer"
             aria-label="홈으로"
           >
-            <span className="w-8 h-8 bg-accent rounded-[9px] flex items-center justify-center text-white">
-              <BookIcon size={17} strokeWidth={2.2} />
-            </span>
+            {/* 파비콘과 같은 파일(public/favicon.svg) — 로고 모양을 한 곳에서만 고친다 */}
+            <img src="/favicon.svg" alt="" aria-hidden="true" width={32} height={32} className="w-8 h-8" />
             <span className="font-bold text-ink-900 text-body-lg tracking-tight">CheckBook</span>
           </button>
 
