@@ -13,6 +13,14 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.regex.Pattern;
 
+/**
+ * 교보 전자도서관 목록 페이지에서 도서관 주소 후보를 뽑는 수동 도구(운영 앱은 부르지 않는다. 2026-10-20 목록을 채울 때 한 번 썼다).
+ *
+ * <p><b>다시 돌리기 전에 교보 약관을 확인한다.</b> 교보문고 이용약관 2026-02-09 시행판 제11조 ⑨가 "회사의 사전 서면 동의
+ * 없이 매크로, 에이전트, 로봇, 크롤러, 스크래퍼 등 자동화 수단이나 수동 프로세스를 사용하여 서비스 데이터 … 를
+ * 수집·가공·추출 … 하는 행위"를 금지한다(2024-04-15판에는 없던 조항, 2026-11-14 확인). robots.txt는 이 경로를 허용하지만
+ * 약관 금지가 우선이다(CLAUDE.md '외부 사이트 수집'). 목록을 다시 받아야 하면 교보의 서면 동의를 먼저 구한다.
+ */
 public class KyoboELibrarySeedCollector {
 
     public static final String SOURCE_URL = "https://ebook.kyobobook.co.kr/dig/cff/e-library";
