@@ -10,6 +10,7 @@ public enum ErrorCode {
 
     INVALID_SEARCH_KEYWORD(HttpStatus.BAD_REQUEST, "검색어를 입력해주세요."),
     KEYWORD_TOO_LONG(HttpStatus.BAD_REQUEST, "검색어는 200자 이내로 입력해주세요."),
+    INVALID_PAGING_PARAMETER(HttpStatus.BAD_REQUEST, "요청한 페이지 범위가 올바르지 않아요."),
     INVALID_REGION_CODE(HttpStatus.BAD_REQUEST, "올바른 지역 코드를 입력해주세요."),
     INVALID_LOCATION(HttpStatus.BAD_REQUEST, "올바른 위치 정보를 입력해주세요."),
     ISBN_REQUIRED(HttpStatus.BAD_REQUEST, "ISBN 정보가 필요합니다."),

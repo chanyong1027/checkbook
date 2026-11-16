@@ -27,7 +27,7 @@ public class BookSearchController {
     @GetMapping("/search")
     public ResponseEntity<BookCandidateResponse> searchBooks(
             @RequestParam @NotBlank @Size(max = 200) String q,
-            @RequestParam(defaultValue = "1") @Min(1) @Max(100) int page,
+            @RequestParam(defaultValue = "1") @Min(1) @Max(BookSearchService.MAX_PAGE) int page,
             @RequestParam(defaultValue = "10") @Min(1) @Max(50) int size
     ) {
         if (q.isBlank()) {
