@@ -172,11 +172,21 @@ class PublicLibraryControllerTest {
         verifyNoInteractions(directoryService);
     }
 
+    @Test
+    void 검색어가_비면_400() throws Exception {
+        mockMvc.perform(get("/api/public-libraries?keyword="))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_SEARCH_KEYWORD"));
+        verifyNoInteractions(directoryService);
+    }
+
+    // @Min·@Max 위반은 '검색어를 입력해주세요'가 아니라 페이지 범위 오류로 알린다
     @ParameterizedTest
-    @ValueSource(strings = {"keyword=", "keyword=a&size=51", "keyword=a&size=0", "keyword=a&page=-1"})
-    void 기관_검색_입력이_틀리면_400(String query) throws Exception {
+    @ValueSource(strings = {"keyword=a&size=51", "keyword=a&size=0", "keyword=a&page=-1"})
+    void 기관_검색의_페이지_범위가_틀리면_페이지_범위_오류(String query) throws Exception {
         mockMvc.perform(get("/api/public-libraries?" + query))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PAGING_PARAMETER"));
         verifyNoInteractions(directoryService);
     }
 }

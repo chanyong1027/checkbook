@@ -92,6 +92,12 @@ public class GlobalExceptionHandler {
                         return ErrorCode.KEYWORD_TOO_LONG;
                     }
 
+                    // 코드베이스의 @Min·@Max는 전부 page·size·offset 같은 페이징 값이다. 파라미터 이름이 아니라 어노테이션
+                    // 이름으로 가른다(경로의 파라미터 이름은 -parameters 옵션이 있어야 보인다)
+                    if ("Min".equals(annotationName) || "Max".equals(annotationName)) {
+                        return ErrorCode.INVALID_PAGING_PARAMETER;
+                    }
+
                     return ErrorCode.INVALID_SEARCH_KEYWORD;
                 })
                 .orElse(ErrorCode.INVALID_SEARCH_KEYWORD);
