@@ -15,7 +15,7 @@
     sudo python3 "$D/api_check.py" --plan "$D/plan.json" --out "$D/api-check.jsonl"
 
 표준 라이브러리만 쓴다. 키는 /opt/checkbook/.env의 DATANARU_AUTH_KEY에서 읽고 어디에도 남기지 않는다.
-응답 원문은 남기지 않는다(도서관 코드·건수·시간만). 정보나루는 초당 2회 미만, 한 조회 안의 시도 병렬(최대 3)만 겹친다.
+응답 원문은 남기지 않는다(도서관 코드·이름·건수·시간만). 정보나루는 초당 2회 미만, 한 조회 안의 시도 병렬(최대 3)만 겹친다.
 이 호출은 앱의 공급자 예산(ExternalCallBudget)에 잡히지 않는다(같은 키를 쓰므로 정보나루 쪽 하루 사용량에는 들어간다).
 """
 import argparse
@@ -32,7 +32,7 @@ import urllib.request
 BASE = "https://data4library.kr/api"
 BIG_PAGE = 1000
 GAP_SECONDS = 0.6  # 차례로 부를 때 간격(초당 2회 미만)
-LOOKUP_GAP_SECONDS = 1.0  # 지역 조회 단계 사이 간격
+LOOKUP_GAP_SECONDS = 1.5  # 지역 조회 단계 사이 간격(세 시도 병렬 단계도 평균 초당 2회 미만이 되게)
 ROUNDS = 3
 NEAREST_ABSENT = 5
 TIMEOUT_SECONDS = 15
@@ -82,7 +82,12 @@ class Client:
 
 
 def lib_codes(resp):
-    return [l["lib"]["libCode"] for l in (resp or {}).get("libs", []) if isinstance(l, dict) and "lib" in l]
+    out = []
+    for item in (resp or {}).get("libs", []) or []:
+        lib = item.get("lib") if isinstance(item, dict) else None
+        if isinstance(lib, dict) and lib.get("libCode"):
+            out.append(lib["libCode"])
+    return out
 
 
 def as_int(v):
@@ -149,6 +154,7 @@ def main():
     plan = json.load(open(args.plan, encoding="utf-8"))
     client = Client(load_key(args.env))
     notice = plan["noticeInstitutions"]["names"]
+    notice_cities = plan["noticeInstitutions"].get("cities", [])
     out = open(args.out, "w", encoding="utf-8")
     started = time.time()
     emit(out, {"phase": "start", "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "limit": args.limit})
@@ -182,6 +188,7 @@ def main():
             time.sleep(GAP_SECONDS)
             resp, el, err = client.get("libSrch", region=region, pageNo=1, pageSize=BIG_PAGE)
             if err:
+                # 좌표 목록이 빠지면 규칙 3 표본이 줄어 "그대로"로 잘못 나온다 — 판정이 보류하게 기록한다
                 emit(out, {"phase": "C", "error": f"libSrch {region}: {err}"})
                 continue
             if as_int(resp.get("numFound")) != len(resp.get("libs", [])):
@@ -189,14 +196,15 @@ def main():
             for l in resp.get("libs", []):
                 lib = l.get("lib", {})
                 try:
-                    libs[lib["libCode"]] = (lib.get("libName", ""), float(lib["latitude"]), float(lib["longitude"]), region)
+                    libs[lib["libCode"]] = (lib.get("libName", ""), float(lib["latitude"]), float(lib["longitude"]), region,
+                                            lib.get("address") or "")
                 except (KeyError, TypeError, ValueError):
                     pass
         anchors = {"seoul": "seoul-cityhall", "gyeonggi": "ansan-cityhall", "gangwon": "wonju-cityhall"}
         for list_key, pos_key in anchors.items():
             pos = plan["positions"][pos_key]
-            nearest = sorted((haversine(pos["lat"], pos["lon"], la, lo), code, name)
-                             for code, (name, la, lo, region) in libs.items() if region in pos["regions"])
+            nearest = sorted((haversine(pos["lat"], pos["lon"], la, lo), code, name, addr)
+                             for code, (name, la, lo, region, addr) in libs.items() if region in pos["regions"])
             books = plan["books"][list_key]
             if args.limit:  # 묶음마다 앞에서 N권
                 books = [b for bin_ in ("common", "middle", "rare", "absent") for b in [x for x in books if x["bin"] == bin_][: args.limit]]
@@ -207,14 +215,17 @@ def main():
                 checks = []
                 if complete:
                     # 목록에 없는 가까운 도서관 5곳 — 목록이 맞다면 모두 "없음"이어야 한다
-                    for dist, code, name in [x for x in nearest if x[1] not in listed][:NEAREST_ABSENT]:
+                    for dist, code, name, addr in [x for x in nearest if x[1] not in listed][:NEAREST_ABSENT]:
                         time.sleep(GAP_SECONDS)
                         resp, el, err = client.get("bookExist", libCode=code, isbn13=b["isbn"])
-                        result = (resp or {}).get("result") or {}
+                        result = (resp or {}).get("result")
+                        result = result if isinstance(result, dict) else {}
                         has = str(result.get("hasBook", "")).strip().upper() or None
                         checks.append({"libCode": code, "name": name, "km": round(dist, 2), "sec": round(el, 3), "error": err,
                                        "hasBook": has, "falseAbsent": has == "Y",
-                                       "notice": any(n in name for n in notice)})
+                                       "notice": any(n in name for n in notice),
+                                       # 이름에 시스템 이름이 없는 분관을 놓치지 않으려는 보조 표시(멈춤 판정에는 쓰지 않는다)
+                                       "noticeCity": any(c in addr for c in notice_cities)})
                 emit(out, {"phase": "C", "list": list_key, "position": pos_key, "isbn": b["isbn"], "bin": b["bin"],
                            "listComplete": complete, "listed": len(listed), "perRegion": results, "checks": checks})
     out.close()
@@ -246,8 +257,12 @@ def summarize(path):
         calls = [r["calls"] for r in b]
         secs = sorted(r["stageSec"] for r in b)
         within = sum(1 for v in secs if v <= RULE2_TARGET_SEC) / len(secs)
-        r1 = "그대로" if max(calls) <= RULE1_MAX_CALLS else "멈춤(먼저 pageSize로 줄일 수 있는지)"
+        b_incomplete = sum(1 for r in b for x in r["perRegion"] if not x["complete"])
+        r1 = "그대로" if max(calls) <= RULE1_MAX_CALLS else "멈춤(이미 pageSize 1000 — 시도 수가 원인인지 적고 묻는다)"
         r2 = "그대로" if within >= RULE2_SHARE and secs[-1] <= RULE2_TARGET_SEC * 2 else "멈춤"
+        if b_incomplete:
+            # 오류 칸이 든 빠른 응답은 호출 수·시간을 좋게 보이게 한다 — 그 표본으로는 판정하지 않는다
+            r1 = r2 = f"판정 보류(불완전한 시도 응답 {b_incomplete}건)"
         out += ["", "## 규칙 1·2 (위치마다 흔한 책, 걸치는 시도를 병렬로)", "", "| 위치 | 시도 | 조회 | 호출 수 | 단계 초(최소~최대) |", "|---|---|---|---|---|"]
         for key in dict.fromkeys(r["position"] for r in b):
             rs = [r for r in b if r["position"] == key]
@@ -262,16 +277,23 @@ def summarize(path):
         false_notice = [x for x in checks if x["falseAbsent"] and x["notice"]]
         errors = [x for x in checks if x["error"] or x["hasBook"] not in ("Y", "N")]
         skipped = [r for r in c if not r["listComplete"]]
-        n = len(checks) - len(errors)
-        upper = 1 - 0.05 ** (1 / n) if n else None
-        r3 = "멈춤(원인을 적는다)" if false_other else ("판정 보류(확인 못 한 칸·불완전 목록)" if errors or skipped else "그대로")
+        coord_errors = [r["error"] for r in recs if r.get("phase") == "C" and r.get("error")]
+        held = errors or skipped or coord_errors
+        r3 = "멈춤(원인을 적고 묻는다)" if false_other else ("판정 보류(확인 못 한 칸·불완전 목록·좌표 목록 오류)" if held else "그대로")
         out += ["", "## 규칙 3 (목록에 없는 가까운 도서관이 정말 없는가)",
-                f"- 확인 {len(checks)}곳(책 {len(c)}권, 목록 불완전으로 건너뛴 책 {len(skipped)}권), 응답 오류·형식 이상 {len(errors)}곳",
-                f"- 거짓 \"없음\": 공지 기관 아닌 곳 **{len(false_other)}건**, 공지 기관(공급자 재수집, 따로 셈) {len(false_notice)}건"]
+                f"- 확인 {len(checks)}곳(책 {len(c)}권, 목록 불완전으로 건너뛴 책 {len(skipped)}권), 응답 오류·형식 이상 {len(errors)}곳, 좌표 목록 오류 {len(coord_errors)}건"]
+        for lst in dict.fromkeys(r["list"] for r in c):
+            mine = [x for r in c if r["list"] == lst for x in r["checks"]]
+            out.append(f"  - {lst}: 확인 {len(mine)}곳(목표 90), 서로 다른 도서관 {len({x['libCode'] for x in mine})}곳, 공지 기관 {sum(1 for x in mine if x['notice'])}곳")
+        out.append(f"- 거짓 \"없음\": 공지 기관 아닌 곳 **{len(false_other)}건**, 공지 기관(공급자 재수집, 따로 셈) {len(false_notice)}건")
         for lst, isbn, x in false_other[:10]:
-            out.append(f"  - {lst} {isbn}: {x['name']}({x['libCode']}, {x['km']}km)")
-        if upper is not None:
-            out.append(f"- 0건이어도 거짓 \"없음\" 비율의 95% 상한은 약 {upper:.1%}({n}곳 기준)")
+            city = " — 주소가 공지 도시(이름으로는 공지 기관 아님, 멈춘 뒤 원인 확인에 참고)" if x.get("noticeCity") else ""
+            out.append(f"  - {lst} {isbn}: {x['name']}({x['libCode']}, {x['km']}km){city}")
+        judged = [x for x in checks if not x["notice"] and x["hasBook"] in ("Y", "N") and not x["error"]]
+        if judged:
+            n = len(judged)
+            out.append(f"- 참고: 공지 기관을 뺀 확인 {n}곳(서로 다른 도서관 {len({x['libCode'] for x in judged})}곳). 같은 도서관이 책마다 되풀이돼 "
+                       f"독립 시행이 아니므로, 이항 95% 상한({1 - 0.05 ** (1 / n):.1%})은 실제보다 강하게 말하는 값이다")
         out.append(f"- 판정 → **{r3}**")
     print("\n".join(out))
 

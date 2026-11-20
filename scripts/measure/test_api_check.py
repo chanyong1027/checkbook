@@ -29,7 +29,7 @@ def c(checks, complete=True):
 
 def check(has="N", notice=False, error=None):
     return {"libCode": "X", "name": "어느도서관", "km": 1.0, "sec": 0.4, "error": error, "hasBook": has,
-            "falseAbsent": has == "Y", "notice": notice}
+            "falseAbsent": has == "Y", "notice": notice, "noticeCity": notice}
 
 
 def report(recs):
@@ -62,6 +62,19 @@ class Rules(unittest.TestCase):
 
     def test_rule3_errors_hold(self):
         self.assertIn("판정 → **판정 보류", report([c([check(error="URLError", has=None)])]))
+
+    def test_incomplete_region_answer_holds_rules_1_and_2(self):
+        text = report([b(regions=[region(complete=False)])])
+        self.assertIn("규칙 1(호출 ≤ 4): 최대 1 → **판정 보류(불완전한 시도 응답 1건)", text)
+
+    def test_coordinate_list_error_holds_rule3(self):
+        text = report([{"phase": "C", "error": "libSrch 32: URLError"}, c([check()])])
+        self.assertIn("좌표 목록 오류 1건", text)
+        self.assertIn("판정 → **판정 보류", text)
+
+    def test_upper_bound_leaves_out_notice_checks(self):
+        text = report([c([check(), check(notice=True)])])
+        self.assertIn("공지 기관을 뺀 확인 1곳", text)
 
     def test_incomplete_list_is_reported(self):
         self.assertIn("불완전(오류·쪽마다 numFound 다름·코드 수 ≠ numFound) 1건", report([c([], complete=False)]))
