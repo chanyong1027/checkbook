@@ -232,6 +232,7 @@ export default async function () {
     const listed = Object.values(plan.books as Record<string, Book[]>).some(list => list.some(b => b.isbn === isbn))
     if (listed) throw new Error('smoke는 측정 목록 밖의 책으로만 연다(측정 캐시를 채우지 않게)')
     await openBook({ isbn, bin: 'smoke', title: '불편한 편의점' }, { lat: position.lat, lon: position.lon })
+    if (ipLimitHit()) abortRun([])
     return
   }
   if (PASS === 'more') {
