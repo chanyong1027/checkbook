@@ -20,6 +20,7 @@
 """
 import argparse
 import concurrent.futures
+import subprocess
 import json
 import math
 import sys
@@ -52,6 +53,8 @@ class Client:
         self._key = key
         self._lock = threading.Lock()
         self.calls = 0
+        # 429·키 오류·한도 초과를 한 번이라도 받으면 나머지 호출을 하지 않는다(한도를 더 나쁘게 하지 않게)
+        self.fatal = None
 
     def get(self, path, **params):
         """(response 칸 dict 또는 None, 걸린 초, 오류 설명 또는 None). 예외를 밖으로 던지지 않는다"""
@@ -65,6 +68,8 @@ class Client:
                 body = r.read()
                 status = r.status
         except urllib.error.HTTPError as e:
+            if e.code == 429:
+                self.fatal = self.fatal or "HTTP 429"
             return None, time.monotonic() - t0, f"HTTP {e.code}"
         except Exception as e:  # 연결 실패·시간 초과 — 원인 이름만
             return None, time.monotonic() - t0, type(e).__name__
@@ -77,6 +82,7 @@ class Client:
             return None, elapsed, "response 칸 없음"
         if resp.get("error"):
             # 정보나루는 키 오류·한도 초과를 HTTP 200 + error 칸으로 준다(DatanaruClient 주석)
+            self.fatal = self.fatal or f"error 칸: {str(resp.get('error'))[:80]}"
             return resp, elapsed, f"error 칸: {str(resp.get('error'))[:80]}"
         return resp, elapsed, None
 
@@ -131,6 +137,30 @@ def region_stage(client, isbn, regions):
     return stage, [res for res, _ in pairs], set().union(*[set(codes) for _, codes in pairs])
 
 
+def db_library_coords():
+    """운영 DB의 활성 도서관 좌표 {코드: (위도, 경도)}. 앱의 주변 탐색이 쓰는 값이다(정보나루 좌표가 비어 와도
+    PublicLibrary.refresh가 옛 좌표를 지켜 후보에 남는다). 서버가 아니면(도커 없음) None"""
+    d = "/opt/checkbook/current/deploy"
+    cmd = ["docker", "compose", "--project-directory", d, "-f", f"{d}/compose.yaml", "--env-file", "/opt/checkbook/.env",
+           "exec", "-T", "postgres", "sh", "-c",
+           'psql -U "$POSTGRES_USER" -d checkbook -tA -F "|" -c "SELECT lib_code, lat, lon FROM public_library WHERE active"']
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if res.returncode != 0:
+        return None
+    coords = {}
+    for line in res.stdout.splitlines():
+        parts = line.split("|")
+        if len(parts) == 3:
+            try:
+                coords[parts[0]] = (float(parts[1]), float(parts[2]))
+            except ValueError:
+                pass
+    return coords or None
+
+
 def haversine(a, b, c, d):
     r = 6371.0
     p1, p2 = math.radians(a), math.radians(c)
@@ -180,19 +210,22 @@ def main():
         emit(out, {"phase": "A", "isbn": isbn, "region": 31, "onePage": one, "defaultPage": default, "split100": split,
                    "sameCodes": one_codes == split_codes})
 
-    if "B" in args.phases:
+    if "B" in args.phases and not client.fatal:
         for rnd in range(1, (1 if args.limit else ROUNDS) + 1):
             for key, pos in plan["positions"].items():
                 commons = [b for b in plan["books"][pos["books"]] if b["bin"] == "common"][: args.limit or None]
                 for b in commons:
+                    if client.fatal:
+                        break
                     time.sleep(LOOKUP_GAP_SECONDS)
                     stage, results, _ = region_stage(client, b["isbn"], pos["regions"])
                     emit(out, {"phase": "B", "round": rnd, "position": key, "isbn": b["isbn"], "regions": pos["regions"],
                                "stageSec": round(stage, 3), "calls": sum(len(r["pages"]) for r in results), "perRegion": results})
 
-    if "C" in args.phases:
+    if "C" in args.phases and not client.fatal:
         # 도서관 좌표(앱 DB와 같은 출처: libSrch 전체). 시도 넷
         libs = {}
+        raw = {}
         for region in sorted({r for p in plan["positions"].values() for r in p["regions"]} | set(plan["bookRegions"].values())):
             time.sleep(GAP_SECONDS)
             resp, el, err = client.get("libSrch", region=region, pageNo=1, pageSize=BIG_PAGE)
@@ -206,19 +239,28 @@ def main():
                 continue
             if as_int(resp.get("numFound")) != len(resp.get("libs", [])):
                 emit(out, {"phase": "C", "warn": f"libSrch {region}: numFound {resp.get('numFound')} 중 {len(resp.get('libs', []))}곳만 받음"})
-            dropped = 0
             for l in resp.get("libs", []):
                 lib = l.get("lib", {}) if isinstance(l, dict) else {}
-                try:
-                    libs[lib["libCode"]] = (lib.get("libName", ""), float(lib["latitude"]), float(lib["longitude"]), region,
-                                            lib.get("address") or "")
-                except (KeyError, TypeError, ValueError):
-                    dropped += 1
-            if dropped:
-                # 앱도 좌표 없는 도서관은 적재하지 않아(정기 동기화 PublicLibraryListSynchronizer 161줄, 초기 적재
-                # DatanaruClient.libSrch) 주변 목록에 나오지 않는다 — 표본에서 빼는 것이
-                # 사용자가 보는 것과 같다. 보류하지 않고 건수만 남긴다
-                emit(out, {"phase": "C", "note": f"libSrch {region}: 좌표 없는 {dropped}곳 제외(앱도 적재하지 않음)"})
+                if lib.get("libCode"):
+                    raw[lib["libCode"]] = (lib.get("libName", ""), lib.get("latitude"), lib.get("longitude"), region,
+                                           lib.get("address") or "")
+        # 좌표는 운영 DB(앱이 거리 계산에 쓰는 값)를 먼저 쓰고, 측정 PC처럼 DB를 못 읽으면 정보나루 좌표를 쓴다
+        db = db_library_coords()
+        dropped = []
+        for code, (name, la, lo, region, addr) in raw.items():
+            if db is not None:
+                if code not in db:
+                    continue  # 앱의 활성 후보가 아니다(주변 목록에 나오지 않음)
+                la, lo = db[code]
+            try:
+                libs[code] = (name, float(la), float(lo), region, addr)
+            except (TypeError, ValueError):
+                dropped.append(code)
+        emit(out, {"phase": "C", "note": f"좌표 출처: {'운영 DB 활성 도서관 ' + str(len(db)) + '곳' if db is not None else '정보나루 libSrch(운영 DB를 못 읽음 — 측정 PC 실행)'}"
+                   + (f", 좌표 없어 뺀 {len(dropped)}곳" if dropped else "")})
+        if dropped and db is not None:
+            # DB에 활성인데 좌표를 못 읽은 곳은 화면 후보일 수 있다 — 표본이 화면과 달라지므로 보류되게 남긴다
+            emit(out, {"phase": "C", "warn": f"운영 DB 활성인데 좌표를 못 읽은 도서관 {len(dropped)}곳: {dropped[:10]}"})
         for list_key, pos_key in anchors.items():
             pos = plan["positions"][pos_key]
             nearest = sorted((haversine(pos["lat"], pos["lon"], la, lo), code, name, addr)
@@ -227,6 +269,8 @@ def main():
             if args.limit:  # 묶음마다 앞에서 N권
                 books = [b for bin_ in ("common", "middle", "rare", "absent") for b in [x for x in books if x["bin"] == bin_][: args.limit]]
             for b in books:
+                if client.fatal:
+                    break
                 time.sleep(LOOKUP_GAP_SECONDS)
                 _, results, listed = region_stage(client, b["isbn"], pos["regions"])
                 complete = all(r["complete"] for r in results)
@@ -234,6 +278,8 @@ def main():
                 if complete:
                     # 목록에 없는 가까운 도서관 5곳 — 목록이 맞다면 모두 "없음"이어야 한다
                     for dist, code, name, addr in [x for x in nearest if x[1] not in listed][:NEAREST_ABSENT]:
+                        if client.fatal:
+                            break
                         time.sleep(GAP_SECONDS)
                         resp, el, err = client.get("bookExist", libCode=code, isbn13=b["isbn"])
                         result = (resp or {}).get("result")
@@ -246,6 +292,12 @@ def main():
                                        "noticeCity": any(c in addr for c in notice_cities)})
                 emit(out, {"phase": "C", "list": list_key, "position": pos_key, "isbn": b["isbn"], "bin": b["bin"],
                            "listComplete": complete, "listed": len(listed), "perRegion": results, "checks": checks})
+    if client.fatal:
+        # 끝 표시를 쓰지 않는다 — 판정은 표본 부족으로 보류한다
+        emit(out, {"phase": "aborted", "reason": client.fatal, "calls": client.calls})
+        out.close()
+        print(f"멈춤: {client.fatal} — 정보나루 {client.calls}회에서 중단 → {args.out}", file=sys.stderr)
+        sys.exit(1)
     emit(out, {"phase": "end", "calls": client.calls})
     out.close()
     print(f"끝: 정보나루 {client.calls}회, {time.time() - started:.0f}초 → {args.out}", file=sys.stderr)
@@ -288,26 +340,36 @@ def summarize(path):
     for x in incomplete[:10]:
         out.append(f"  - 시도 {x['region']}: numFound {x['numFound']}, 받은 코드 {x['distinct']}, 쪽 오류 {[p['error'] for p in x['pages'] if p['error']]}")
     if b:
-        calls = [r["calls"] for r in b]
-        secs = sorted(r["stageSec"] for r in b)
-        within = sum(1 for v in secs if v <= RULE2_TARGET_SEC) / len(secs)
-        b_incomplete = sum(1 for r in b for x in r["perRegion"] if not x["complete"])
-        r1 = "그대로" if max(calls) <= RULE1_MAX_CALLS else "멈춤(이미 pageSize 1000 — 시도 수가 원인인지 적고 묻는다)"
-        r2 = "그대로" if within >= RULE2_SHARE and secs[-1] <= RULE2_TARGET_SEC * 2 else "멈춤"
-        r1, r2 = hold_unless_stop(r1), hold_unless_stop(r2)
-        if b_incomplete:
-            # 오류 칸이 든 빠른 응답은 호출 수·시간을 좋게 보이게 한다 — 그 표본으로는 "그대로"를 내지 않는다.
-            # 이미 멈춤이면 그대로 둔다(불완전 응답은 숫자를 줄여 보이게 할 뿐이라 멈춤은 성립한다)
-            hold = f"판정 보류(불완전한 시도 응답 {b_incomplete}건)"
-            r1 = r1 if r1.startswith("멈춤") else hold
-            r2 = r2 if r2.startswith("멈춤") else hold
-        out += ["", "## 규칙 1·2 (위치마다 흔한 책, 걸치는 시도를 병렬로)", "", "| 위치 | 시도 | 조회 | 호출 수 | 단계 초(최소~최대) |", "|---|---|---|---|---|"]
+        # 판정은 모든 시도 응답이 완전한 표본으로만 한다. 시간 초과·오류 칸이 든 표본은 호출 수·시간이 실제와 달라
+        # (시간 초과는 15초까지 늘고, 오류 칸은 빨리 끝난다) 그 표본으로 멈춤도 그대로도 내지 않는다
+        ok = [r for r in b if all(x["complete"] for x in r["perRegion"])]
+        b_incomplete = len(b) - len(ok)
+        total = expected.get("B") or len(b)
+        out += ["", "## 규칙 1·2 (위치마다 흔한 책, 걸치는 시도를 병렬로)", "", "| 위치 | 시도 | 조회(완전) | 호출 수 | 단계 초(최소~최대) |", "|---|---|---|---|---|"]
         for key in dict.fromkeys(r["position"] for r in b):
-            rs = [r for r in b if r["position"] == key]
+            rs = [r for r in ok if r["position"] == key]
+            n_all = sum(1 for r in b if r["position"] == key)
+            if not rs:
+                out.append(f"| {key} | — | 0/{n_all} | — | — |")
+                continue
             ss = [r["stageSec"] for r in rs]
-            out.append(f"| {key} | {rs[0]['regions']} | {len(rs)} | {min(r['calls'] for r in rs)}~{max(r['calls'] for r in rs)} | {min(ss):.2f}~{max(ss):.2f} |")
-        out += ["", f"- 규칙 1(호출 ≤ {RULE1_MAX_CALLS}): 최대 {max(calls)} → **{r1}**",
-                f"- 규칙 2(단계 ≤ {RULE2_TARGET_SEC}초, 95% + 최대 {RULE2_TARGET_SEC * 2}초): {len(secs)}건 중 {within:.1%} 이하, 최대 {secs[-1]:.2f}초 → **{r2}**"]
+            out.append(f"| {key} | {rs[0]['regions']} | {len(rs)}/{n_all} | {min(r['calls'] for r in rs)}~{max(r['calls'] for r in rs)} | {min(ss):.2f}~{max(ss):.2f} |")
+        uncertain = partial or b_incomplete
+        why = f"불완전한 시도 응답 {b_incomplete}건" if b_incomplete else "표본 부족"
+        if ok:
+            calls = [r["calls"] for r in ok]
+            secs = sorted(r["stageSec"] for r in ok)
+            over = sum(1 for v in secs if v > RULE2_TARGET_SEC)
+            # 남은 표본이 모두 좋아도 뒤집히지 않는 실패만 "멈춤"(가장 느린 값이 2배를 넘음, 또는 넘은 표본이 전체의 5% 초과)
+            stop1 = max(calls) > RULE1_MAX_CALLS
+            stop2 = secs[-1] > RULE2_TARGET_SEC * 2 or over > (1 - RULE2_SHARE) * total
+            r1 = "멈춤(이미 pageSize 1000 — 시도 수가 원인인지 적고 묻는다)" if stop1 else (f"판정 보류({why})" if uncertain else "그대로")
+            r2 = "멈춤" if stop2 else (f"판정 보류({why})" if uncertain else ("그대로" if over <= (1 - RULE2_SHARE) * len(secs) else "멈춤"))
+            out += ["", f"- 규칙 1(호출 ≤ {RULE1_MAX_CALLS}): 완전한 표본 {len(ok)}건 최대 {max(calls)} → **{r1}**",
+                    f"- 규칙 2(단계 ≤ {RULE2_TARGET_SEC}초, 95% + 최대 {RULE2_TARGET_SEC * 2}초): 완전한 표본 {len(ok)}건(전체 {total}건 중) "
+                    f"넘은 것 {over}건, 최대 {secs[-1]:.2f}초 → **{r2}**"]
+        else:
+            out += ["", f"- 규칙 1·2: 완전한 표본이 없음 → **판정 보류({why})**"]
     c = [r for r in recs if r.get("phase") == "C" and "checks" in r]
     if c:
         checks = [x for r in c for x in r["checks"]]

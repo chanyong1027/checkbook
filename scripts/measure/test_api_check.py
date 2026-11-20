@@ -70,7 +70,25 @@ class Rules(unittest.TestCase):
 
     def test_incomplete_region_answer_holds_rules_1_and_2(self):
         text = report([b(regions=[region(complete=False)])])
-        self.assertIn("규칙 1(호출 ≤ 4): 최대 1 → **판정 보류(불완전한 시도 응답 1건)", text)
+        self.assertIn("규칙 1·2: 완전한 표본이 없음 → **판정 보류(불완전한 시도 응답 1건)", text)
+
+    def test_one_slow_sample_in_partial_run_is_not_yet_a_stop(self):
+        # 60건 중 1건만 모였고 2초 — 나머지 59건이 좋으면 59/60으로 통과할 수 있다
+        text = report([b(sec=2.0)], expected={"A": 0, "B": 60, "C": 0})
+        self.assertIn("넘은 것 1건, 최대 2.00초 → **판정 보류(표본 부족)", text)
+
+    def test_timed_out_sample_does_not_stop_rule2(self):
+        recs = [b(sec=1.0)] * 19 + [b(sec=15.0, regions=[region(complete=False)])]
+        text = report(recs)
+        self.assertIn("최대 1.00초 → **판정 보류(불완전한 시도 응답 1건)", text)
+
+    def test_certain_failure_stops_even_in_partial_run(self):
+        text = report([b(sec=2.0)] * 4, expected={"A": 0, "B": 60, "C": 0})
+        self.assertIn("넘은 것 4건, 최대 2.00초 → **멈춤**", text)
+
+    def test_aborted_run_holds(self):
+        text = report([c([check()]), {"phase": "aborted", "reason": "HTTP 429"}], finished=False)
+        self.assertIn("판정 보류(표본 부족: 끝 표시 없음)", text)
 
     def test_coordinate_list_error_holds_rule3(self):
         text = report([{"phase": "C", "error": "libSrch 32: URLError"}, c([check()])])
