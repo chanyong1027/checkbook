@@ -18,6 +18,7 @@
  */
 import http from 'k6/http'
 import { sleep } from 'k6'
+import exec from 'k6/execution'
 
 import { RoundDeadlineError, runExploreRound, type ExploreResult } from '../../frontend/src/components/library/exploreLoop.ts'
 import { INITIAL_STATE, type ExplorerState } from '../../frontend/src/components/library/nearbyExplorer.ts'
@@ -41,11 +42,21 @@ const GAP_SECONDS = 2
 const MORE_CLICK_SECONDS = 1
 /** 더 찾기 횟수 상한. 서울 10km 약 205곳 ÷ 5 = 41배치라 넉넉히. 장애로 같은 곳을 끝없이 다시 찾지 않게 */
 const MORE_ROUND_LIMIT = 60
-/** 우리 IP 하루 한도에 닿으면(429) 그날 측정을 거기서 멈춘다(D4: 한도를 더 올리지 않는다) */
-let ipLimitHit = false
-const IP_LIMIT_CODES = ['DAILY_REQUEST_LIMIT_EXCEEDED', 'RATE_LIMIT_EXCEEDED']
+/**
+ * 요청 제한 429는 측정 절차의 실패라 그 회차를 거기서 멈춘다(집계는 "측정 중단"으로 빼고 다시 잰다, 규칙 문서 6절).
+ * DAILY_REQUEST_LIMIT_EXCEEDED: 우리 IP 하루 한도 — 다음 날 잇는다(D4: 한도를 더 올리지 않는다)
+ * RATE_LIMIT_EXCEEDED: nginx 분당·초당 제한 — 간격을 늘려 그 회차를 다시 잰다
+ */
+const LIMIT_CODES: Record<string, string> = { DAILY_REQUEST_LIMIT_EXCEEDED: 'IP_DAILY_LIMIT', RATE_LIMIT_EXCEEDED: 'NGINX_RATE_LIMIT' }
+let limitHit: string | null = null
+const ipLimitHit = () => limitHit != null
 function noteLimit(status: number, code: string | null) {
-  if (status === 429 && code != null && IP_LIMIT_CODES.includes(code)) ipLimitHit = true
+  if (status === 429 && code != null && code in LIMIT_CODES) limitHit ??= LIMIT_CODES[code]
+}
+/** 줄을 남기고 0 아닌 코드로 끝낸다 — 운영자가 모르고 다음 회차로 넘어가지 않게 */
+function abortRun(remaining: string[]) {
+  emit({ stage: STAGE, pass: PASS, position: POSITION, round: ROUND, aborted: limitHit, remaining })
+  exec.test.abort(`요청 제한(${limitHit})에 걸려 멈춤 — README "측정일 순서" 참고`)
 }
 
 export const options = {
@@ -202,10 +213,11 @@ async function openBookAndMoreToEnd(book: Book, origin: Origin) {
     const fatal = sum.error != null && (sum.error as { status?: number }).status === 400
     if (state.nextOffset == null || sum.stop === 'DAILY_LIMIT' || fatal) break
     // 화면의 canMore는 ERROR·CIRCUIT_OPEN 뒤에도 더 찾기를 열어 두지만, 사람이 장애 중에 끝없이 누르지는 않는다
-    if (sum.stop === 'ERROR' || sum.stop === 'CIRCUIT_OPEN' || ipLimitHit || rounds.length >= MORE_ROUND_LIMIT) break
+    if (sum.stop === 'ERROR' || sum.stop === 'CIRCUIT_OPEN' || ipLimitHit() || rounds.length >= MORE_ROUND_LIMIT) break
     sleep(MORE_CLICK_SECONDS)
   }
   emit({ ...base(book, t0), rounds, totalChecked: state.seen.length, totalFound: state.found.length, search: await searchP })
+  if (ipLimitHit()) abortRun([])
 }
 
 function pick(listKey: string, bin: string): Book {
@@ -230,15 +242,17 @@ export default async function () {
   if (PASS === 'reference') {
     const x = plan.extras.reference
     await openBook(pick(x.books, x.bin), { referenceLibCode: x.referenceLibCode })
+    if (ipLimitHit()) abortRun([])
     return
   }
   const books = plan.books[position.books] as Book[]
   for (let i = 0; i < books.length; i++) {
-    if (ipLimitHit) {
-      emit({ stage: STAGE, pass: PASS, position: POSITION, round: ROUND, aborted: 'IP_DAILY_LIMIT', remaining: books.slice(i).map(b => b.isbn) })
+    if (ipLimitHit()) {
+      abortRun(books.slice(i).map(b => b.isbn))
       return
     }
     if (i > 0) sleep(GAP_SECONDS)
     await openBook(books[i], { lat: position.lat, lon: position.lon })
   }
+  if (ipLimitHit()) abortRun([])
 }

@@ -48,14 +48,16 @@ const INIT_SCRIPT = `
   window.fetch = (input, init) => {
     const url = typeof input === 'string' ? input : input.url
     if (!url.includes('/api/public-libraries/availability/batch') || !url.includes('mode=NEARBY')) return origFetch(input, init)
-    const rec = { offset: Number(new URL(url, location.href).searchParams.get('offset')), startMs: performance.now(), endMs: null, status: null, held: null }
+    // endMs는 본문까지 받은 때(복제본 파싱이 끝난 때)다. 헤더만 온 때로 재면 본문 받기·파싱이 "네트워크 밖 몫"에 들어간다
+    const rec = { offset: Number(new URL(url, location.href).searchParams.get('offset')), startMs: performance.now(), headersMs: null, endMs: null, status: null, held: null, parseError: false }
     m.batches.push(rec)
     return origFetch(input, init).then(res => {
-      rec.endMs = performance.now()
+      rec.headersMs = performance.now()
       rec.status = res.status
       res.clone().json().then(j => {
+        rec.endMs = performance.now()
         rec.held = (j.items || []).filter(i => i.state === 'AVAILABLE' || i.state === 'ON_LOAN').length
-      }).catch(() => {})
+      }).catch(() => { rec.endMs = performance.now(); rec.parseError = true })
       return res
     }, err => { rec.endMs = performance.now(); rec.status = 'ERR'; throw err })
   }
@@ -106,7 +108,7 @@ export default async function () {
       timedOut = true
     }
     const m = await page.evaluate(() => (window as unknown as { __measure: unknown }).__measure) as {
-      batches: Array<{ offset: number; startMs: number; endMs: number | null; status: number | string | null; held: number | null }>
+      batches: Array<{ offset: number; startMs: number; headersMs: number | null; endMs: number | null; status: number | string | null; held: number | null; parseError: boolean }>
       firstFoundPaintMs: number | null
       noneConfirmedPaintMs: number | null
       settledPaintMs: number | null
@@ -118,8 +120,10 @@ export default async function () {
     const firstStart = m.batches[0]?.startMs ?? null
     const fetchSum = (upTo: number) => m.batches.slice(0, upTo + 1)
       .reduce((acc, b) => acc + (b.endMs != null ? b.endMs - b.startMs : 0), 0)
+    // 그때까지 배치 중 본문을 못 읽은 것이 있으면 어느 배치가 소장을 실었는지 확신할 수 없어 계산하지 않는다
+    const readable = (upTo: number) => m.batches.slice(0, upTo + 1).every(b => b.endMs != null && !b.parseError)
     const nonNetwork = (paint: number | null, upTo: number) =>
-      paint != null && firstStart != null && upTo >= 0 ? paint - firstStart - fetchSum(upTo) : null
+      paint != null && firstStart != null && upTo >= 0 && readable(upTo) ? paint - firstStart - fetchSum(upTo) : null
     console.log(`MEASURE ${JSON.stringify({
       stage: STAGE, pass: 'browser', position: POSITION, isbn: book.isbn, bin: book.bin, startedAt, timedOut,
       firstBatchStartMs: m.batches[0]?.startMs ?? null,

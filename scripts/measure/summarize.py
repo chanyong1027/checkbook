@@ -29,6 +29,8 @@ EXTERNAL_REASONS = {"TIMEOUT", "UPSTREAM_ERROR"}
 SLOW_CALL_SECONDS = 1.1
 UNRESOLVED_STOPS = {"ERROR", "ALL_UNKNOWN", "DAILY_LIMIT", "CIRCUIT_OPEN"}
 BINS = ["common", "middle", "rare", "absent"]
+# 요청 제한 429는 측정 절차의 실패라 표본에서 빼고 "측정 중단"으로 적는다(규칙 문서 6절)
+LIMIT_CODES = {"DAILY_REQUEST_LIMIT_EXCEEDED", "RATE_LIMIT_EXCEEDED"}
 
 PROBE_LINE = re.compile(r"^(\S+) port=(\d+) ([a-zA-Z_:][a-zA-Z0-9_:]*)\{(.*)\} (\S+)$")
 LABEL = re.compile(r'([a-zA-Z_][a-zA-Z0-9_]*)="((?:[^"\\]|\\.)*)"')
@@ -80,23 +82,42 @@ def budget_used(diff):
 
 
 def client_stats(diff):
-    """정보나루 호출 수·느린 호출 수·성공 아닌 호출 수·버킷(누적). 칸끼리는 프로세스가 달라 더한다"""
+    """정보나루 호출 수·느린 성공 호출 수·성공 아닌 호출 수·버킷(누적, 전체). 칸끼리는 프로세스가 달라 더한다.
+
+    느린 호출은 성공 호출에서만 센다 — 시간 초과는 "성공 아님"이면서 느린 호출이기도 해 두 번 세게 된다
+    """
     buckets = collections.defaultdict(float)
-    count = not_success = 0.0
+    success_buckets = collections.defaultdict(float)
+    count = success = not_success = 0.0
     for values in diff["ports"].values():
         for (name, labels), v in values.items():
             lab = dict(labels)
+            ok = lab.get("outcome") in (None, "SUCCESS")
             if name == "http_client_requests_seconds_count":
                 count += v
-                if lab.get("outcome") not in (None, "SUCCESS"):
+                if ok:
+                    success += v
+                else:
                     not_success += v
             elif name == "http_client_requests_seconds_bucket":
                 le = lab.get("le")
-                buckets[math.inf if le == "+Inf" else float(le)] += v
-    under = [le for le in buckets if le <= SLOW_CALL_SECONDS]
+                le = math.inf if le == "+Inf" else float(le)
+                buckets[le] += v
+                if ok:
+                    success_buckets[le] += v
+    under = [le for le in success_buckets if le <= SLOW_CALL_SECONDS]
     slow_le = max(under) if under else None
-    slow = count - buckets[slow_le] if slow_le is not None else None
+    slow = success - success_buckets[slow_le] if slow_le is not None else None
     return {"count": count, "slow": slow, "slowLe": slow_le, "notSuccess": not_success, "buckets": dict(buckets)}
+
+
+def limit_hit(lib):
+    return bool(lib.get("error")) and lib["error"].get("status") == 429 and lib["error"].get("code") in LIMIT_CODES
+
+
+def items_checked(lib):
+    """서버가 확인한 곳 수 = 배치 응답 항목 수의 합(화면 seen은 목표를 넘친 소장 칸 뒤를 넣지 않는다)"""
+    return sum(b.get("items", 0) for b in lib.get("batches", []))
 
 
 def quantile(buckets, q):
@@ -169,13 +190,14 @@ def main(folder):
     diffs = {label: probe_diff(load_probe(folder / f"probe-{label}-pre.txt"), load_probe(folder / f"probe-{label}-post.txt"))
              for label in runs}
 
-    p("## 회차별 정보나루 호출 (서버 지표 차이가 주 값, 응답으로 센 확인 수는 보조)\n")
-    p("| 실행 | 조회 | 서버 예산 차이 | 응답으로 센 확인 수 | 정보나루 호출(지표) | 느린 호출 | 성공 아님 | 표시 |")
+    p("## 회차별 정보나루 호출 (서버 지표 차이가 주 값, 응답 항목 수는 보조)\n")
+    p("| 실행 | 조회 | 서버 예산 차이 | 응답 항목 수 | 정보나루 호출(지표) | 느린 호출 | 성공 아님 | 표시 |")
     p("|---|---|---|---|---|---|---|---|")
     ext_evidence = {}
     for label, recs in runs.items():
         lookups = [r for r in recs if "library" in r]
-        checked = sum(r["library"]["checked"] for r in lookups) + sum(r.get("totalChecked", 0) for r in recs if "rounds" in r)
+        checked = sum(items_checked(r["library"]) for r in lookups) + sum(
+            items_checked(x) for r in recs for x in r.get("rounds", []))
         aborted = [r for r in recs if r.get("aborted")]
         d = diffs[label]
         notes = []
@@ -197,7 +219,7 @@ def main(folder):
         if d["switched"]:
             notes.append(f"⚠칸 전환 {sorted(d['switched'])}")
         if any(r.get("pass") == "first" for r in lookups) and used != checked:
-            notes.append(f"⚠예산≠확인 수({used - checked:+,.0f})")
+            notes.append(f"⚠예산≠항목 수({used - checked:+,.0f})")
         p(f"| {label} | {len(lookups)} | {used:,.0f} | {checked} | {cs['count']:,.0f} | {cs['slow'] if cs['slow'] is not None else '—'} "
           f"| {cs['notSuccess']:,.0f} | {' '.join(notes)} |")
     p("")
@@ -209,10 +231,16 @@ def main(folder):
             share_by_pos[r["position"]] = max(share_by_pos[r["position"]], r["nonNetworkShareMs"])
     use_browser = bool(share_by_pos) and max(share_by_pos.values()) > RENDER_SHARE_LIMIT_MS
 
+    stopped = [r for recs in runs.values() for r in recs if r.get("aborted")]
+    limited = [r for recs in runs.values() for r in recs if "library" in r and limit_hit(r["library"])]
+    if stopped or limited:
+        p(f"## ⚠ 측정 중단\n\n- 요청 제한으로 멈춘 실행 {[(r['position'], r.get('round'), r['aborted']) for r in stopped]}, "
+          f"제한에 걸린 조회 {len(limited)}건(표본에서 뺌). 그 회차를 다시 잴 때까지 그날 판정은 보류한다.\n")
+
     def lookups(pass_names):
         for label, recs in runs.items():
             for r in recs:
-                if r.get("pass") in pass_names and "library" in r:
+                if r.get("pass") in pass_names and "library" in r and not limit_hit(r["library"]):
                     yield label, r
 
     for title, passes in (("판정 표본: 캐시 빈 회차 + 기준 도서관", {"first", "reference"}), ("따로: 두 번째 사람(캐시 적중)", {"second"})):
@@ -221,7 +249,7 @@ def main(folder):
             continue
         kinds = {id(r): unresolved_kind(r["library"], ext_evidence.get(label)) for label, r in sample}
         p(f"## {title}\n")
-        p("| 위치 | 묶음 | 조회 | 첫 표시 ms | 확정 ms(확정된 조회만) | 확인 곳 수(1회차) | 멈춤 사유 |")
+        p("| 위치 | 묶음 | 조회 | 첫 표시 ms | 확정 ms(TIME 뺌) | 확인 곳 수(1회차) | 멈춤 사유 |")
         p("|---|---|---|---|---|---|---|")
         groups = collections.defaultdict(list)
         for _, r in sample:
@@ -230,24 +258,29 @@ def main(folder):
         for (pos, b), rs in sorted(groups.items(), key=lambda kv: (kv[0][0], order.index(kv[0][1]) if kv[0][1] in order else 99)):
             stops = collections.Counter(r["library"]["stop"] for r in rs)
             p(f"| {pos} | {b} | {len(rs)} | {rng(r['library']['firstDisplayMs'] for r in rs)} "
-              f"| {rng(r['library']['settledMs'] for r in rs if kinds[id(r)] is None)} "
+              f"| {rng(r['library']['settledMs'] for r in rs if kinds[id(r)] != 'time')} "
               f"| {rng(r['library']['checked'] for r in rs if r['round'] == 1)} | {', '.join(f'{k} {v}' for k, v in stops.most_common())} |")
         p("")
         fd = [r["library"]["firstDisplayMs"] for _, r in sample]
         if use_browser:
             fd = [None if v is None else v + share_by_pos.get(r["position"], max(share_by_pos.values())) for v, (_, r) in zip(fd, sample)]
         no_fd = collections.Counter(r["library"]["stop"] for _, r in sample if r["library"]["firstDisplayMs"] is None)
-        st = [r["library"]["settledMs"] for _, r in sample if kinds[id(r)] is None]
+        # 확정 시간 표본은 TIME이 아닌 조회 전부(미확정도 사용자는 멈출 때까지 기다렸다). 확정된 조회만은 참고
+        st = [r["library"]["settledMs"] for _, r in sample if kinds[id(r)] != "time"]
+        st_ok = [r["library"]["settledMs"] for _, r in sample if kinds[id(r)] is None]
         v1, d1 = judge_times(fd, FIRST_DISPLAY_TARGET_MS)
         v2, d2 = judge_times(st, SETTLED_TARGET_MS)
+        _, d2_ok = judge_times(st_ok, SETTLED_TARGET_MS)
         p(f"- 첫 표시{'(브라우저 몫을 더한 값)' if use_browser else ''}: **{v1}** — {d1}. 첫 표시로 세지 않은 조회: {dict(no_fd) or '없음'}")
-        p(f"- 확정: **{v2}** — {d2}")
+        p(f"- 확정: **{v2}** — {d2}. 참고(확정된 조회만): {d2_ok}")
         time_stops = [r for _, r in sample if r["library"]["stop"] == "TIME"]
         p(f"- `TIME` 종료(따로 적음): {len(time_stops)}건" + (f", 그때 보인 소장 수 {rng(r['library']['found'] for r in time_stops)}" if time_stops else ""))
         n = len(sample)
         c = collections.Counter(kinds.values())
         ext, ours, und = c.get("external", 0), c.get("ours", 0), c.get("undetermined", 0)
-        if und:
+        if stopped or limited:
+            verdict = "판정 보류(측정 중단 — 위 경고)"
+        elif und:
             verdict = f"판정 보류(지표 없는 회차의 외부 사유 {und}건)"
         elif ext / n > EXTERNAL_ALLOWED:
             verdict = "그날 측정 무효(외부 원인 1% 초과)"

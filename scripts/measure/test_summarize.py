@@ -14,7 +14,8 @@ import summarize as s  # noqa: E402
 
 def lib(stop="GOAL", unknown=0, reasons=None, error=None, first=1500, settled=1500, checked=5, found=5):
     return {"stop": stop, "unknown": unknown, "unknownReasons": reasons or {}, "error": error,
-            "firstDisplayMs": first, "settledMs": settled, "checked": checked, "found": found}
+            "firstDisplayMs": first, "settledMs": settled, "checked": checked, "found": found,
+            "batches": [{"items": checked}]}
 
 
 class JudgeTimes(unittest.TestCase):
@@ -95,8 +96,15 @@ class Probe(unittest.TestCase):
         self.assertEqual(s.budget_used(diff), 20)
         cs = s.client_stats(diff)
         self.assertEqual(cs["count"], 20)
-        self.assertEqual(cs["slow"], 2)
+        # 느린 호출은 성공 호출만 센다(성공 19 중 1.0초 버킷 밖 1). 성공 아님 1은 따로
+        self.assertEqual(cs["slow"], 1)
         self.assertEqual(cs["notSuccess"], 1)
+
+    def test_timeout_is_not_counted_twice(self):
+        timeout = ('2026-11-25T05:05:00Z port=8081 http_client_requests_seconds_bucket{client_name="data4library.kr",outcome="UNKNOWN",uri="/bookExist",le="1.0"} 0\n'
+                   '2026-11-25T05:05:00Z port=8081 http_client_requests_seconds_bucket{client_name="data4library.kr",outcome="UNKNOWN",uri="/bookExist",le="+Inf"} 1\n')
+        cs = s.client_stats(self.diff(PRE, POST + timeout))
+        self.assertEqual(cs["slow"] + cs["notSuccess"], 2)
 
     def test_budget_gauge_is_not_doubled_when_both_slots_are_up(self):
         two = lambda text: text + text.replace("port=8081", "port=8082")  # noqa: E731
@@ -129,7 +137,7 @@ class EndToEnd(unittest.TestCase):
             self.rec("2", lib(stop="ROUND_LIMIT", first=6000, settled=6000, checked=20, found=0), "absent"),
         ])
         self.assertIn("| seoul-cityhall-r1 | 2 | 20 | 25 |", text)
-        self.assertIn("⚠예산≠확인 수(-5)", text)
+        self.assertIn("⚠예산≠항목 수(-5)", text)
         self.assertIn("첫 표시: **미달**", text)
 
     def test_time_stop_is_left_out_of_settled_sample(self):
@@ -139,6 +147,23 @@ class EndToEnd(unittest.TestCase):
         ])
         self.assertIn("확정: **통과** — 1건 중", text)
         self.assertIn("`TIME` 종료(따로 적음): 1건", text)
+
+    def test_limit_429_lookups_are_left_out_and_hold_the_verdict(self):
+        text = self.report([
+            self.rec("1", lib()),
+            self.rec("2", lib(stop="ERROR", error={"status": 429, "code": "DAILY_REQUEST_LIMIT_EXCEEDED"})),
+        ])
+        self.assertIn("측정 중단", text)
+        self.assertIn("판정 보류(측정 중단", text)
+        self.assertIn("우리 원인 0건", text)
+
+    def test_unresolved_lookups_stay_in_settled_sample(self):
+        text = self.report([
+            self.rec("1", lib(settled=1500)),
+            self.rec("2", lib(settled=6000, unknown=1, reasons={"POOL_BUSY": 1})),
+        ])
+        self.assertIn("확정: **미달** — 2건 중 50.0%", text)
+        self.assertIn("참고(확정된 조회만): 1건 중 100.0%", text)
 
     def test_missing_probe_holds_judgement_instead_of_blaming_us(self):
         text = self.report([self.rec("1", lib(unknown=1, reasons={"TIMEOUT": 1}))], probes=False)
