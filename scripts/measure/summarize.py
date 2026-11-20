@@ -6,7 +6,7 @@
 폴더 안 파일 이름 규칙(README):
     <label>.jsonl              k6 --log-format raw --console-output 결과(MEASURE 줄)
     probe-<label>-pre.txt      그 실행 직전 server-probe.sh read 출력
-    probe-<label>-post.txt     그 실행이 끝나고 15초 뒤 read 출력
+    probe-<label>-post.txt     그 실행이 끝난 뒤 read 출력(read가 예산 값이 멈출 때까지 기다린다)
 label 예: seoul-cityhall-r1, seoul-cityhall-second, seoul-cityhall-browser, more, reference
 
 판정 숫자는 규칙 문서와 목표 카드 3의 값이다. 바꾸려면 결과를 보기 전에 문서부터 고친다.
@@ -44,6 +44,9 @@ def load_records(folder):
             i = line.find("MEASURE ")
             if i >= 0:
                 recs.append(json.loads(line[i + len("MEASURE "):]))
+        if f.stem.endswith("-browser"):
+            for r in recs:
+                r["_label_position"] = f.stem[: -len("-browser")]
         runs[f.stem] = recs
     return runs
 
@@ -220,7 +223,9 @@ def completeness(runs, plan):
             # 개수가 아니라 묶음마다 정해진 책(그 묶음의 첫 책)의 유효한 기록이 있는지 본다
             position = label[: -len("-browser")]
             for book in required_browser_books(plan, position):
-                hit = [r for r in recs if r.get("isbn") == book["isbn"] and r.get("bin") == book["bin"]]
+                # 서울시청과 강서구청은 같은 책 목록이라 위치까지 맞춰야 다른 위치 기록으로 대신 채워지지 않는다
+                hit = [r for r in recs if r.get("isbn") == book["isbn"] and r.get("bin") == book["bin"]
+                       and r.get("position") == position]
                 if not hit:
                     out.append(f"browser {label}: {book['bin']} 묶음 {book['isbn']} 기록 없음")
                 elif all(r.get("timedOut") or r.get("nonNetworkShareMs") is None for r in hit):
@@ -293,7 +298,8 @@ def main(folder):
     browser = [r for recs in runs.values() for r in recs if r.get("pass") == "browser"]
     share_by_pos = collections.defaultdict(float)
     for r in browser:
-        if r.get("nonNetworkShareMs") is not None:
+        # 파일 이름(label)의 위치와 기록의 위치가 다른 표본은 몫 계산에 쓰지 않는다(completeness가 누락으로 잡는다)
+        if r.get("nonNetworkShareMs") is not None and r.get("_label_position", r["position"]) == r["position"]:
             share_by_pos[r["position"]] = max(share_by_pos[r["position"]], r["nonNetworkShareMs"])
     use_browser = bool(share_by_pos) and max(share_by_pos.values()) > RENDER_SHARE_LIMIT_MS
 

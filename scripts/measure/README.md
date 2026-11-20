@@ -43,7 +43,7 @@
 ```bash
 sudo git -C /opt/checkbook/app fetch -q origin && sudo git -C /opt/checkbook/app show origin/main:scripts/measure/server-probe.sh | sudo bash -s -- <read | reset ISBN...>
 ```
-`read` 출력은 측정 PC의 `build\measure\<stage>\probe-<label>-pre.txt`·`-post.txt`로 받는다. `post`는 회차가 끝나고 **15초 뒤**에 읽는다(예산 DB 동기화 10초).
+`read` 출력은 측정 PC의 `build\measure\<stage>\probe-<label>-pre.txt`·`-post.txt`로 받는다. 예산 지표는 칸마다 10초 간격으로 DB와 따로 맞추므로, `read`는 11초 간격으로 두 번 읽어 정보나루 예산 값이 그대로이고 칸끼리 같을 때 값을 낸다(최대 5번, 약 45초). 그래도 멈추지 않으면 `WARN`을 내고 마지막 값을 낸다 — 그 회차는 측정 밖 호출이 섞였을 수 있으니 결과에 적는다. 실행 직후 바로 `read`해도 된다(따로 기다리지 않는다).
 
 위치 순서는 전 측정 `seoul-cityhall → suwon-station → gangseo-office → chuncheon-cityhall`, 후 측정은 거꾸로다(`plan.json`의 `order`). 위치마다:
 
@@ -51,7 +51,7 @@ sudo git -C /opt/checkbook/app fetch -q origin && sudo git -C /opt/checkbook/app
    ```powershell
    k6 run --quiet --log-format raw --console-output build\measure\before\seoul-cityhall-browser.jsonl -e POSITION=seoul-cityhall scripts\measure\browser-check.ts
    ```
-2. 회차 1~3(춘천은 1만): `PROBE reset <18권>` → `PROBE read`(pre) → 실행 → 15초 → `PROBE read`(post). label `<위치>-r<회차>`
+2. 회차 1~3(춘천은 1만): `PROBE reset <18권>` → `PROBE read`(pre) → 실행 → `PROBE read`(post). label `<위치>-r<회차>`
    ```powershell
    k6 run --quiet --log-format raw --console-output build\measure\before\seoul-cityhall-r1.jsonl -e POSITION=seoul-cityhall -e PASS=first -e ROUND=1 scripts\measure\library-explore.ts
    ```
@@ -66,7 +66,7 @@ sudo git -C /opt/checkbook/app fetch -q origin && sudo git -C /opt/checkbook/app
 다시 잴 때(회차 종류와 상관없이):
 1. 중단된 실행의 jsonl과 probe 파일을 `build\measure\<stage>\aborted\`로 옮긴다(`--console-output`은 이어 쓰므로, 옮기지 않으면 중단 줄이 남아 그날 판정이 계속 보류된다). 그다음 같은 label로 다시 잰다.
 2. `first`(캐시 빈 회차): 그 전에 연 책들이 이미 스냅샷을 채웠으므로 **반드시 `PROBE reset`부터** 하고(다음 날 이어도 스냅샷이 24시간이라 같다) pre·실행·post를 다시 받는다.
-3. `second`(두 번째 사람): 캐시가 찬 상태가 조건이라 reset 뒤 바로 재면 안 된다. `PROBE reset` → `PASS=first`로 준비 실행 1번(label `<위치>-prep`, 집계에 쓰지 않으니 `build\measure\<stage>\` 밖에 저장) → **15초 기다린 뒤**(준비 실행의 호출이 두 칸 예산 지표에 다 반영되게) `PROBE read`(pre) → `PASS=second` → 15초 → `PROBE read`(post).
+3. `second`(두 번째 사람): 캐시가 찬 상태가 조건이라 reset 뒤 바로 재면 안 된다. `PROBE reset` → `PASS=first`로 준비 실행 1번(label `<위치>-prep`, 집계에 쓰지 않으니 `build\measure\<stage>\` 밖에 저장) → `PROBE read`(pre — 준비 실행의 호출이 두 칸 예산 지표에 다 반영될 때까지 `read`가 스스로 기다린다. `WARN`이 나면 다시 읽는다) → `PASS=second` → `PROBE read`(post).
 
 중단 확인: 11-20 k6 v2.0.0에서 async 함수 안 `exec.test.abort()`가 종료 코드 108로 끝나는 것을 봤다.
 

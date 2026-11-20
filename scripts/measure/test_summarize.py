@@ -187,6 +187,7 @@ class EndToEnd(unittest.TestCase):
         aborted = {"stage": "before", "pass": "first", "position": "seoul-cityhall", "round": 1, "aborted": "HTTP_429", "remaining": []}
         text = self.report([self.rec("1", lib())], extra={"seoul-cityhall-r2.jsonl": "MEASURE " + json.dumps(aborted)})
         self.assertIn("첫 표시: **판정 보류(통과, 측정 중단)", text)
+        self.assertIn("확정: **판정 보류(통과, 측정 중단)", text)
         self.assertIn("판정 보류(측정 중단 — 위 경고)", text)
 
     def test_missing_probe_holds_judgement_instead_of_blaming_us(self):
@@ -224,8 +225,8 @@ class Completeness(unittest.TestCase):
     def runs(self, **overrides):
         first = lambda: [{"pass": "first"}, {"pass": "first"}]  # noqa: E731
         runs = {"p-r1": first(), "p-r2": first(), "p-second": [{"pass": "second"}] * 2,
-                "p-browser": [{"pass": "browser", "isbn": "1", "bin": "common", "timedOut": False, "nonNetworkShareMs": 10},
-                              {"pass": "browser", "isbn": "2", "bin": "absent", "timedOut": False, "nonNetworkShareMs": 12}],
+                "p-browser": [{"pass": "browser", "position": "p", "isbn": "1", "bin": "common", "timedOut": False, "nonNetworkShareMs": 10},
+                              {"pass": "browser", "position": "p", "isbn": "2", "bin": "absent", "timedOut": False, "nonNetworkShareMs": 12}],
                 "more": [{"pass": "more"}], "reference": [{"pass": "reference"}]}
         runs.update(overrides)
         return {k: v for k, v in runs.items() if v is not None}
@@ -239,15 +240,25 @@ class Completeness(unittest.TestCase):
         self.assertIn("reference: 실행 없음", out)
 
     def test_invalid_browser_sample(self):
-        bad = [{"pass": "browser", "isbn": "1", "bin": "common", "timedOut": True, "nonNetworkShareMs": None},
-               {"pass": "browser", "isbn": "2", "bin": "absent", "timedOut": False, "nonNetworkShareMs": 12}]
+        bad = [{"pass": "browser", "position": "p", "isbn": "1", "bin": "common", "timedOut": True, "nonNetworkShareMs": None},
+               {"pass": "browser", "position": "p", "isbn": "2", "bin": "absent", "timedOut": False, "nonNetworkShareMs": 12}]
         out = s.completeness(self.runs(**{"p-browser": bad}), self.PLAN)
         self.assertIn("browser p-browser: common 묶음 1 몫을 못 잼", out)
 
     def test_right_count_but_wrong_bins_is_missing(self):
-        same_bin = [{"pass": "browser", "isbn": "1", "bin": "common", "timedOut": False, "nonNetworkShareMs": 10}] * 2
+        same_bin = [{"pass": "browser", "position": "p", "isbn": "1", "bin": "common", "timedOut": False, "nonNetworkShareMs": 10}] * 2
         out = s.completeness(self.runs(**{"p-browser": same_bin}), self.PLAN)
         self.assertIn("browser p-browser: absent 묶음 2 기록 없음", out)
+
+    def test_record_from_another_position_with_same_books_is_missing(self):
+        plan = {"positions": {"p": {"books": "b", "rounds": 2}, "q": {"books": "b", "rounds": 2}}, "books": self.PLAN["books"]}
+        other = [{"pass": "browser", "position": "q", "isbn": "1", "bin": "common", "timedOut": False, "nonNetworkShareMs": 10},
+                 {"pass": "browser", "position": "q", "isbn": "2", "bin": "absent", "timedOut": False, "nonNetworkShareMs": 12}]
+        runs = self.runs(**{"p-browser": other})
+        runs.update({"q-r1": runs["p-r1"], "q-r2": runs["p-r2"], "q-second": runs["p-second"], "q-browser": other})
+        out = s.completeness(runs, plan)
+        self.assertIn("browser p-browser: common 묶음 1 기록 없음", out)
+        self.assertNotIn("browser q-browser: common 묶음 1 기록 없음", out)
 
     def test_real_plan_expects_four_positions(self):
         exp = s.expected_runs(s.load_plan())
