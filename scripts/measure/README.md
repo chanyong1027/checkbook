@@ -63,7 +63,12 @@ sudo git -C /opt/checkbook/app fetch -q origin && sudo git -C /opt/checkbook/app
 
 요청 제한 429에 걸리면 스크립트가 남은 책을 열지 않고 `aborted` 줄을 남긴 뒤 **0이 아닌 코드로 끝난다**(그대로 다음 회차로 넘어가지 않는다). 집계는 그 조회를 표본에서 빼고 판정을 보류한다. `IP_DAILY_LIMIT`(우리 IP 하루 한도)이면 그날은 거기서 멈추고 다음 날 그 회차부터 다시 잰다. `NGINX_RATE_LIMIT`(분당·초당 제한)이면 1분 쉬고 그 회차를 처음부터 다시 잰다(같은 일이 또 나면 책 사이 쉼을 늘린다).
 
-`first` 회차를 다시 잴 때는 그 전에 연 책들이 이미 스냅샷을 채웠으므로 **반드시 `PROBE reset`부터** 하고(다음 날 이어도 스냅샷이 24시간이라 같다), pre·post `read`도 다시 받는다. 같은 label로 덮어쓴다(`--console-output`은 이어 쓰므로 먼저 그 jsonl을 `build\measure\<stage>\aborted\`로 옮긴다). 옮기지 않으면 중단 줄이 남아 그날 판정이 계속 보류된다. `second`(두 번째 사람)가 중단됐으면 캐시가 찬 상태가 조건이라 reset 뒤 바로 다시 재면 안 된다: `PROBE reset` → `PASS=first`로 준비 실행 1번(label `<위치>-prep`, 집계에 쓰지 않으니 `build\measure\<stage>\` 밖에 저장) → `PROBE read`(pre) → `PASS=second`(같은 label). 중단 확인: 11-20 k6 v2.0.0에서 async 함수 안 `exec.test.abort()`가 종료 코드 108로 끝나는 것을 봤다.
+다시 잴 때(회차 종류와 상관없이):
+1. 중단된 실행의 jsonl과 probe 파일을 `build\measure\<stage>\aborted\`로 옮긴다(`--console-output`은 이어 쓰므로, 옮기지 않으면 중단 줄이 남아 그날 판정이 계속 보류된다). 그다음 같은 label로 다시 잰다.
+2. `first`(캐시 빈 회차): 그 전에 연 책들이 이미 스냅샷을 채웠으므로 **반드시 `PROBE reset`부터** 하고(다음 날 이어도 스냅샷이 24시간이라 같다) pre·실행·post를 다시 받는다.
+3. `second`(두 번째 사람): 캐시가 찬 상태가 조건이라 reset 뒤 바로 재면 안 된다. `PROBE reset` → `PASS=first`로 준비 실행 1번(label `<위치>-prep`, 집계에 쓰지 않으니 `build\measure\<stage>\` 밖에 저장) → **15초 기다린 뒤**(준비 실행의 호출이 두 칸 예산 지표에 다 반영되게) `PROBE read`(pre) → `PASS=second` → 15초 → `PROBE read`(post).
+
+중단 확인: 11-20 k6 v2.0.0에서 async 함수 안 `exec.test.abort()`가 종료 코드 108로 끝나는 것을 봤다.
 
 후 측정(지역 조회 구현 뒤)에는 `reset`이 지역 목록 표의 그 ISBN 행도 지워야 한다. 표 이름이 정해지는 구현 PR에서 `server-probe.sh`에 더한다.
 

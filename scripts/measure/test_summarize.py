@@ -176,6 +176,19 @@ class EndToEnd(unittest.TestCase):
         self.assertIn("확정: **미달** — 2건 중 50.0%", text)
         self.assertIn("참고(확정된 조회만): 1건 중 100.0%", text)
 
+    def test_search_only_429_is_left_out(self):
+        rec = self.rec("2", lib(settled=9000))
+        rec["search"] = {"status": 429, "code": None}
+        text = self.report([self.rec("1", lib()), rec])
+        self.assertIn("제한에 걸린 조회 1건", text)
+        self.assertIn("확정: **판정 보류(통과, 측정 중단)", text)
+
+    def test_stop_after_full_sample_holds_time_verdicts(self):
+        aborted = {"stage": "before", "pass": "first", "position": "seoul-cityhall", "round": 1, "aborted": "HTTP_429", "remaining": []}
+        text = self.report([self.rec("1", lib())], extra={"seoul-cityhall-r2.jsonl": "MEASURE " + json.dumps(aborted)})
+        self.assertIn("첫 표시: **판정 보류(통과, 측정 중단)", text)
+        self.assertIn("판정 보류(측정 중단 — 위 경고)", text)
+
     def test_missing_probe_holds_judgement_instead_of_blaming_us(self):
         text = self.report([self.rec("1", lib(unknown=1, reasons={"TIMEOUT": 1}))], probes=False)
         self.assertIn("판정 보류", text)
@@ -211,8 +224,8 @@ class Completeness(unittest.TestCase):
     def runs(self, **overrides):
         first = lambda: [{"pass": "first"}, {"pass": "first"}]  # noqa: E731
         runs = {"p-r1": first(), "p-r2": first(), "p-second": [{"pass": "second"}] * 2,
-                "p-browser": [{"pass": "browser", "isbn": "1", "timedOut": False, "nonNetworkShareMs": 10},
-                              {"pass": "browser", "isbn": "2", "timedOut": False, "nonNetworkShareMs": 12}],
+                "p-browser": [{"pass": "browser", "isbn": "1", "bin": "common", "timedOut": False, "nonNetworkShareMs": 10},
+                              {"pass": "browser", "isbn": "2", "bin": "absent", "timedOut": False, "nonNetworkShareMs": 12}],
                 "more": [{"pass": "more"}], "reference": [{"pass": "reference"}]}
         runs.update(overrides)
         return {k: v for k, v in runs.items() if v is not None}
@@ -226,10 +239,15 @@ class Completeness(unittest.TestCase):
         self.assertIn("reference: 실행 없음", out)
 
     def test_invalid_browser_sample(self):
-        bad = [{"pass": "browser", "isbn": "1", "timedOut": True, "nonNetworkShareMs": None},
-               {"pass": "browser", "isbn": "2", "timedOut": False, "nonNetworkShareMs": 12}]
+        bad = [{"pass": "browser", "isbn": "1", "bin": "common", "timedOut": True, "nonNetworkShareMs": None},
+               {"pass": "browser", "isbn": "2", "bin": "absent", "timedOut": False, "nonNetworkShareMs": 12}]
         out = s.completeness(self.runs(**{"p-browser": bad}), self.PLAN)
-        self.assertTrue(any(m.startswith("browser p-browser: 몫을 못 잰") for m in out))
+        self.assertIn("browser p-browser: common 묶음 1 몫을 못 잼", out)
+
+    def test_right_count_but_wrong_bins_is_missing(self):
+        same_bin = [{"pass": "browser", "isbn": "1", "bin": "common", "timedOut": False, "nonNetworkShareMs": 10}] * 2
+        out = s.completeness(self.runs(**{"p-browser": same_bin}), self.PLAN)
+        self.assertIn("browser p-browser: absent 묶음 2 기록 없음", out)
 
     def test_real_plan_expects_four_positions(self):
         exp = s.expected_runs(s.load_plan())

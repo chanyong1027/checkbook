@@ -111,9 +111,12 @@ def client_stats(diff):
     return {"count": count, "slow": slow, "slowLe": slow_le, "notSuccess": not_success, "buckets": dict(buckets)}
 
 
-def limit_hit(lib):
-    """요청 제한 429(코드를 모르는 429 포함 — 스크립트가 모든 429에서 멈춘다)"""
-    return bool(lib.get("error")) and lib["error"].get("status") == 429
+def limit_hit(rec):
+    """그 조회의 도서관 배치나 함께 보낸 /api/search가 요청 제한 429를 받았나(코드를 모르는 429 포함 —
+    스크립트가 모든 429에서 멈춘다)"""
+    lib = rec.get("library") or {}
+    lib_429 = bool(lib.get("error")) and lib["error"].get("status") == 429
+    return lib_429 or (rec.get("search") or {}).get("status") == 429
 
 
 def items_checked(lib):
@@ -214,9 +217,25 @@ def completeness(runs, plan):
         if len(recs) < n:
             out.append(f"{'browser ' if pass_name == 'browser' else ''}{label}: 기대 {n}건 중 {len(recs)}건")
         if pass_name == "browser":
-            bad = [r["isbn"] for r in recs if r.get("timedOut") or r.get("nonNetworkShareMs") is None]
-            if bad:
-                out.append(f"browser {label}: 몫을 못 잰 표본 {bad}")
+            # 개수가 아니라 묶음마다 정해진 책(그 묶음의 첫 책)의 유효한 기록이 있는지 본다
+            position = label[: -len("-browser")]
+            for book in required_browser_books(plan, position):
+                hit = [r for r in recs if r.get("isbn") == book["isbn"] and r.get("bin") == book["bin"]]
+                if not hit:
+                    out.append(f"browser {label}: {book['bin']} 묶음 {book['isbn']} 기록 없음")
+                elif all(r.get("timedOut") or r.get("nonNetworkShareMs") is None for r in hit):
+                    out.append(f"browser {label}: {book['bin']} 묶음 {book['isbn']} 몫을 못 잼")
+    return out
+
+
+def required_browser_books(plan, position):
+    """browser-check.ts firstOfEachBin과 같은 규칙: 묶음마다 목록의 첫 책"""
+    books = plan["books"][plan["positions"][position]["books"]]
+    out = []
+    for b in BINS:
+        first = next((x for x in books if x["bin"] == b), None)
+        if first:
+            out.append(first)
     return out
 
 
@@ -288,7 +307,7 @@ def main(folder):
         p("")
 
     stopped = [r for recs in runs.values() for r in recs if r.get("aborted")]
-    limited = [r for recs in runs.values() for r in recs if "library" in r and limit_hit(r["library"])]
+    limited = [r for recs in runs.values() for r in recs if "library" in r and limit_hit(r)]
     if stopped or limited:
         p(f"## ⚠ 측정 중단\n\n- 요청 제한으로 멈춘 실행 {[(r['position'], r.get('round'), r['aborted']) for r in stopped]}, "
           f"제한에 걸린 조회 {len(limited)}건(표본에서 뺌). 그 회차를 다시 잴 때까지 그날 판정은 보류한다.\n")
@@ -296,7 +315,7 @@ def main(folder):
     def lookups(pass_names):
         for label, recs in runs.items():
             for r in recs:
-                if r.get("pass") in pass_names and "library" in r and not limit_hit(r["library"]):
+                if r.get("pass") in pass_names and "library" in r and not limit_hit(r):
                     yield label, r
 
     for title, passes in (("판정 표본: 캐시 빈 회차 + 기준 도서관", {"first", "reference"}), ("따로: 두 번째 사람(캐시 적중)", {"second"})):
@@ -326,7 +345,9 @@ def main(folder):
         st_ok = [r["library"]["settledMs"] for _, r in sample if kinds[id(r)] is None]
         v1, d1 = judge_times(fd, FIRST_DISPLAY_TARGET_MS)
         v2, d2 = judge_times(st, SETTLED_TARGET_MS)
-        if missing and passes != {"second"}:
+        if (stopped or limited) and passes != {"second"}:
+            v1, v2 = f"판정 보류({v1}, 측정 중단)", f"판정 보류({v2}, 측정 중단)"
+        elif missing and passes != {"second"}:
             why = "표본 부족, 브라우저 포함" if browser_missing else "표본 부족"
             v1, v2 = f"판정 보류({v1}, {why})", f"판정 보류({v2}, 표본 부족)"
         _, d2_ok = judge_times(st_ok, SETTLED_TARGET_MS)
