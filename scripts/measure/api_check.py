@@ -191,6 +191,10 @@ def main():
                 # 좌표 목록이 빠지면 규칙 3 표본이 줄어 "그대로"로 잘못 나온다 — 판정이 보류하게 기록한다
                 emit(out, {"phase": "C", "error": f"libSrch {region}: {err}"})
                 continue
+            if not resp.get("libs"):
+                # 3월 libSrch 오류 삼킴과 같은 꼴(오류 표시 없이 빈 목록) — 보류되게 오류로 남긴다
+                emit(out, {"phase": "C", "error": f"libSrch {region}: 빈 목록(numFound {resp.get('numFound')})"})
+                continue
             if as_int(resp.get("numFound")) != len(resp.get("libs", [])):
                 emit(out, {"phase": "C", "warn": f"libSrch {region}: numFound {resp.get('numFound')} 중 {len(resp.get('libs', []))}곳만 받음"})
             for l in resp.get("libs", []):
@@ -261,8 +265,11 @@ def summarize(path):
         r1 = "그대로" if max(calls) <= RULE1_MAX_CALLS else "멈춤(이미 pageSize 1000 — 시도 수가 원인인지 적고 묻는다)"
         r2 = "그대로" if within >= RULE2_SHARE and secs[-1] <= RULE2_TARGET_SEC * 2 else "멈춤"
         if b_incomplete:
-            # 오류 칸이 든 빠른 응답은 호출 수·시간을 좋게 보이게 한다 — 그 표본으로는 판정하지 않는다
-            r1 = r2 = f"판정 보류(불완전한 시도 응답 {b_incomplete}건)"
+            # 오류 칸이 든 빠른 응답은 호출 수·시간을 좋게 보이게 한다 — 그 표본으로는 "그대로"를 내지 않는다.
+            # 이미 멈춤이면 그대로 둔다(불완전 응답은 숫자를 줄여 보이게 할 뿐이라 멈춤은 성립한다)
+            hold = f"판정 보류(불완전한 시도 응답 {b_incomplete}건)"
+            r1 = r1 if r1.startswith("멈춤") else hold
+            r2 = r2 if r2.startswith("멈춤") else hold
         out += ["", "## 규칙 1·2 (위치마다 흔한 책, 걸치는 시도를 병렬로)", "", "| 위치 | 시도 | 조회 | 호출 수 | 단계 초(최소~최대) |", "|---|---|---|---|---|"]
         for key in dict.fromkeys(r["position"] for r in b):
             rs = [r for r in b if r["position"] == key]
@@ -277,11 +284,13 @@ def summarize(path):
         false_notice = [x for x in checks if x["falseAbsent"] and x["notice"]]
         errors = [x for x in checks if x["error"] or x["hasBook"] not in ("Y", "N")]
         skipped = [r for r in c if not r["listComplete"]]
-        coord_errors = [r["error"] for r in recs if r.get("phase") == "C" and r.get("error")]
-        held = errors or skipped or coord_errors
+        coord_errors = [r.get("error") or r.get("warn") for r in recs if r.get("phase") == "C" and (r.get("error") or r.get("warn"))]
+        empty_lists = [lst for lst in dict.fromkeys(r["list"] for r in c)
+                       if not any(r["checks"] for r in c if r["list"] == lst)]
+        held = errors or skipped or coord_errors or empty_lists
         r3 = "멈춤(원인을 적고 묻는다)" if false_other else ("판정 보류(확인 못 한 칸·불완전 목록·좌표 목록 오류)" if held else "그대로")
         out += ["", "## 규칙 3 (목록에 없는 가까운 도서관이 정말 없는가)",
-                f"- 확인 {len(checks)}곳(책 {len(c)}권, 목록 불완전으로 건너뛴 책 {len(skipped)}권), 응답 오류·형식 이상 {len(errors)}곳, 좌표 목록 오류 {len(coord_errors)}건"]
+                f"- 확인 {len(checks)}곳(책 {len(c)}권, 목록 불완전으로 건너뛴 책 {len(skipped)}권), 응답 오류·형식 이상 {len(errors)}곳, 좌표 목록 오류·일부만 받음 {len(coord_errors)}건, 확인 0곳인 목록 {empty_lists or '없음'}"]
         for lst in dict.fromkeys(r["list"] for r in c):
             mine = [x for r in c if r["list"] == lst for x in r["checks"]]
             out.append(f"  - {lst}: 확인 {len(mine)}곳(목표 90), 서로 다른 도서관 {len({x['libCode'] for x in mine})}곳, 공지 기관 {sum(1 for x in mine if x['notice'])}곳")

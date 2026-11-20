@@ -69,12 +69,21 @@ class Rules(unittest.TestCase):
 
     def test_coordinate_list_error_holds_rule3(self):
         text = report([{"phase": "C", "error": "libSrch 32: URLError"}, c([check()])])
-        self.assertIn("좌표 목록 오류 1건", text)
+        self.assertIn("좌표 목록 오류·일부만 받음 1건", text)
         self.assertIn("판정 → **판정 보류", text)
 
     def test_upper_bound_leaves_out_notice_checks(self):
         text = report([c([check(), check(notice=True)])])
         self.assertIn("공지 기관을 뺀 확인 1곳", text)
+
+    def test_stop_is_not_masked_by_incomplete_answers(self):
+        text = report([b(calls=5), b(regions=[region(complete=False)])])
+        self.assertIn("최대 5 → **멈춤", text)
+
+    def test_partial_coordinate_list_and_empty_check_list_hold(self):
+        self.assertIn("판정 → **판정 보류", report([{"phase": "C", "warn": "libSrch 31: 일부만"}, c([check()])]))
+        self.assertIn("확인 0곳인 목록 ['seoul']", report([c([])]))
+        self.assertIn("판정 → **판정 보류", report([c([])]))
 
     def test_incomplete_list_is_reported(self):
         self.assertIn("불완전(오류·쪽마다 numFound 다름·코드 수 ≠ numFound) 1건", report([c([], complete=False)]))
