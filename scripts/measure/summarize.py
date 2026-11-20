@@ -201,7 +201,7 @@ def expected_runs(plan):
         books = plan["books"][pos["books"]]
         for n in range(1, pos["rounds"] + 1):
             exp[f"{key}-r{n}"] = ("first", len(books))
-        if pos["rounds"] > 1:  # 춘천(1회차)은 두 번째 사람을 재지 않는다
+        if pos["rounds"] > 1:  # 원주(1회차)는 두 번째 사람을 재지 않는다
             exp[f"{key}-second"] = ("second", len(books))
         exp[f"{key}-browser"] = ("browser", len({b["bin"] for b in books}))
     exp["more"] = ("more", 1)
