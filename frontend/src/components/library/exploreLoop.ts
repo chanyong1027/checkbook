@@ -64,10 +64,17 @@ export async function runExploreRound(from: ExplorerState, deps: ExploreDeps): P
       return done('ERROR', err)
     }
     if (deps.isCancelled()) return CANCELLED
-    const result = applyBatch(state, round, offset, res)
-    state = result.state
-    round = result.round
-    deps.onBatch?.(state)
-    if (result.stop) return done(result.stop)
+    let stop: ExploreStop | null
+    try {
+      // 200인데 형태가 다른 응답(items 없음)처럼 반영하다 터져도 ERROR로 끝낸다 — 밖으로 던지면 화면이 '찾는 중'에 멈춘다
+      const result = applyBatch(state, round, offset, res)
+      state = result.state
+      round = result.round
+      stop = result.stop
+      deps.onBatch?.(state)
+    } catch (err) {
+      return done('ERROR', err)
+    }
+    if (stop) return done(stop)
   }
 }

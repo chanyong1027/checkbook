@@ -127,6 +127,27 @@ test('AbortError(마감이 아닌 중단)는 취소로 본다', async () => {
   assert.deepEqual(await runExploreRound(INITIAL_STATE, deps), { cancelled: true })
 })
 
+test('형태가 다른 응답(items 없음)은 밖으로 던지지 않고 ERROR', async () => {
+  const { deps } = fakeDeps({ 0: { nextOffset: 5, stopReason: 'NONE' } as unknown as PublicLibraryBatchResponse })
+  const result = await runExploreRound(INITIAL_STATE, deps)
+  assert.equal(result.cancelled, false)
+  if (result.cancelled) return
+  assert.equal(result.stop, 'ERROR')
+  assert.ok(result.error instanceof TypeError)
+})
+
+test('서버 중단 사유는 그대로 멈춤 사유가 된다', async () => {
+  const { deps, calls } = fakeDeps({ 0: batch([item('L1', 'UNKNOWN')], 5, 'DAILY_LIMIT') })
+  const result = await runExploreRound(INITIAL_STATE, deps)
+  assert.equal(result.cancelled ? null : result.stop, 'DAILY_LIMIT')
+  assert.equal(calls.length, 1)
+})
+
+test('취소된 뒤 마감 오류가 와도 취소가 먼저다', async () => {
+  const { deps } = fakeDeps({ 0: new RoundDeadlineError() }, { cancelAfterCall: 1 })
+  assert.deepEqual(await runExploreRound(INITIAL_STATE, deps), { cancelled: true })
+})
+
 test('더 찾기는 앞 결과를 지우지 않고 넘겨받은 위치부터 이어 찾는다', async () => {
   const from: ExplorerState = { found: [item('L1', 'AVAILABLE')], unknown: [], seen: ['L1', 'L2'], nextOffset: 5 }
   const { deps, calls } = fakeDeps({ 5: batch([item('L6', 'ON_LOAN')], null) })
