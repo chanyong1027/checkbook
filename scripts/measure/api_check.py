@@ -293,6 +293,14 @@ def main():
             pos = plan["positions"][pos_key]
             nearest = sorted((haversine(pos["lat"], pos["lon"], la, lo), code, name, addr)
                              for code, (name, la, lo, region, addr) in libs.items() if region in pos["regions"])
+            if db is not None:
+                # DB에는 활성인데 오늘 libSrch 목록(이 스크립트가 시도를 아는 곳)에 없는 가까운 도서관 — 화면 후보인데
+                # 표본에서 빠질 수 있는 곳이다. 시도를 몰라도 거리로 센다
+                missing = sorted(round(haversine(pos["lat"], pos["lon"], la, lo), 1)
+                                 for code, (la, lo) in db.items() if code not in raw
+                                 and haversine(pos["lat"], pos["lon"], la, lo) <= 10)
+                emit(out, {"phase": "C", "note": f"{pos_key}: DB 활성인데 libSrch 목록에 없는 10km 안 도서관 {len(missing)}곳"
+                           + (f"(가까운 거리 {missing[:5]}km)" if missing else "")})
             books = plan["books"][list_key]
             if args.limit:  # 묶음마다 앞에서 N권
                 books = [b for bin_ in ("common", "middle", "rare", "absent") for b in [x for x in books if x["bin"] == bin_][: args.limit]]
