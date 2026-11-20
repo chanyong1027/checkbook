@@ -75,7 +75,7 @@ class Rules(unittest.TestCase):
     def test_one_slow_sample_in_partial_run_is_not_yet_a_stop(self):
         # 60건 중 1건만 모였고 2초 — 나머지 59건이 좋으면 59/60으로 통과할 수 있다
         text = report([b(sec=2.0)], expected={"A": 0, "B": 60, "C": 0})
-        self.assertIn("넘은 것 1건, 최대 2.00초 → **판정 보류(표본 부족)", text)
+        self.assertIn("넘은 것 1건, 최대 2.00초 → **판정 보류(표본 부족: B 1/60)", text)
 
     def test_timed_out_sample_does_not_stop_rule2(self):
         recs = [b(sec=1.0)] * 19 + [b(sec=15.0, regions=[region(complete=False)])]
@@ -133,6 +133,118 @@ class Rules(unittest.TestCase):
 
     def test_incomplete_list_is_reported(self):
         self.assertIn("불완전(오류·쪽마다 numFound 다름·코드 수 ≠ numFound) 1건", report([c([], complete=False)]))
+
+
+class FakeResponse:
+    def __init__(self, payload):
+        self._body = json.dumps(payload).encode("utf-8")
+        self.status = 200
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+class ClientErrors(unittest.TestCase):
+    """정보나루 오류 칸: 키·한도는 바로 멈추고, 그 밖의 오류는 연달아 3번일 때만 멈춘다"""
+
+    def call(self, client, error):
+        original = a.urllib.request.urlopen
+        a.urllib.request.urlopen = lambda req, timeout: FakeResponse({"response": {"error": error}})
+        try:
+            return client.get("bookExist", libCode="1", isbn13="1")
+        finally:
+            a.urllib.request.urlopen = original
+
+    def test_key_or_limit_error_stops_at_once(self):
+        client = a.Client("k")
+        self.call(client, "인증키가 유효하지 않습니다")
+        self.assertTrue(client.fatal.startswith("error 칸(키·한도)"))
+
+    def test_other_error_stops_only_after_streak(self):
+        client = a.Client("k")
+        self.call(client, "잘못된 도서관 코드")
+        self.call(client, "잘못된 도서관 코드")
+        self.assertIsNone(client.fatal)
+        self.call(client, "잘못된 도서관 코드")
+        self.assertIn("3회 연속", client.fatal)
+
+    def test_success_resets_streak(self):
+        client = a.Client("k")
+        self.call(client, "잘못된 도서관 코드")
+        self.call(client, "잘못된 도서관 코드")
+        original = a.urllib.request.urlopen
+        a.urllib.request.urlopen = lambda req, timeout: FakeResponse({"response": {"result": {"hasBook": "N"}}})
+        try:
+            client.get("bookExist", libCode="1", isbn13="1")
+        finally:
+            a.urllib.request.urlopen = original
+        self.call(client, "잘못된 도서관 코드")
+        self.assertIsNone(client.fatal)
+
+
+class DbCoords(unittest.TestCase):
+    def run_with(self, returncode, stdout="", stderr=""):
+        original = a.subprocess.run
+        a.subprocess.run = lambda *x, **k: type("R", (), {"returncode": returncode, "stdout": stdout, "stderr": stderr})()
+        try:
+            return a.db_library_coords()
+        finally:
+            a.subprocess.run = original
+
+    def test_failure_is_reported_not_swallowed(self):
+        coords, bad, err = self.run_with(1, stderr="no such service: postgres")
+        self.assertIsNone(coords)
+        self.assertIn("no such service", err)
+
+    def test_bad_lines_are_counted(self):
+        coords, bad, err = self.run_with(0, stdout="111|37.5|127.0\n222|x|y\n")
+        self.assertEqual(coords, {"111": (37.5, 127.0)})
+        self.assertEqual(bad, 1)
+        self.assertIsNone(err)
+
+
+class AbortPath(unittest.TestCase):
+    def test_main_stops_and_writes_aborted_without_end(self):
+        class FatalClient:
+            def __init__(self, key):
+                self.calls = 0
+                self.fatal = None
+
+            def get(self, path, **params):
+                self.calls += 1
+                self.fatal = "HTTP 429"
+                return None, 0.1, "HTTP 429"
+
+        plan = {"positions": {"seoul-cityhall": {"lat": 37.5, "lon": 127.0, "books": "seoul", "rounds": 1, "regions": [11]},
+                              "ansan-cityhall": {"lat": 37.3, "lon": 126.8, "books": "gyeonggi", "rounds": 1, "regions": [31]},
+                              "wonju-cityhall": {"lat": 37.3, "lon": 127.9, "books": "gangwon", "rounds": 1, "regions": [32]}},
+                "bookRegions": {"seoul": 11, "gyeonggi": 31, "gangwon": 32},
+                "noticeInstitutions": {"names": [], "cities": []},
+                "books": {k: [{"isbn": "9780000000001", "bin": "common", "title": "t"}] for k in ("seoul", "gyeonggi", "gangwon")}}
+        original_client, original_sleep, original_argv = a.Client, a.time.sleep, sys.argv
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
+            (Path(d) / ".env").write_text("DATANARU_AUTH_KEY=k\n", encoding="utf-8")
+            a.Client, a.time.sleep = FatalClient, (lambda s: None)
+            sys.argv = ["api_check.py", "--plan", str(Path(d) / "plan.json"), "--env", str(Path(d) / ".env"), "--out", str(Path(d) / "o.jsonl")]
+            try:
+                with self.assertRaises(SystemExit) as cm:
+                    a.main()
+                self.assertEqual(cm.exception.code, 1)
+                recs = [json.loads(line) for line in (Path(d) / "o.jsonl").read_text(encoding="utf-8").splitlines()]
+            finally:
+                a.Client, a.time.sleep, sys.argv = original_client, original_sleep, original_argv
+        phases = [r["phase"] for r in recs]
+        self.assertIn("aborted", phases)
+        self.assertNotIn("end", phases)
+        self.assertNotIn("B", phases)  # 첫 호출에서 멈춰 B·C를 부르지 않는다
+        self.assertEqual(next(r for r in recs if r["phase"] == "aborted")["calls"], 1)
 
 
 if __name__ == "__main__":

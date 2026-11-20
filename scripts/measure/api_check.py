@@ -29,6 +29,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 BASE = "https://data4library.kr/api"
 BIG_PAGE = 1000
@@ -37,6 +38,10 @@ LOOKUP_GAP_SECONDS = 1.5  # 지역 조회 단계 사이 간격(세 시도 병렬
 ROUNDS = 3
 NEAREST_ABSENT = 5
 TIMEOUT_SECONDS = 15
+# error 칸에 이 말이 있으면 키·한도 오류로 보고 바로 멈춘다. 그 밖의 오류 칸(표본 하나의 잘못된 코드 등)은 연달아
+# ERROR_STREAK_LIMIT번 나올 때만 멈춘다 — 한 건 때문에 표본 전체를 잃지 않게
+FATAL_ERROR_WORDS = ("인증", "키", "key", "한도", "초과", "limit", "auth", "권한", "quota")
+ERROR_STREAK_LIMIT = 3
 
 
 def load_key(env_path):
@@ -53,8 +58,9 @@ class Client:
         self._key = key
         self._lock = threading.Lock()
         self.calls = 0
-        # 429·키 오류·한도 초과를 한 번이라도 받으면 나머지 호출을 하지 않는다(한도를 더 나쁘게 하지 않게)
+        # 429·키 오류·한도 초과를 받으면 나머지 호출을 하지 않는다(한도를 더 나쁘게 하지 않게)
         self.fatal = None
+        self._error_streak = 0
 
     def get(self, path, **params):
         """(response 칸 dict 또는 None, 걸린 초, 오류 설명 또는 None). 예외를 밖으로 던지지 않는다"""
@@ -82,8 +88,16 @@ class Client:
             return None, elapsed, "response 칸 없음"
         if resp.get("error"):
             # 정보나루는 키 오류·한도 초과를 HTTP 200 + error 칸으로 준다(DatanaruClient 주석)
-            self.fatal = self.fatal or f"error 칸: {str(resp.get('error'))[:80]}"
-            return resp, elapsed, f"error 칸: {str(resp.get('error'))[:80]}"
+            msg = str(resp.get("error"))[:80]
+            with self._lock:
+                self._error_streak += 1
+                if any(w in msg.lower() for w in FATAL_ERROR_WORDS):
+                    self.fatal = self.fatal or f"error 칸(키·한도): {msg}"
+                elif self._error_streak >= ERROR_STREAK_LIMIT:
+                    self.fatal = self.fatal or f"error 칸 {ERROR_STREAK_LIMIT}회 연속: {msg}"
+            return resp, elapsed, f"error 칸: {msg}"
+        with self._lock:
+            self._error_streak = 0
         return resp, elapsed, None
 
 
@@ -115,6 +129,9 @@ def fetch_region(client, isbn, region, page_size=BIG_PAGE):
     if err is None and num_found:
         need = math.ceil(num_found / page_size)
         for page in range(2, need + 1):
+            if client.fatal:
+                pages.append({"pageNo": page, "sec": 0, "error": "멈춤(앞선 한도 오류)", "numFound": None, "resultNum": None, "got": 0})
+                break
             time.sleep(GAP_SECONDS)
             r2, el2, err2 = client.get("libSrchByBook", isbn=isbn, region=region, pageNo=page, pageSize=page_size)
             pages.append({"pageNo": page, "sec": round(el2, 3), "error": err2, "numFound": as_int((r2 or {}).get("numFound")),
@@ -138,27 +155,31 @@ def region_stage(client, isbn, regions):
 
 
 def db_library_coords():
-    """운영 DB의 활성 도서관 좌표 {코드: (위도, 경도)}. 앱의 주변 탐색이 쓰는 값이다(정보나루 좌표가 비어 와도
-    PublicLibrary.refresh가 옛 좌표를 지켜 후보에 남는다). 서버가 아니면(도커 없음) None"""
+    """운영 DB의 활성 도서관 좌표. (좌표 {코드: (위도, 경도)} 또는 None, 못 읽은 줄 수, 실패 설명 또는 None).
+    앱의 주변 탐색이 쓰는 값이다(정보나루 좌표가 비어 와도 PublicLibrary.refresh가 옛 좌표를 지켜 후보에 남는다)"""
     d = "/opt/checkbook/current/deploy"
     cmd = ["docker", "compose", "--project-directory", d, "-f", f"{d}/compose.yaml", "--env-file", "/opt/checkbook/.env",
            "exec", "-T", "postgres", "sh", "-c",
            'psql -U "$POSTGRES_USER" -d checkbook -tA -F "|" -c "SELECT lib_code, lat, lon FROM public_library WHERE active"']
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-    except (OSError, subprocess.TimeoutExpired):
-        return None
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return None, 0, type(e).__name__
     if res.returncode != 0:
-        return None
+        return None, 0, f"종료 코드 {res.returncode}: {res.stderr.strip()[:160]}"
     coords = {}
+    bad = 0
     for line in res.stdout.splitlines():
+        if not line.strip():
+            continue
         parts = line.split("|")
-        if len(parts) == 3:
-            try:
-                coords[parts[0]] = (float(parts[1]), float(parts[2]))
-            except ValueError:
-                pass
-    return coords or None
+        try:
+            coords[parts[0]] = (float(parts[1]), float(parts[2]))
+        except (IndexError, ValueError):
+            bad += 1
+    if not coords:
+        return None, bad, "활성 도서관이 0곳으로 읽힘"
+    return coords, bad, None
 
 
 def haversine(a, b, c, d):
@@ -201,14 +222,16 @@ def main():
     if "A" in args.phases:
         isbn = next(b["isbn"] for b in plan["books"]["gyeonggi"] if b["bin"] == "common")
         one, one_codes = fetch_region(client, isbn, 31, BIG_PAGE)
-        time.sleep(GAP_SECONDS)
-        resp, el, err = client.get("libSrchByBook", isbn=isbn, region=31)  # pageSize 없이: 기본 쪽 크기
-        default = {"sec": round(el, 3), "error": err, "numFound": as_int((resp or {}).get("numFound")),
-                   "pageSize": as_int((resp or {}).get("pageSize")), "resultNum": as_int((resp or {}).get("resultNum"))}
-        time.sleep(GAP_SECONDS)
-        split, split_codes = fetch_region(client, isbn, 31, 100)
-        emit(out, {"phase": "A", "isbn": isbn, "region": 31, "onePage": one, "defaultPage": default, "split100": split,
-                   "sameCodes": one_codes == split_codes})
+        if not client.fatal:
+            time.sleep(GAP_SECONDS)
+            resp, el, err = client.get("libSrchByBook", isbn=isbn, region=31)  # pageSize 없이: 기본 쪽 크기
+            default = {"sec": round(el, 3), "error": err, "numFound": as_int((resp or {}).get("numFound")),
+                       "pageSize": as_int((resp or {}).get("pageSize")), "resultNum": as_int((resp or {}).get("resultNum"))}
+        if not client.fatal:
+            time.sleep(GAP_SECONDS)
+            split, split_codes = fetch_region(client, isbn, 31, 100)
+            emit(out, {"phase": "A", "isbn": isbn, "region": 31, "onePage": one, "defaultPage": default, "split100": split,
+                       "sameCodes": one_codes == split_codes})
 
     if "B" in args.phases and not client.fatal:
         for rnd in range(1, (1 if args.limit else ROUNDS) + 1):
@@ -223,10 +246,12 @@ def main():
                                "stageSec": round(stage, 3), "calls": sum(len(r["pages"]) for r in results), "perRegion": results})
 
     if "C" in args.phases and not client.fatal:
-        # 도서관 좌표(앱 DB와 같은 출처: libSrch 전체). 시도 넷
+        # 시도 소속은 정보나루 libSrch로 정하고, 좌표는 운영 DB(앱이 거리 계산에 쓰는 값)를 쓴다. 시도 넷
         libs = {}
         raw = {}
         for region in sorted({r for p in plan["positions"].values() for r in p["regions"]} | set(plan["bookRegions"].values())):
+            if client.fatal:
+                break
             time.sleep(GAP_SECONDS)
             resp, el, err = client.get("libSrch", region=region, pageNo=1, pageSize=BIG_PAGE)
             if err:
@@ -245,7 +270,13 @@ def main():
                     raw[lib["libCode"]] = (lib.get("libName", ""), lib.get("latitude"), lib.get("longitude"), region,
                                            lib.get("address") or "")
         # 좌표는 운영 DB(앱이 거리 계산에 쓰는 값)를 먼저 쓰고, 측정 PC처럼 DB를 못 읽으면 정보나루 좌표를 쓴다
-        db = db_library_coords()
+        db, db_bad, db_err = db_library_coords()
+        on_server = Path("/opt/checkbook").exists()
+        if db is None and on_server:
+            # 서버인데 DB를 못 읽었다 — 정보나루 좌표로 대신하면 화면과 다른 표본이 되므로 보류되게 남긴다
+            emit(out, {"phase": "C", "warn": f"운영 DB 좌표를 못 읽음(서버 실행): {db_err}"})
+        if db_bad:
+            emit(out, {"phase": "C", "warn": f"운영 DB 좌표 줄 {db_bad}개를 못 읽음 — 그 도서관이 표본에서 빠질 수 있다"})
         dropped = []
         for code, (name, la, lo, region, addr) in raw.items():
             if db is not None:
@@ -256,11 +287,8 @@ def main():
                 libs[code] = (name, float(la), float(lo), region, addr)
             except (TypeError, ValueError):
                 dropped.append(code)
-        emit(out, {"phase": "C", "note": f"좌표 출처: {'운영 DB 활성 도서관 ' + str(len(db)) + '곳' if db is not None else '정보나루 libSrch(운영 DB를 못 읽음 — 측정 PC 실행)'}"
+        emit(out, {"phase": "C", "note": f"좌표 출처: {'운영 DB 활성 도서관 ' + str(len(db)) + '곳' if db is not None else '정보나루 libSrch(운영 DB를 못 읽음' + (' — 서버, 위 경고' if on_server else ' — 측정 PC 실행') + ')'}"
                    + (f", 좌표 없어 뺀 {len(dropped)}곳" if dropped else "")})
-        if dropped and db is not None:
-            # DB에 활성인데 좌표를 못 읽은 곳은 화면 후보일 수 있다 — 표본이 화면과 달라지므로 보류되게 남긴다
-            emit(out, {"phase": "C", "warn": f"운영 DB 활성인데 좌표를 못 읽은 도서관 {len(dropped)}곳: {dropped[:10]}"})
         for list_key, pos_key in anchors.items():
             pos = plan["positions"][pos_key]
             nearest = sorted((haversine(pos["lat"], pos["lon"], la, lo), code, name, addr)
@@ -326,6 +354,9 @@ def summarize(path):
         # 이미 다른 이유로 보류면 그 사유를 지우지 않고 표본 부족을 덧붙인다
         return f"{verdict}, 표본 부족: {why}" if verdict.startswith("판정 보류") else f"판정 보류(표본 부족: {why})"
     out = [f"# 순서 4 API 확인 판정 — `{path}`", "", f"- 실행 {start.get('at')}" + (f" ⚠ --limit {start['limit']}(스크립트 확인용, 판정에 쓰지 않음)" if start.get("limit") else "")]
+    aborted = next((r for r in recs if r.get("phase") == "aborted"), None)
+    if aborted:
+        out.append(f"- ⚠ 실행이 멈춤: {aborted.get('reason')} (정보나루 {aborted.get('calls')}회에서)")
     out.append(f"- 기록: A {got['A']}/{expected.get('A')}, B {got['B']}/{expected.get('B')}, C {got['C']}/{expected.get('C')}, 끝 표시 {'있음' if not unfinished else '없음'}"
                + (" → **표본 부족이라 '그대로'는 판정 보류로 둔다**" if partial else ""))
     a = next((r for r in recs if r.get("phase") == "A"), None)
@@ -355,7 +386,7 @@ def summarize(path):
             ss = [r["stageSec"] for r in rs]
             out.append(f"| {key} | {rs[0]['regions']} | {len(rs)}/{n_all} | {min(r['calls'] for r in rs)}~{max(r['calls'] for r in rs)} | {min(ss):.2f}~{max(ss):.2f} |")
         uncertain = partial or b_incomplete
-        why = f"불완전한 시도 응답 {b_incomplete}건" if b_incomplete else "표본 부족"
+        why = f"불완전한 시도 응답 {b_incomplete}건" if b_incomplete else f"표본 부족: B {len(b)}/{total}"
         if ok:
             calls = [r["calls"] for r in ok]
             secs = sorted(r["stageSec"] for r in ok)
