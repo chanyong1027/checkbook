@@ -4,7 +4,8 @@
 #   read            두 칸(blue 8081·green 8082)의 /actuator/prometheus에서 정보나루 관련 줄만 뽑는다
 #                   - external_budget_used{provider="datanaru"}: 오늘(KST) 나간 정보나루 호출 수(회차 앞뒤 차이가 호출 수의 주 값, R12)
 #                   - http_client_requests_seconds_*: 정보나루 호출 시간 히스토그램(외부 원인 판정 D3, 전후 두 날 비교)
-#                   예산 값이 동기화 간격(10초)보다 긴 11초 사이에 그대로이고 칸끼리 같을 때까지 다시 읽는다(최대 5번).
+#                   떠 있는 칸이 모두 응답하고, 예산 값이 11초(동기화 간격 10초보다 길게) 사이 그대로이며 칸끼리 같고,
+#                   동기화 실패 카운터가 늘지 않았을 때만 값을 낸다(최대 5번, 안 되면 실패).
 #   reset ISBN...   library_availability_snapshot에서 그 ISBN 행만 지운다(운영 DB 변경 — 측정일에 사용자 확인을 받고 쓴다)
 #
 # 서버에서 부르는 법(저장소 사본에서 꺼내 바로 실행, 작업 트리를 쓰지 않는다):
@@ -24,7 +25,7 @@ snapshot() {
     if body="$(curl -fsS --max-time 3 "http://127.0.0.1:${port}/actuator/prometheus" 2>/dev/null)"; then
       found=1
       lines="$(printf '%s\n' "$body" \
-        | grep -E '^external_budget_used\{[^}]*provider="datanaru"|^http_client_requests_seconds_(count|sum|max|bucket)\{[^}]*(data4library|bookExist|libSrch)' || true)"
+        | grep -E '^external_budget_used\{[^}]*provider="datanaru"|^external_budget_sync_failures_total|^http_client_requests_seconds_(count|sum|max|bucket)\{[^}]*(data4library|bookExist|libSrch)' || true)"
       # 줄이 비면 외부 원인 판정을 못 한다(집계가 "판정 보류"로 둔다). 측정 PC가 바로 알게 표준 오류로 알린다
       if ! grep -q '^external_budget_used' <<<"$lines"; then
         echo "WARN port=${port} external_budget_used(datanaru) 줄 없음" >&2
@@ -46,22 +47,42 @@ shift || true
 
 case "$cmd" in
   read)
-    # 예산 게이지는 칸마다 10초 간격으로 DB와 따로 맞춘다. 고정된 대기 시간으로는 동기화를 보장할 수 없어서,
-    # 동기화 간격보다 길게(11초) 두 번 읽어 정보나루 예산 값이 그대로이고 칸끼리도 같을 때의 값을 낸다(최대 5번 시도)
-    prev=""
+    # 예산 게이지는 칸마다 10초 간격으로 DB와 따로 맞춘다. 고정된 대기로는 동기화를 보장할 수 없어서 아래가 모두 맞을 때의
+    # 값만 낸다(11초 간격으로 다시 읽기, 최대 5번). 끝내 안 맞으면 값을 내지 않고 실패한다(측정 PC는 잠시 뒤 다시 읽는다).
+    #   - 떠 있는 앱 칸(docker ps)이 모두 응답하고 정보나루 예산 줄이 있다
+    #   - 정보나루 예산 값이 직전 읽기와 같고 칸끼리도 같다(동기화 간격보다 긴 동안 그대로)
+    #   - 동기화 실패 카운터가 직전 읽기와 같다(값이 같아도 DB 쓰기가 실패했으면 반영 안 된 증가분이 남는다)
+    expected_ports=""
+    running="$(docker ps --format '{{.Names}}' 2>/dev/null || true)"
+    grep -q '^checkbook-app-blue-1$' <<<"$running" && expected_ports="$expected_ports 8081"
+    grep -q '^checkbook-app-green-1$' <<<"$running" && expected_ports="$expected_ports 8082"
+    if [ -z "$expected_ports" ]; then
+      echo "ERROR 떠 있는 앱 칸을 찾지 못함(docker ps)" >&2
+      exit 1
+    fi
+    prev_budget=""
+    prev_fail=""
     for attempt in 1 2 3 4 5; do
-      out="$(snapshot)" || exit 1
+      out="$(snapshot)" || out=""
       budget="$(grep -E ' external_budget_used\{' <<<"$out" | sed -E 's/^[^ ]+ //' | sort || true)"
+      fail="$(grep -E ' external_budget_sync_failures_total' <<<"$out" | sed -E 's/^[^ ]+ //' | sort || true)"
+      all_up=1
+      for port in $expected_ports; do
+        grep -q "^port=${port} external_budget_used" <<<"$budget" || all_up=0
+        grep -q "^port=${port} external_budget_sync_failures_total" <<<"$fail" || all_up=0
+      done
       ports_agree="$(sed -E 's/^port=[0-9]+ //' <<<"$budget" | sort -u | wc -l)"
-      if [ -n "$prev" ] && [ "$budget" = "$prev" ] && [ "$ports_agree" -le 1 ]; then
+      if [ "$all_up" = 1 ] && [ -n "$prev_budget" ] && [ "$budget" = "$prev_budget" ] \
+          && [ "$fail" = "$prev_fail" ] && [ "$ports_agree" -le 1 ]; then
         printf '%s\n' "$out"
         exit 0
       fi
-      prev="$budget"
+      prev_budget="$budget"
+      prev_fail="$fail"
       if [ "$attempt" -lt 5 ]; then sleep 11; fi
     done
-    echo "WARN 예산 값이 5번 읽는 동안 멈추지 않았거나 칸끼리 다름 — 마지막 값을 낸다(측정 밖 호출이 섞였을 수 있음)" >&2
-    printf '%s\n' "$out"
+    echo "ERROR 동기화를 확인하지 못함(떠 있는 칸:${expected_ports}) — 칸 무응답·예산 값 변동·칸끼리 다름·동기화 실패 증가 중 하나. 잠시 뒤 다시 읽는다" >&2
+    exit 1
     ;;
   reset)
     if [ "$#" -eq 0 ]; then
