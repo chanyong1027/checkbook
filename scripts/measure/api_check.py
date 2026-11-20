@@ -383,6 +383,7 @@ def summarize(path):
         # (시간 초과는 15초까지 늘고, 오류 칸은 빨리 끝난다) 그 표본으로 멈춤도 그대로도 내지 않는다
         ok = [r for r in b if all(x["complete"] for x in r["perRegion"])]
         b_incomplete = len(b) - len(ok)
+        known_total = bool(expected.get("B"))
         total = expected.get("B") or len(b)
         out += ["", "## 규칙 1·2 (위치마다 흔한 책, 걸치는 시도를 병렬로)", "", "| 위치 | 시도 | 조회(완전) | 호출 수 | 단계 초(최소~최대) |", "|---|---|---|---|---|"]
         for key in dict.fromkeys(r["position"] for r in b):
@@ -401,7 +402,8 @@ def summarize(path):
             over = sum(1 for v in secs if v > RULE2_TARGET_SEC)
             # 남은 표본이 모두 좋아도 뒤집히지 않는 실패만 "멈춤"(가장 느린 값이 2배를 넘음, 또는 넘은 표본이 전체의 5% 초과)
             stop1 = max(calls) > RULE1_MAX_CALLS
-            stop2 = secs[-1] > RULE2_TARGET_SEC * 2 or over > (1 - RULE2_SHARE) * total
+            # 비율로 확정하려면 전체 기대 수를 알아야 한다(기대 수가 없는 옛 기록이면 최대 시간 기준만 확정)
+            stop2 = secs[-1] > RULE2_TARGET_SEC * 2 or (known_total and over > (1 - RULE2_SHARE) * total)
             r1 = "멈춤(이미 pageSize 1000 — 시도 수가 원인인지 적고 묻는다)" if stop1 else (f"판정 보류({why})" if uncertain else "그대로")
             r2 = "멈춤" if stop2 else (f"판정 보류({why})" if uncertain else ("그대로" if over <= (1 - RULE2_SHARE) * len(secs) else "멈춤"))
             out += ["", f"- 규칙 1(호출 ≤ {RULE1_MAX_CALLS}): 완전한 표본 {len(ok)}건 최대 {max(calls)} → **{r1}**",

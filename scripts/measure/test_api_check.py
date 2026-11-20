@@ -86,6 +86,23 @@ class Rules(unittest.TestCase):
         text = report([b(sec=2.0)] * 4, expected={"A": 0, "B": 60, "C": 0})
         self.assertIn("넘은 것 4건, 최대 2.00초 → **멈춤**", text)
 
+    def test_old_file_without_expected_count_does_not_stop_on_ratio(self):
+        # 기대 수가 없으면 비율 실패는 확정할 수 없다 — 2초 1건은 보류, 3초 넘는 값은 멈춤
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "old.jsonl"
+            f.write_text("\n".join(json.dumps(r) for r in [{"phase": "start", "at": "t", "limit": 0}, b(sec=2.0), {"phase": "end"}]),
+                         encoding="utf-8")
+            buf = StringIO()
+            with redirect_stdout(buf):
+                a.summarize(str(f))
+            self.assertIn("최대 2.00초 → **판정 보류", buf.getvalue())
+            f.write_text("\n".join(json.dumps(r) for r in [{"phase": "start", "at": "t", "limit": 0}, b(sec=3.5), {"phase": "end"}]),
+                         encoding="utf-8")
+            buf = StringIO()
+            with redirect_stdout(buf):
+                a.summarize(str(f))
+            self.assertIn("최대 3.50초 → **멈춤**", buf.getvalue())
+
     def test_aborted_run_holds(self):
         text = report([c([check()]), {"phase": "aborted", "reason": "HTTP 429"}], finished=False)
         self.assertIn("판정 보류(표본 부족: 끝 표시 없음)", text)
