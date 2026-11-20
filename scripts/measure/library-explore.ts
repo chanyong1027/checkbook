@@ -39,6 +39,14 @@ if (!['first', 'second', 'more', 'reference', 'smoke'].includes(PASS)) throw new
 const GAP_SECONDS = 2
 /** 사용자가 "더 찾기"를 누르기까지의 쉼(초). 시간이 아니라 호출 수를 보는 줄이라 짧게 둔다 */
 const MORE_CLICK_SECONDS = 1
+/** 더 찾기 횟수 상한. 서울 10km 약 205곳 ÷ 5 = 41배치라 넉넉히. 장애로 같은 곳을 끝없이 다시 찾지 않게 */
+const MORE_ROUND_LIMIT = 60
+/** 우리 IP 하루 한도에 닿으면(429) 그날 측정을 거기서 멈춘다(D4: 한도를 더 올리지 않는다) */
+let ipLimitHit = false
+const IP_LIMIT_CODES = ['DAILY_REQUEST_LIMIT_EXCEEDED', 'RATE_LIMIT_EXCEEDED']
+function noteLimit(status: number, code: string | null) {
+  if (status === 429 && code != null && IP_LIMIT_CODES.includes(code)) ipLimitHit = true
+}
 
 export const options = {
   scenarios: {
@@ -104,7 +112,11 @@ async function explore(book: Book, origin: Origin, from: ExplorerState, t0: numb
       const log: BatchLog = { offset, startMs: start - t0, ms: Date.now() - start, status: res.status, items: 0, stopReason: null }
       batches.push(log)
       if (res.error_code === K6_REQUEST_TIMEOUT) throw new RoundDeadlineError()
-      if (res.status !== 200) throw new HttpFailure(res.status, bodyCode(res), res.error_code)
+      if (res.status !== 200) {
+        const code = bodyCode(res)
+        noteLimit(res.status, code)
+        throw new HttpFailure(res.status, code, res.error_code)
+      }
       const json = res.json() as unknown as { items: unknown[]; stopReason: string }
       log.items = Array.isArray(json.items) ? json.items.length : 0
       log.stopReason = json.stopReason ?? null
@@ -120,8 +132,9 @@ function summarizeExplore(r: Awaited<ReturnType<typeof explore>>, endMs: number)
   const { state, stop, error } = result
   const reasons: Record<string, number> = {}
   for (const u of state.unknown) reasons[u.reason ?? 'null'] = (reasons[u.reason ?? 'null'] ?? 0) + 1
-  // 첫 표시(규칙 문서 6절): 소장 1곳이 처음 보인 시각, 또는 소장 없음이 확정된 종료(EXHAUSTED·ROUND_LIMIT)
-  const noneConfirmed = firstFoundMs == null && (stop === 'EXHAUSTED' || stop === 'ROUND_LIMIT')
+  // 첫 표시(규칙 문서 6절): 소장 1곳이 처음 보인 시각, 또는 소장 없음이 확정된 종료(EXHAUSTED·ROUND_LIMIT이면서
+  // 확인 못 함 0 — 확인 못 함이 있으면 화면은 "소장이 확인된 곳이 없어요 · N곳 확인 못 함"이라 없음이 확정되지 않았다)
+  const noneConfirmed = firstFoundMs == null && (stop === 'EXHAUSTED' || stop === 'ROUND_LIMIT') && state.unknown.length === 0
   return {
     firstDisplayMs: firstFoundMs ?? (noneConfirmed ? endMs : null),
     firstDisplayKind: firstFoundMs != null ? 'found' : noneConfirmed ? 'none' : null,
@@ -148,6 +161,7 @@ async function search(book: Book, t0: number) {
     out.sections = json.metadata?.sectionStatuses ?? null
   } else {
     out.code = bodyCode(res)
+    noteLimit(res.status, out.code as string | null)
   }
   return out
 }
@@ -187,6 +201,8 @@ async function openBookAndMoreToEnd(book: Book, origin: Origin) {
     rounds.push(rest)
     const fatal = sum.error != null && (sum.error as { status?: number }).status === 400
     if (state.nextOffset == null || sum.stop === 'DAILY_LIMIT' || fatal) break
+    // 화면의 canMore는 ERROR·CIRCUIT_OPEN 뒤에도 더 찾기를 열어 두지만, 사람이 장애 중에 끝없이 누르지는 않는다
+    if (sum.stop === 'ERROR' || sum.stop === 'CIRCUIT_OPEN' || ipLimitHit || rounds.length >= MORE_ROUND_LIMIT) break
     sleep(MORE_CLICK_SECONDS)
   }
   emit({ ...base(book, t0), rounds, totalChecked: state.seen.length, totalFound: state.found.length, search: await searchP })
@@ -218,6 +234,10 @@ export default async function () {
   }
   const books = plan.books[position.books] as Book[]
   for (let i = 0; i < books.length; i++) {
+    if (ipLimitHit) {
+      emit({ stage: STAGE, pass: PASS, position: POSITION, round: ROUND, aborted: 'IP_DAILY_LIMIT', remaining: books.slice(i).map(b => b.isbn) })
+      return
+    }
     if (i > 0) sleep(GAP_SECONDS)
     await openBook(books[i], { lat: position.lat, lon: position.lon })
   }

@@ -4,9 +4,11 @@
  * 무엇을 재나 — 모두 페이지 안의 같은 시계(performance.now, 페이지 이동 시작이 0)로 잰다:
  *   - batchResponseMs: 소장이 처음 담긴 배치 응답을 받은 시각(fetch가 끝난 때)
  *   - firstFoundPaintMs: 상태 줄에 "소장 N곳"(N≥1)이 처음 그려진 시각(DOM 변경 뒤 다음 프레임)
- *   - renderShareMs = firstFoundPaintMs − batchResponseMs: 응답을 받은 뒤 화면에 보이기까지 — 프로토콜 측정이 놓치는 몫
- *   - firstBatchStartMs: 첫 배치를 보낸 시각(페이지 로드·위치 확인까지의 몫, 프로토콜 측정에는 없음)
- * 판정(규칙 문서 5절·D5): renderShareMs가 300ms 이하면 첫 표시를 프로토콜 값으로 판정한다.
+ *   - firstBatchStartMs: 첫 배치를 보낸 시각(페이지 로드·위치 확인까지의 몫, 프로토콜 측정의 시작점 밖이라 참고만)
+ *   - nonNetworkShareMs = (그려진 시각 − firstBatchStartMs) − 그때까지 배치 응답 시간의 합
+ *     = 배치 사이 간격 + 마지막 응답 뒤 그리기. 프로토콜 측정이 놓치는 몫이고 판정에 쓴다
+ *   - renderShareMs = firstFoundPaintMs − batchResponseMs: 그중 마지막 응답 뒤 그리기만(자세히 보기용)
+ * 판정(규칙 문서 6절 정의 보강·D5): nonNetworkShareMs 최댓값이 300ms 이하면 첫 표시를 프로토콜 값으로 판정한다.
  * 같은 책의 프로토콜 값과 직접 빼지 않는 이유: 두 실행은 정보나루 응답 시간이 서로 달라(수백 ms) 차이에 외부 변동이 섞인다.
  *
  * 실행(Windows PowerShell, 저장소 루트, Chrome 또는 Chromium 필요):
@@ -110,13 +112,22 @@ export default async function () {
       settledPaintMs: number | null
       statusText: string | null
     }
-    const firstHeld = m.batches.find(b => (b.held ?? 0) > 0)
+    const heldIdx = m.batches.findIndex(b => (b.held ?? 0) > 0)
+    const firstHeld = heldIdx >= 0 ? m.batches[heldIdx] : undefined
     const batchResponseMs = firstHeld?.endMs ?? null
+    const firstStart = m.batches[0]?.startMs ?? null
+    const fetchSum = (upTo: number) => m.batches.slice(0, upTo + 1)
+      .reduce((acc, b) => acc + (b.endMs != null ? b.endMs - b.startMs : 0), 0)
+    const nonNetwork = (paint: number | null, upTo: number) =>
+      paint != null && firstStart != null && upTo >= 0 ? paint - firstStart - fetchSum(upTo) : null
     console.log(`MEASURE ${JSON.stringify({
       stage: STAGE, pass: 'browser', position: POSITION, isbn: book.isbn, bin: book.bin, startedAt, timedOut,
       firstBatchStartMs: m.batches[0]?.startMs ?? null,
       batchResponseMs,
       firstFoundPaintMs: m.firstFoundPaintMs,
+      nonNetworkShareMs: m.firstFoundPaintMs != null
+        ? nonNetwork(m.firstFoundPaintMs, heldIdx)
+        : nonNetwork(m.noneConfirmedPaintMs, m.batches.length - 1),
       renderShareMs: batchResponseMs != null && m.firstFoundPaintMs != null ? m.firstFoundPaintMs - batchResponseMs : null,
       // 소장 없음으로 끝난 책: 마지막 배치 응답 → "소장 도서관이 없어요"가 그려지기까지
       noneRenderShareMs: m.noneConfirmedPaintMs != null && m.batches.length > 0 && m.batches[m.batches.length - 1].endMs != null

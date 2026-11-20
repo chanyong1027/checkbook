@@ -26,9 +26,16 @@ case "$cmd" in
     for port in 8081 8082; do
       if body="$(curl -fsS --max-time 3 "http://127.0.0.1:${port}/actuator/prometheus" 2>/dev/null)"; then
         found=1
-        printf '%s\n' "$body" \
-          | grep -E '^external_budget_used\{[^}]*provider="datanaru"|^http_client_requests_seconds_(count|sum|max|bucket)\{[^}]*(data4library|bookExist|libSrch)' \
-          | sed "s/^/${ts} port=${port} /" || true
+        lines="$(printf '%s\n' "$body" \
+          | grep -E '^external_budget_used\{[^}]*provider="datanaru"|^http_client_requests_seconds_(count|sum|max|bucket)\{[^}]*(data4library|bookExist|libSrch)' || true)"
+        # 줄이 비면 외부 원인 판정을 못 한다(집계가 "판정 보류"로 둔다). 측정 PC가 바로 알게 표준 오류로 알린다
+        if ! grep -q '^external_budget_used' <<<"$lines"; then
+          echo "WARN port=${port} external_budget_used(datanaru) 줄 없음" >&2
+        fi
+        if ! grep -q '^http_client_requests_seconds_count' <<<"$lines"; then
+          echo "WARN port=${port} 정보나루 http_client_requests 줄 없음(라벨 가정 확인 필요)" >&2
+        fi
+        [ -n "$lines" ] && sed "s/^/${ts} port=${port} /" <<<"$lines"
       fi
     done
     if [ "$found" = 0 ]; then

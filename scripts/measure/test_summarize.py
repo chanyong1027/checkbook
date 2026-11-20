@@ -44,6 +44,9 @@ class Unresolved(unittest.TestCase):
     def test_timeout_without_server_evidence_is_ours(self):
         self.assertEqual(s.unresolved_kind(lib(unknown=1, reasons={"TIMEOUT": 1}), False), "ours")
 
+    def test_timeout_without_metrics_is_undetermined(self):
+        self.assertEqual(s.unresolved_kind(lib(unknown=1, reasons={"TIMEOUT": 1}), None), "undetermined")
+
     def test_pool_busy_is_ours_even_with_evidence(self):
         self.assertEqual(s.unresolved_kind(lib(unknown=2, reasons={"TIMEOUT": 1, "POOL_BUSY": 1}), True), "ours")
 
@@ -52,6 +55,9 @@ class Unresolved(unittest.TestCase):
 
     def test_daily_limit_stop_is_ours(self):
         self.assertEqual(s.unresolved_kind(lib(stop="DAILY_LIMIT", unknown=0), True), "ours")
+
+    def test_time_stop_is_counted_apart(self):
+        self.assertEqual(s.unresolved_kind(lib(stop="TIME", unknown=1, reasons={"TIMEOUT": 1}), True), "time")
 
 
 class Quantile(unittest.TestCase):
@@ -78,37 +84,65 @@ POST = """2026-11-25T05:05:00Z port=8081 external_budget_used{provider="datanaru
 
 
 class Probe(unittest.TestCase):
-    def test_diff_counts_budget_slow_and_not_success(self):
+    def diff(self, pre, post):
         with tempfile.TemporaryDirectory() as d:
-            (Path(d) / "pre.txt").write_text(PRE, encoding="utf-8")
-            (Path(d) / "post.txt").write_text(POST, encoding="utf-8")
-            diff = s.probe_diff(s.load_probe(Path(d) / "pre.txt"), s.load_probe(Path(d) / "post.txt"))
+            (Path(d) / "pre.txt").write_text(pre, encoding="utf-8")
+            (Path(d) / "post.txt").write_text(post, encoding="utf-8")
+            return s.probe_diff(s.load_probe(Path(d) / "pre.txt"), s.load_probe(Path(d) / "post.txt"))
+
+    def test_diff_counts_budget_slow_and_not_success(self):
+        diff = self.diff(PRE, POST)
         self.assertEqual(s.budget_used(diff), 20)
         cs = s.client_stats(diff)
         self.assertEqual(cs["count"], 20)
         self.assertEqual(cs["slow"], 2)
         self.assertEqual(cs["notSuccess"], 1)
 
+    def test_budget_gauge_is_not_doubled_when_both_slots_are_up(self):
+        two = lambda text: text + text.replace("port=8081", "port=8082")  # noqa: E731
+        diff = self.diff(two(PRE), two(POST))
+        self.assertEqual(s.budget_used(diff), 20)
+        self.assertEqual(s.client_stats(diff)["count"], 40)
+
 
 class EndToEnd(unittest.TestCase):
-    def test_report_runs_on_synthetic_folder(self):
-        recs = [
-            {"stage": "before", "pass": "first", "position": "seoul-cityhall", "round": 1, "isbn": "1", "bin": "common",
-             "library": lib(), "search": {"status": 200}},
-            {"stage": "before", "pass": "first", "position": "seoul-cityhall", "round": 1, "isbn": "2", "bin": "absent",
-             "library": lib(stop="ROUND_LIMIT", first=6000, settled=6000, checked=20, found=0), "search": {"status": 200}},
-        ]
+    def report(self, recs, probes=True):
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "seoul-cityhall-r1.jsonl").write_text(
                 "\n".join("MEASURE " + json.dumps(r) for r in recs), encoding="utf-8")
-            (Path(d) / "probe-seoul-cityhall-r1-pre.txt").write_text(PRE, encoding="utf-8")
-            (Path(d) / "probe-seoul-cityhall-r1-post.txt").write_text(POST, encoding="utf-8")
+            if probes:
+                (Path(d) / "probe-seoul-cityhall-r1-pre.txt").write_text(PRE, encoding="utf-8")
+                (Path(d) / "probe-seoul-cityhall-r1-post.txt").write_text(POST, encoding="utf-8")
             buf = StringIO()
             with redirect_stdout(buf):
                 s.main(d)
-        text = buf.getvalue()
+        return buf.getvalue()
+
+    @staticmethod
+    def rec(isbn, library, bin_="common"):
+        return {"stage": "before", "pass": "first", "position": "seoul-cityhall", "round": 1, "isbn": isbn, "bin": bin_,
+                "library": library, "search": {"status": 200}}
+
+    def test_flags_budget_mismatch_and_judges_first_display(self):
+        text = self.report([
+            self.rec("1", lib()),
+            self.rec("2", lib(stop="ROUND_LIMIT", first=6000, settled=6000, checked=20, found=0), "absent"),
+        ])
         self.assertIn("| seoul-cityhall-r1 | 2 | 20 | 25 |", text)
+        self.assertIn("⚠예산≠확인 수(-5)", text)
         self.assertIn("첫 표시: **미달**", text)
+
+    def test_time_stop_is_left_out_of_settled_sample(self):
+        text = self.report([
+            self.rec("1", lib(settled=1500)),
+            self.rec("2", lib(stop="TIME", settled=9900, unknown=1, reasons={"TIMEOUT": 1})),
+        ])
+        self.assertIn("확정: **통과** — 1건 중", text)
+        self.assertIn("`TIME` 종료(따로 적음): 1건", text)
+
+    def test_missing_probe_holds_judgement_instead_of_blaming_us(self):
+        text = self.report([self.rec("1", lib(unknown=1, reasons={"TIMEOUT": 1}))], probes=False)
+        self.assertIn("판정 보류", text)
 
 
 if __name__ == "__main__":
