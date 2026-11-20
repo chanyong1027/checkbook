@@ -32,10 +32,15 @@ def check(has="N", notice=False, error=None):
             "falseAbsent": has == "Y", "notice": notice, "noticeCity": notice}
 
 
-def report(recs):
+def report(recs, expected=None, finished=True, limit=0):
+    """기본은 기록한 만큼이 기대 수이고 끝 표시가 있는 완전한 실행"""
+    if expected is None:
+        expected = {"A": 0, "B": sum(1 for r in recs if r.get("phase") == "B"),
+                    "C": sum(1 for r in recs if r.get("phase") == "C" and "checks" in r)}
+    lines = [{"phase": "start", "at": "t", "limit": limit, "expected": expected}] + recs + ([{"phase": "end"}] if finished else [])
     with tempfile.TemporaryDirectory() as d:
         f = Path(d) / "r.jsonl"
-        f.write_text("\n".join(json.dumps(r) for r in [{"phase": "start", "at": "t", "limit": 0}] + recs), encoding="utf-8")
+        f.write_text("\n".join(json.dumps(r) for r in lines), encoding="utf-8")
         buf = StringIO()
         with redirect_stdout(buf):
             a.summarize(str(f))
@@ -84,6 +89,21 @@ class Rules(unittest.TestCase):
         self.assertIn("판정 → **판정 보류", report([{"phase": "C", "warn": "libSrch 31: 일부만"}, c([check()])]))
         self.assertIn("확인 0곳인 목록 ['seoul']", report([c([])]))
         self.assertIn("판정 → **판정 보류", report([c([])]))
+
+    def test_partial_run_holds_pass_but_keeps_stop(self):
+        text = report([c([check()])], expected={"A": 0, "B": 0, "C": 54})
+        self.assertIn("C 1/54", text)
+        self.assertIn("판정 → **판정 보류(표본 부족: C 1/54)", text)
+        self.assertIn("판정 → **멈춤", report([c([check("Y")])], expected={"A": 0, "B": 0, "C": 54}))
+
+    def test_unfinished_or_limit_run_holds(self):
+        self.assertIn("판정 보류(표본 부족: 끝 표시 없음)", report([c([check()])], finished=False))
+        self.assertIn("판정 보류(표본 부족: --limit 실행)", report([c([check()])], limit=1))
+
+    def test_dropped_coordinates_are_noted_not_held(self):
+        text = report([{"phase": "C", "note": "libSrch 32: 좌표 없는 1곳 제외(앱도 적재하지 않음)"}, c([check()])])
+        self.assertIn("참고: libSrch 32: 좌표 없는 1곳 제외", text)
+        self.assertIn("판정 → **그대로**", text)
 
     def test_incomplete_list_is_reported(self):
         self.assertIn("불완전(오류·쪽마다 numFound 다름·코드 수 ≠ numFound) 1건", report([c([], complete=False)]))

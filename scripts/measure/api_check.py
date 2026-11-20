@@ -157,7 +157,16 @@ def main():
     notice_cities = plan["noticeInstitutions"].get("cities", [])
     out = open(args.out, "w", encoding="utf-8")
     started = time.time()
-    emit(out, {"phase": "start", "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "limit": args.limit})
+    anchors = {"seoul": "seoul-cityhall", "gyeonggi": "ansan-cityhall", "gangwon": "wonju-cityhall"}
+    # 판정이 표본 완전성을 확인하게 기대 기록 수를 남긴다(끝 표시와 함께)
+    expected = {
+        "A": 1 if "A" in args.phases else 0,
+        "B": ROUNDS * sum(sum(1 for b in plan["books"][p["books"]] if b["bin"] == "common") for p in plan["positions"].values())
+        if "B" in args.phases else 0,
+        "C": sum(len(plan["books"][k]) for k in anchors) if "C" in args.phases else 0,
+    }
+    emit(out, {"phase": "start", "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "limit": args.limit, "phases": args.phases,
+               "expected": expected})
 
     if "A" in args.phases:
         isbn = next(b["isbn"] for b in plan["books"]["gyeonggi"] if b["bin"] == "common")
@@ -197,14 +206,18 @@ def main():
                 continue
             if as_int(resp.get("numFound")) != len(resp.get("libs", [])):
                 emit(out, {"phase": "C", "warn": f"libSrch {region}: numFound {resp.get('numFound')} 중 {len(resp.get('libs', []))}곳만 받음"})
+            dropped = 0
             for l in resp.get("libs", []):
-                lib = l.get("lib", {})
+                lib = l.get("lib", {}) if isinstance(l, dict) else {}
                 try:
                     libs[lib["libCode"]] = (lib.get("libName", ""), float(lib["latitude"]), float(lib["longitude"]), region,
                                             lib.get("address") or "")
                 except (KeyError, TypeError, ValueError):
-                    pass
-        anchors = {"seoul": "seoul-cityhall", "gyeonggi": "ansan-cityhall", "gangwon": "wonju-cityhall"}
+                    dropped += 1
+            if dropped:
+                # 앱도 좌표 없는 도서관은 적재하지 않아(DatanaruClient.libSrch) 주변 목록에 나오지 않는다 — 표본에서 빼는 것이
+                # 사용자가 보는 것과 같다. 보류하지 않고 건수만 남긴다
+                emit(out, {"phase": "C", "note": f"libSrch {region}: 좌표 없는 {dropped}곳 제외(앱도 적재하지 않음)"})
         for list_key, pos_key in anchors.items():
             pos = plan["positions"][pos_key]
             nearest = sorted((haversine(pos["lat"], pos["lon"], la, lo), code, name, addr)
@@ -232,6 +245,7 @@ def main():
                                        "noticeCity": any(c in addr for c in notice_cities)})
                 emit(out, {"phase": "C", "list": list_key, "position": pos_key, "isbn": b["isbn"], "bin": b["bin"],
                            "listComplete": complete, "listed": len(listed), "perRegion": results, "checks": checks})
+    emit(out, {"phase": "end", "calls": client.calls})
     out.close()
     print(f"끝: 정보나루 {client.calls}회, {time.time() - started:.0f}초 → {args.out}", file=sys.stderr)
 
@@ -245,7 +259,18 @@ RULE2_SHARE = 0.95  # D3: 95% 이상 기준 이하 + 가장 느린 값 기준의
 def summarize(path):
     recs = [json.loads(line) for line in open(path, encoding="utf-8") if line.strip()]
     start = next((r for r in recs if r.get("phase") == "start"), {})
+    expected = start.get("expected") or {}
+    got = {k: sum(1 for r in recs if r.get("phase") == k and ("checks" in r if k == "C" else True)) for k in ("A", "B", "C")}
+    # 끝 표시가 없거나 기대 기록 수에 못 미치거나 --limit 실행이면 "그대로"를 내지 않는다(이미 성립한 멈춤은 그대로)
+    short = [f"{k} {got[k]}/{expected.get(k)}" for k in ("A", "B", "C") if expected.get(k) and got[k] < expected[k]]
+    unfinished = not any(r.get("phase") == "end" for r in recs)
+    partial = bool(short or unfinished or start.get("limit") or not expected)
+
+    def hold_unless_stop(verdict):
+        return verdict if verdict.startswith("멈춤") or not partial else f"판정 보류(표본 부족: {', '.join(short) or ('끝 표시 없음' if unfinished else '--limit 실행' if start.get('limit') else '기대 수 기록 없음')})"
     out = [f"# 순서 4 API 확인 판정 — `{path}`", "", f"- 실행 {start.get('at')}" + (f" ⚠ --limit {start['limit']}(스크립트 확인용, 판정에 쓰지 않음)" if start.get("limit") else "")]
+    out.append(f"- 기록: A {got['A']}/{expected.get('A')}, B {got['B']}/{expected.get('B')}, C {got['C']}/{expected.get('C')}, 끝 표시 {'있음' if not unfinished else '없음'}"
+               + (" → **표본 부족이라 '그대로'는 판정 보류로 둔다**" if partial else ""))
     a = next((r for r in recs if r.get("phase") == "A"), None)
     if a:
         out += ["", "## 응답 꼴(D1)", f"- 한 번에 받기(pageSize {BIG_PAGE}): numFound {a['onePage']['numFound']}, 받은 코드 {a['onePage']['distinct']}, 쪽 {len(a['onePage']['pages'])}, 완전 {a['onePage']['complete']}",
@@ -264,6 +289,7 @@ def summarize(path):
         b_incomplete = sum(1 for r in b for x in r["perRegion"] if not x["complete"])
         r1 = "그대로" if max(calls) <= RULE1_MAX_CALLS else "멈춤(이미 pageSize 1000 — 시도 수가 원인인지 적고 묻는다)"
         r2 = "그대로" if within >= RULE2_SHARE and secs[-1] <= RULE2_TARGET_SEC * 2 else "멈춤"
+        r1, r2 = hold_unless_stop(r1), hold_unless_stop(r2)
         if b_incomplete:
             # 오류 칸이 든 빠른 응답은 호출 수·시간을 좋게 보이게 한다 — 그 표본으로는 "그대로"를 내지 않는다.
             # 이미 멈춤이면 그대로 둔다(불완전 응답은 숫자를 줄여 보이게 할 뿐이라 멈춤은 성립한다)
@@ -289,6 +315,10 @@ def summarize(path):
                        if not any(r["checks"] for r in c if r["list"] == lst)]
         held = errors or skipped or coord_errors or empty_lists
         r3 = "멈춤(원인을 적고 묻는다)" if false_other else ("판정 보류(확인 못 한 칸·불완전 목록·좌표 목록 오류)" if held else "그대로")
+        r3 = hold_unless_stop(r3)
+        notes = [r["note"] for r in recs if r.get("phase") == "C" and r.get("note")]
+        if notes:
+            out.append(f"- 참고: {'; '.join(notes)}")
         out += ["", "## 규칙 3 (목록에 없는 가까운 도서관이 정말 없는가)",
                 f"- 확인 {len(checks)}곳(책 {len(c)}권, 목록 불완전으로 건너뛴 책 {len(skipped)}권), 응답 오류·형식 이상 {len(errors)}곳, 좌표 목록 오류·일부만 받음 {len(coord_errors)}건, 확인 0곳인 목록 {empty_lists or '없음'}"]
         for lst in dict.fromkeys(r["list"] for r in c):
