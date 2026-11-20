@@ -105,6 +105,14 @@ class Rules(unittest.TestCase):
         self.assertIn("참고: libSrch 32: 좌표 없는 1곳 제외", text)
         self.assertIn("판정 → **그대로**", text)
 
+    def test_note_is_printed_under_rule3(self):
+        text = report([b(), {"phase": "C", "note": "libSrch 32: 좌표 없는 1곳 제외(앱도 적재하지 않음)"}, c([check()])])
+        self.assertLess(text.index("## 규칙 3"), text.index("참고: libSrch 32"))
+
+    def test_partial_run_keeps_original_hold_reason(self):
+        text = report([c([check(error="URLError", has=None)])], expected={"A": 0, "B": 0, "C": 54})
+        self.assertIn("판정 → **판정 보류(확인 못 한 칸·불완전 목록·좌표 목록 오류), 표본 부족: C 1/54", text)
+
     def test_incomplete_list_is_reported(self):
         self.assertIn("불완전(오류·쪽마다 numFound 다름·코드 수 ≠ numFound) 1건", report([c([], complete=False)]))
 

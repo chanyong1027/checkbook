@@ -215,7 +215,8 @@ def main():
                 except (KeyError, TypeError, ValueError):
                     dropped += 1
             if dropped:
-                # 앱도 좌표 없는 도서관은 적재하지 않아(DatanaruClient.libSrch) 주변 목록에 나오지 않는다 — 표본에서 빼는 것이
+                # 앱도 좌표 없는 도서관은 적재하지 않아(정기 동기화 PublicLibraryListSynchronizer 161줄, 초기 적재
+                # DatanaruClient.libSrch) 주변 목록에 나오지 않는다 — 표본에서 빼는 것이
                 # 사용자가 보는 것과 같다. 보류하지 않고 건수만 남긴다
                 emit(out, {"phase": "C", "note": f"libSrch {region}: 좌표 없는 {dropped}곳 제외(앱도 적재하지 않음)"})
         for list_key, pos_key in anchors.items():
@@ -267,7 +268,11 @@ def summarize(path):
     partial = bool(short or unfinished or start.get("limit") or not expected)
 
     def hold_unless_stop(verdict):
-        return verdict if verdict.startswith("멈춤") or not partial else f"판정 보류(표본 부족: {', '.join(short) or ('끝 표시 없음' if unfinished else '--limit 실행' if start.get('limit') else '기대 수 기록 없음')})"
+        if verdict.startswith("멈춤") or not partial:
+            return verdict
+        why = ", ".join(short) or ("끝 표시 없음" if unfinished else "--limit 실행" if start.get("limit") else "기대 수 기록 없음")
+        # 이미 다른 이유로 보류면 그 사유를 지우지 않고 표본 부족을 덧붙인다
+        return f"{verdict}, 표본 부족: {why}" if verdict.startswith("판정 보류") else f"판정 보류(표본 부족: {why})"
     out = [f"# 순서 4 API 확인 판정 — `{path}`", "", f"- 실행 {start.get('at')}" + (f" ⚠ --limit {start['limit']}(스크립트 확인용, 판정에 쓰지 않음)" if start.get("limit") else "")]
     out.append(f"- 기록: A {got['A']}/{expected.get('A')}, B {got['B']}/{expected.get('B')}, C {got['C']}/{expected.get('C')}, 끝 표시 {'있음' if not unfinished else '없음'}"
                + (" → **표본 부족이라 '그대로'는 판정 보류로 둔다**" if partial else ""))
@@ -317,9 +322,7 @@ def summarize(path):
         r3 = "멈춤(원인을 적고 묻는다)" if false_other else ("판정 보류(확인 못 한 칸·불완전 목록·좌표 목록 오류)" if held else "그대로")
         r3 = hold_unless_stop(r3)
         notes = [r["note"] for r in recs if r.get("phase") == "C" and r.get("note")]
-        if notes:
-            out.append(f"- 참고: {'; '.join(notes)}")
-        out += ["", "## 규칙 3 (목록에 없는 가까운 도서관이 정말 없는가)",
+        out += ["", "## 규칙 3 (목록에 없는 가까운 도서관이 정말 없는가)"] + ([f"- 참고: {'; '.join(notes)}"] if notes else []) + [
                 f"- 확인 {len(checks)}곳(책 {len(c)}권, 목록 불완전으로 건너뛴 책 {len(skipped)}권), 응답 오류·형식 이상 {len(errors)}곳, 좌표 목록 오류·일부만 받음 {len(coord_errors)}건, 확인 0곳인 목록 {empty_lists or '없음'}"]
         for lst in dict.fromkeys(r["list"] for r in c):
             mine = [x for r in c if r["list"] == lst for x in r["checks"]]
