@@ -5,7 +5,7 @@
 #                   - external_budget_used{provider="datanaru"}: 오늘(KST) 나간 정보나루 호출 수(회차 앞뒤 차이가 호출 수의 주 값, R12)
 #                   - http_client_requests_seconds_*: 정보나루 호출 시간 히스토그램(외부 원인 판정 D3, 전후 두 날 비교)
 #                   떠 있는 칸이 모두 응답하고, 예산 값이 11초(동기화 간격 10초보다 길게) 사이 그대로이며 칸끼리 같고,
-#                   동기화 실패 카운터가 늘지 않았을 때만 값을 낸다(최대 5번, 안 되면 실패).
+#                   동기화 실패 카운터가 늘지 않았으며, DB 값이 모든 칸 게이지와 같을 때만 값을 낸다(최대 5번, 안 되면 실패).
 #   reset ISBN...   library_availability_snapshot에서 그 ISBN 행만 지운다(운영 DB 변경 — 측정일에 사용자 확인을 받고 쓴다)
 #
 # 서버에서 부르는 법(저장소 사본에서 꺼내 바로 실행, 작업 트리를 쓰지 않는다):
@@ -42,6 +42,13 @@ snapshot() {
   fi
 }
 
+# 정보나루 오늘(KST) 사용량의 DB 값(정수). 행이 없으면 0
+db_datanaru_used() {
+  local sql="SELECT COALESCE((SELECT used FROM external_call_budget WHERE budget_key = 'DATANARU' AND usage_date = (now() AT TIME ZONE 'Asia/Seoul')::date), 0);"
+  compose exec -T -e SQL="$sql" postgres sh -c 'psql -U "$POSTGRES_USER" -d checkbook -tA -v ON_ERROR_STOP=1 -c "$SQL"' \
+    | tr -d '[:space:]'
+}
+
 cmd="${1:-}"
 shift || true
 
@@ -51,7 +58,10 @@ case "$cmd" in
     # 값만 낸다(11초 간격으로 다시 읽기, 최대 5번). 끝내 안 맞으면 값을 내지 않고 실패한다(측정 PC는 잠시 뒤 다시 읽는다).
     #   - 떠 있는 앱 칸(docker ps)이 모두 응답하고 정보나루 예산 줄이 있다
     #   - 정보나루 예산 값이 직전 읽기와 같고 칸끼리도 같다(동기화 간격보다 긴 동안 그대로)
-    #   - 동기화 실패 카운터가 직전 읽기와 같다(값이 같아도 DB 쓰기가 실패했으면 반영 안 된 증가분이 남는다)
+    #   - 동기화 실패 카운터가 직전 읽기와 같다
+    #   - DB(external_call_budget, DATANARU, 오늘 KST)의 값이 떠 있는 모든 칸의 게이지와 같다. 게이지는 "그 칸이 메모리로 센 것 +
+    #     다른 칸이 DB에 쓴 합계"라, 안 쓴 증가분이 있으면 게이지가 DB보다 크고 남이 쓴 것을 아직 안 읽었으면 작다.
+    #     같으면 모든 칸의 쓰기와 읽기가 끝난 것이다(실패 카운터만으로는 진행 중인 DB 작업을 못 가른다)
     expected_ports=""
     running="$(docker ps --format '{{.Names}}' 2>/dev/null || true)"
     grep -q '^checkbook-app-blue-1$' <<<"$running" && expected_ports="$expected_ports 8081"
@@ -72,16 +82,27 @@ case "$cmd" in
         grep -q "^port=${port} external_budget_sync_failures_total" <<<"$fail" || all_up=0
       done
       ports_agree="$(sed -E 's/^port=[0-9]+ //' <<<"$budget" | sort -u | wc -l)"
-      if [ "$all_up" = 1 ] && [ -n "$prev_budget" ] && [ "$budget" = "$prev_budget" ] \
+      db_used="$(db_datanaru_used || true)"
+      db_agree=1
+      if ! [[ "$db_used" =~ ^[0-9]+$ ]]; then
+        db_agree=0
+      else
+        while read -r _ _ value; do
+          [ -z "${value:-}" ] && continue
+          [ "${value%.*}" = "$db_used" ] || db_agree=0
+        done <<<"$(sed -E 's/^(port=[0-9]+) [^ ]+ /\1 x /' <<<"$budget")"
+      fi
+      if [ "$all_up" = 1 ] && [ "$db_agree" = 1 ] && [ -n "$prev_budget" ] && [ "$budget" = "$prev_budget" ] \
           && [ "$fail" = "$prev_fail" ] && [ "$ports_agree" -le 1 ]; then
         printf '%s\n' "$out"
+        echo "# db external_call_budget DATANARU used=${db_used}"
         exit 0
       fi
       prev_budget="$budget"
       prev_fail="$fail"
       if [ "$attempt" -lt 5 ]; then sleep 11; fi
     done
-    echo "ERROR 동기화를 확인하지 못함(떠 있는 칸:${expected_ports}) — 칸 무응답·예산 값 변동·칸끼리 다름·동기화 실패 증가 중 하나. 잠시 뒤 다시 읽는다" >&2
+    echo "ERROR 동기화를 확인하지 못함(떠 있는 칸:${expected_ports}, DB ${db_used:-없음}) — 칸 무응답·예산 값 변동·칸끼리 다름·DB와 다름·동기화 실패 증가 중 하나. 잠시 뒤 다시 읽는다" >&2
     exit 1
     ;;
   reset)

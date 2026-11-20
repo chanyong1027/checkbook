@@ -43,7 +43,7 @@
 ```bash
 sudo git -C /opt/checkbook/app fetch -q origin && sudo git -C /opt/checkbook/app show origin/main:scripts/measure/server-probe.sh | sudo bash -s -- <read | reset ISBN...>
 ```
-`read` 출력은 측정 PC의 `build\measure\<stage>\probe-<label>-pre.txt`·`-post.txt`로 받는다. 예산 지표는 칸마다 10초 간격으로 DB와 따로 맞추므로, `read`는 11초 간격으로 두 번 읽어 정보나루 예산 값이 그대로이고 칸끼리 같을 때 값을 낸다(최대 5번, 약 45초). 그래도 멈추지 않으면 `WARN`을 내고 마지막 값을 낸다 — 그 회차는 측정 밖 호출이 섞였을 수 있으니 결과에 적는다. 실행 직후 바로 `read`해도 된다(따로 기다리지 않는다).
+`read` 출력은 측정 PC의 `build\measure\<stage>\probe-<label>-pre.txt`·`-post.txt`로 받는다. 예산 지표는 칸마다 10초 간격으로 DB와 따로 맞추므로 고정 대기로는 동기화를 보장할 수 없다. 그래서 `read`는 11초 간격으로 다시 읽어 ① 떠 있는 앱 칸(`docker ps`)이 모두 응답하고 ② 정보나루 예산 값이 그대로이며 칸끼리 같고 ③ 동기화 실패 카운터가 늘지 않았고 ④ DB(`external_call_budget`의 오늘 `DATANARU`) 값이 모든 칸의 게이지와 같을 때만 값을 낸다(최대 5번, 약 45초). ④가 모든 칸의 DB 쓰기와 읽기가 끝났다는 확인이다(안 쓴 증가분이 있으면 게이지가 DB보다 크다). 끝내 안 맞으면 값을 내지 않고 **실패(종료 코드 1)**하니, 잠시 뒤 다시 읽는다. 실행 직후 바로 `read`해도 된다.
 
 위치 순서는 전 측정 `seoul-cityhall → suwon-station → gangseo-office → chuncheon-cityhall`, 후 측정은 거꾸로다(`plan.json`의 `order`). 위치마다:
 
@@ -66,7 +66,7 @@ sudo git -C /opt/checkbook/app fetch -q origin && sudo git -C /opt/checkbook/app
 다시 잴 때(회차 종류와 상관없이):
 1. 중단된 실행의 jsonl과 probe 파일을 `build\measure\<stage>\aborted\`로 옮긴다(`--console-output`은 이어 쓰므로, 옮기지 않으면 중단 줄이 남아 그날 판정이 계속 보류된다). 그다음 같은 label로 다시 잰다.
 2. `first`(캐시 빈 회차): 그 전에 연 책들이 이미 스냅샷을 채웠으므로 **반드시 `PROBE reset`부터** 하고(다음 날 이어도 스냅샷이 24시간이라 같다) pre·실행·post를 다시 받는다.
-3. `second`(두 번째 사람): 캐시가 찬 상태가 조건이라 reset 뒤 바로 재면 안 된다. `PROBE reset` → `PASS=first`로 준비 실행 1번(label `<위치>-prep`, 집계에 쓰지 않으니 `build\measure\<stage>\` 밖에 저장) → `PROBE read`(pre — 준비 실행의 호출이 두 칸 예산 지표에 다 반영될 때까지 `read`가 스스로 기다린다. `WARN`이 나면 다시 읽는다) → `PASS=second` → `PROBE read`(post).
+3. `second`(두 번째 사람): 캐시가 찬 상태가 조건이라 reset 뒤 바로 재면 안 된다. `PROBE reset` → `PASS=first`로 준비 실행 1번(label `<위치>-prep`, 집계에 쓰지 않으니 `build\measure\<stage>\` 밖에 저장) → `PROBE read`(pre — 준비 실행의 호출이 DB와 모든 칸 예산 지표에 다 반영될 때까지 `read`가 스스로 기다리고, 확인하지 못하면 종료 코드 1로 실패하니 다시 읽는다) → `PASS=second` → `PROBE read`(post).
 
 중단 확인: 11-20 k6 v2.0.0에서 async 함수 안 `exec.test.abort()`가 종료 코드 108로 끝나는 것을 봤다.
 
