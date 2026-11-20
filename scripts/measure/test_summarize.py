@@ -114,10 +114,21 @@ class Probe(unittest.TestCase):
 
 
 class EndToEnd(unittest.TestCase):
-    def report(self, recs, probes=True):
+    """판정 규칙 시험. 계획과의 대조(표본 부족)는 Completeness에서 따로 본다"""
+
+    def setUp(self):
+        self._completeness = s.completeness
+        s.completeness = lambda runs, plan: []
+
+    def tearDown(self):
+        s.completeness = self._completeness
+
+    def report(self, recs, probes=True, extra=None):
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / "seoul-cityhall-r1.jsonl").write_text(
                 "\n".join("MEASURE " + json.dumps(r) for r in recs), encoding="utf-8")
+            for name, text in (extra or {}).items():
+                (Path(d) / name).write_text(text, encoding="utf-8")
             if probes:
                 (Path(d) / "probe-seoul-cityhall-r1-pre.txt").write_text(PRE, encoding="utf-8")
                 (Path(d) / "probe-seoul-cityhall-r1-post.txt").write_text(POST, encoding="utf-8")
@@ -168,6 +179,73 @@ class EndToEnd(unittest.TestCase):
     def test_missing_probe_holds_judgement_instead_of_blaming_us(self):
         text = self.report([self.rec("1", lib(unknown=1, reasons={"TIMEOUT": 1}))], probes=False)
         self.assertIn("판정 보류", text)
+
+
+    def test_missing_slow_bucket_holds_instead_of_counting_zero(self):
+        no_buckets = "\n".join(l for l in POST.splitlines() if "_bucket" not in l) + "\n"
+        pre = "\n".join(l for l in PRE.splitlines() if "_bucket" not in l) + "\n"
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "seoul-cityhall-r1.jsonl").write_text(
+                "MEASURE " + json.dumps(self.rec("1", lib(unknown=2, reasons={"TIMEOUT": 2}))), encoding="utf-8")
+            (Path(d) / "probe-seoul-cityhall-r1-pre.txt").write_text(pre, encoding="utf-8")
+            (Path(d) / "probe-seoul-cityhall-r1-post.txt").write_text(no_buckets, encoding="utf-8")
+            buf = StringIO()
+            with redirect_stdout(buf):
+                s.main(d)
+        self.assertIn("⚠느린 호출 버킷 없음", buf.getvalue())
+        self.assertIn("판정 보류(지표 없는 회차", buf.getvalue())
+
+    def test_aborted_more_record_does_not_break_report(self):
+        more = {"stage": "before", "pass": "more", "position": "seoul-cityhall", "round": 1, "isbn": "9", "bin": "absent",
+                "rounds": [{"stop": "EXHAUSTED", "settledMs": 900, "checked": 5, "batches": [{"items": 5}]}],
+                "totalChecked": 5, "totalFound": 0, "search": {"status": 200}}
+        aborted = {"stage": "before", "pass": "more", "position": "seoul-cityhall", "round": 1, "aborted": "IP_DAILY_LIMIT", "remaining": []}
+        text = self.report([self.rec("1", lib())], extra={"more.jsonl": "MEASURE " + json.dumps(more) + "\nMEASURE " + json.dumps(aborted)})
+        self.assertIn("## 더 찾기 끝까지", text)
+        self.assertIn("측정 중단", text)
+
+
+class Completeness(unittest.TestCase):
+    PLAN = {"positions": {"p": {"books": "b", "rounds": 2}}, "books": {"b": [{"isbn": "1", "bin": "common"}, {"isbn": "2", "bin": "absent"}]}}
+
+    def runs(self, **overrides):
+        first = lambda: [{"pass": "first"}, {"pass": "first"}]  # noqa: E731
+        runs = {"p-r1": first(), "p-r2": first(), "p-second": [{"pass": "second"}] * 2,
+                "p-browser": [{"pass": "browser", "isbn": "1", "timedOut": False, "nonNetworkShareMs": 10},
+                              {"pass": "browser", "isbn": "2", "timedOut": False, "nonNetworkShareMs": 12}],
+                "more": [{"pass": "more"}], "reference": [{"pass": "reference"}]}
+        runs.update(overrides)
+        return {k: v for k, v in runs.items() if v is not None}
+
+    def test_complete(self):
+        self.assertEqual(s.completeness(self.runs(), self.PLAN), [])
+
+    def test_short_round_and_missing_run(self):
+        out = s.completeness(self.runs(**{"p-r2": [{"pass": "first"}], "reference": None}), self.PLAN)
+        self.assertIn("p-r2: 기대 2건 중 1건", out)
+        self.assertIn("reference: 실행 없음", out)
+
+    def test_invalid_browser_sample(self):
+        bad = [{"pass": "browser", "isbn": "1", "timedOut": True, "nonNetworkShareMs": None},
+               {"pass": "browser", "isbn": "2", "timedOut": False, "nonNetworkShareMs": 12}]
+        out = s.completeness(self.runs(**{"p-browser": bad}), self.PLAN)
+        self.assertTrue(any(m.startswith("browser p-browser: 몫을 못 잰") for m in out))
+
+    def test_real_plan_expects_four_positions(self):
+        exp = s.expected_runs(s.load_plan())
+        self.assertEqual(exp["seoul-cityhall-r3"], ("first", 18))
+        self.assertNotIn("chuncheon-cityhall-second", exp)
+        self.assertEqual(exp["gangseo-office-browser"], ("browser", 4))
+
+    def test_partial_folder_holds_first_display_verdict(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "seoul-cityhall-r1.jsonl").write_text(
+                "MEASURE " + json.dumps(EndToEnd.rec("1", lib())), encoding="utf-8")
+            buf = StringIO()
+            with redirect_stdout(buf):
+                s.main(d)
+        self.assertIn("표본 부족 — 판정 보류", buf.getvalue())
+        self.assertIn("첫 표시: **판정 보류(통과, 표본 부족, 브라우저 포함)", buf.getvalue())
 
 
 if __name__ == "__main__":

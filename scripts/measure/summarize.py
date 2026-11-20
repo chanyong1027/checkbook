@@ -112,7 +112,8 @@ def client_stats(diff):
 
 
 def limit_hit(lib):
-    return bool(lib.get("error")) and lib["error"].get("status") == 429 and lib["error"].get("code") in LIMIT_CODES
+    """요청 제한 429(코드를 모르는 429 포함 — 스크립트가 모든 429에서 멈춘다)"""
+    return bool(lib.get("error")) and lib["error"].get("status") == 429
 
 
 def items_checked(lib):
@@ -180,6 +181,45 @@ def unresolved_kind(lib, ext_evidence):
     return "ours"
 
 
+PLAN_PATH = Path(__file__).with_name("plan.json")
+
+
+def load_plan(path=PLAN_PATH):
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def expected_runs(plan):
+    """{label: (pass, 기대 조회 수)} — README의 측정일 순서"""
+    exp = {}
+    for key, pos in plan["positions"].items():
+        books = plan["books"][pos["books"]]
+        for n in range(1, pos["rounds"] + 1):
+            exp[f"{key}-r{n}"] = ("first", len(books))
+        if pos["rounds"] > 1:  # 춘천(1회차)은 두 번째 사람을 재지 않는다
+            exp[f"{key}-second"] = ("second", len(books))
+        exp[f"{key}-browser"] = ("browser", len({b["bin"] for b in books}))
+    exp["more"] = ("more", 1)
+    exp["reference"] = ("reference", 1)
+    return exp
+
+
+def completeness(runs, plan):
+    """빠진 것의 설명 목록. 브라우저는 표본마다 시간 초과가 없고 몫이 계산돼야 유효하다"""
+    out = []
+    for label, (pass_name, n) in expected_runs(plan).items():
+        recs = [r for r in runs.get(label, []) if r.get("pass") == pass_name and not r.get("aborted")]
+        if label not in runs:
+            out.append(f"{'browser ' if pass_name == 'browser' else ''}{label}: 실행 없음")
+            continue
+        if len(recs) < n:
+            out.append(f"{'browser ' if pass_name == 'browser' else ''}{label}: 기대 {n}건 중 {len(recs)}건")
+        if pass_name == "browser":
+            bad = [r["isbn"] for r in recs if r.get("timedOut") or r.get("nonNetworkShareMs") is None]
+            if bad:
+                out.append(f"browser {label}: 몫을 못 잰 표본 {bad}")
+    return out
+
+
 def main(folder):
     folder = Path(folder)
     runs = load_records(folder)
@@ -214,8 +254,15 @@ def main(folder):
             notes.append("⚠정보나루 호출 지표 없음")
         else:
             cells = sum(external_cells(r["library"]) for r in lookups)
-            evidence = (cs["slow"] or 0) + cs["notSuccess"]
-            ext_evidence[label] = evidence >= cells if cells else False
+            if not cells:
+                ext_evidence[label] = False
+            elif cs["notSuccess"] >= cells:
+                ext_evidence[label] = True  # 실패 호출만으로 설명된다
+            elif cs["slow"] is None:
+                ext_evidence[label] = None  # 버킷이 없어 느린 호출을 못 셌다 — 0으로 보지 않고 보류
+                notes.append("⚠느린 호출 버킷 없음")
+            else:
+                ext_evidence[label] = cs["slow"] + cs["notSuccess"] >= cells
         if d["switched"]:
             notes.append(f"⚠칸 전환 {sorted(d['switched'])}")
         if any(r.get("pass") == "first" for r in lookups) and used != checked:
@@ -230,6 +277,15 @@ def main(folder):
         if r.get("nonNetworkShareMs") is not None:
             share_by_pos[r["position"]] = max(share_by_pos[r["position"]], r["nonNetworkShareMs"])
     use_browser = bool(share_by_pos) and max(share_by_pos.values()) > RENDER_SHARE_LIMIT_MS
+
+    # 계획(plan.json)과 대조: 빠진 실행·모자란 조회·무효 브라우저 표본이 있으면 판정을 보류한다
+    missing = completeness(runs, load_plan())
+    browser_missing = [m for m in missing if m.startswith("browser")]
+    if missing:
+        p("## ⚠ 표본 부족 — 판정 보류\n")
+        for m in missing:
+            p(f"- {m}")
+        p("")
 
     stopped = [r for recs in runs.values() for r in recs if r.get("aborted")]
     limited = [r for recs in runs.values() for r in recs if "library" in r and limit_hit(r["library"])]
@@ -270,6 +326,9 @@ def main(folder):
         st_ok = [r["library"]["settledMs"] for _, r in sample if kinds[id(r)] is None]
         v1, d1 = judge_times(fd, FIRST_DISPLAY_TARGET_MS)
         v2, d2 = judge_times(st, SETTLED_TARGET_MS)
+        if missing and passes != {"second"}:
+            why = "표본 부족, 브라우저 포함" if browser_missing else "표본 부족"
+            v1, v2 = f"판정 보류({v1}, {why})", f"판정 보류({v2}, 표본 부족)"
         _, d2_ok = judge_times(st_ok, SETTLED_TARGET_MS)
         p(f"- 첫 표시{'(브라우저 몫을 더한 값)' if use_browser else ''}: **{v1}** — {d1}. 첫 표시로 세지 않은 조회: {dict(no_fd) or '없음'}")
         p(f"- 확정: **{v2}** — {d2}. 참고(확정된 조회만): {d2_ok}")
@@ -280,6 +339,8 @@ def main(folder):
         ext, ours, und = c.get("external", 0), c.get("ours", 0), c.get("undetermined", 0)
         if stopped or limited:
             verdict = "판정 보류(측정 중단 — 위 경고)"
+        elif missing and passes != {"second"}:
+            verdict = "판정 보류(표본 부족 — 위 경고)"
         elif und:
             verdict = f"판정 보류(지표 없는 회차의 외부 사유 {und}건)"
         elif ext / n > EXTERNAL_ALLOWED:
@@ -297,7 +358,7 @@ def main(folder):
         searches = collections.Counter(r["search"]["status"] for _, r in sample)
         p(f"- 함께 보낸 /api/search 상태: {dict(searches)}\n")
 
-    for r in (r for recs in runs.values() for r in recs if r.get("pass") == "more"):
+    for r in (r for recs in runs.values() for r in recs if r.get("pass") == "more" and "rounds" in r):
         p("## 더 찾기 끝까지\n")
         p(f"- {r['position']} {r['isbn']}({r['bin']}): 탐색 {len(r['rounds'])}번, 확인 {r['totalChecked']}곳, 소장 {r['totalFound']}곳, "
           f"마지막 멈춤 {r['rounds'][-1]['stop']}, 탐색마다 확정 {rng(x['settledMs'] for x in r['rounds'])}ms\n")

@@ -51,7 +51,8 @@ const LIMIT_CODES: Record<string, string> = { DAILY_REQUEST_LIMIT_EXCEEDED: 'IP_
 let limitHit: string | null = null
 const ipLimitHit = () => limitHit != null
 function noteLimit(status: number, code: string | null) {
-  if (status === 429 && code != null && code in LIMIT_CODES) limitHit ??= LIMIT_CODES[code]
+  // 본문이 없거나 모르는 코드인 429(nginx HTML 등)도 요청 제한이라 멈춘다
+  if (status === 429) limitHit ??= (code != null && code in LIMIT_CODES ? LIMIT_CODES[code] : 'HTTP_429')
 }
 /** 줄을 남기고 0 아닌 코드로 끝낸다 — 운영자가 모르고 다음 회차로 넘어가지 않게 */
 function abortRun(remaining: string[]) {
