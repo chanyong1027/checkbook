@@ -2,16 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { getNearbyLibraryBatch, getSavedLibraryBatch } from '../../api'
 import { ApiError } from '../../api/errors.ts'
 import type { PublicLibraryBatchItem } from '../../types'
+import { RoundDeadlineError, runExploreRound } from './exploreLoop.ts'
 import {
   INITIAL_STATE,
-  NEW_ROUND,
-  ROUND_DEADLINE_MS,
-  applyBatch,
-  hasTimeForNextBatch,
   mergeRetry,
   type ExploreStop,
   type ExplorerState,
-  type RoundState,
 } from './nearbyExplorer.ts'
 
 export type LibraryOrigin = { lat: number; lon: number } | { referenceLibCode: string }
@@ -71,44 +67,32 @@ export function useNearbyExplorer(isbn13: string, origin: LibraryOrigin | null, 
     setStop(null)
     setError(null)
     setFatal(false)
-    const started = performance.now()
-    let s = from
-    let round: RoundState = NEW_ROUND
-    let finalStop: ExploreStop = 'EXHAUSTED'
-    while (true) {
-      const offset = s.nextOffset
-      if (offset == null) { finalStop = 'EXHAUSTED'; break }
-      const elapsed = performance.now() - started
-      if (round.checked > 0 && !hasTimeForNextBatch(elapsed)) { finalStop = 'TIME'; break }
-      const controller = new AbortController()
-      abortRef.current = controller
-      // 서버 배치 마감(2.2초)과 별개로, 네트워크가 멈춰도 탐색 전체 10초를 넘기지 않게 끊는다
-      let timedOut = false
-      const timer = setTimeout(() => { timedOut = true; controller.abort() }, Math.max(0, ROUND_DEADLINE_MS - elapsed))
-      try {
-        const res = await getNearbyLibraryBatch(isbn13, current, offset, controller.signal, titleRef.current)
-        if (gen !== generation.current) return
-        const result = applyBatch(s, round, offset, res)
-        s = result.state
-        round = result.round
-        setState(s)
-        if (result.stop) { finalStop = result.stop; break }
-      } catch (err) {
-        if (gen !== generation.current) return
-        if (timedOut) { finalStop = 'TIME'; break }
-        if (isAbort(err)) return
-        // 응답을 못 받은 구간은 넘어가지 않는다 — 진행 위치를 그대로 두고 더 찾기로 같은 곳부터 다시
-        finalStop = 'ERROR'
-        setError(lookupErrorMessage(err, '도서관을 더 찾지 못했어요. 잠시 뒤 다시 시도해 주세요'))
-        setFatal(err instanceof ApiError && err.status === 400)
-        break
-      } finally {
-        clearTimeout(timer)
-      }
+    const result = await runExploreRound(from, {
+      now: () => performance.now(),
+      isCancelled: () => gen !== generation.current,
+      onBatch: setState,
+      fetchBatch: async (offset, remainingMs) => {
+        const controller = new AbortController()
+        abortRef.current = controller
+        // 서버 배치 마감(2.2초)과 별개로, 네트워크가 멈춰도 탐색 전체 10초를 넘기지 않게 끊는다
+        let timedOut = false
+        const timer = setTimeout(() => { timedOut = true; controller.abort() }, remainingMs)
+        try {
+          return await getNearbyLibraryBatch(isbn13, current, offset, controller.signal, titleRef.current)
+        } catch (err) {
+          throw timedOut ? new RoundDeadlineError() : err
+        } finally {
+          clearTimeout(timer)
+        }
+      },
+    })
+    if (result.cancelled || gen !== generation.current) return
+    if (result.stop === 'ERROR') {
+      setError(lookupErrorMessage(result.error, '도서관을 더 찾지 못했어요. 잠시 뒤 다시 시도해 주세요'))
+      setFatal(result.error instanceof ApiError && result.error.status === 400)
     }
-    if (gen !== generation.current) return
     setRunning(false)
-    setStop(finalStop)
+    setStop(result.stop)
   }, [isbn13])
 
   const runningRef = useRef(running)
