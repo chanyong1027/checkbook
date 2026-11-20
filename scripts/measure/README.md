@@ -5,10 +5,11 @@
 
 | 파일 | 하는 일 |
 |---|---|
-| `plan.json` | 위치 4곳, 시도별 18권(흔한·중간·드문 5권, 없는 3권), 더 찾기·기준 도서관 줄. 2026-11-20 확정, 측정 끝까지 바꾸지 않는다 |
+| `plan.json` | 위치 4곳(서울시청·안산시청·강서구청·원주시청)과 그 10km 원이 걸치는 시도, 시도별 18권(흔한·중간·드문 5권, 없는 3권), 더 찾기·기준 도서관 줄, 정보나루 공지 기관. 2026-11-20 확정(11-21 위치 둘 변경), 측정 끝까지 바꾸지 않는다 |
 | `library-explore.ts` | k6 프로토콜 스크립트. 화면과 같은 탐색 고리(`frontend/.../exploreLoop.ts`)를 import해 `/api/search`와 배치를 화면과 같은 순서·주소로 보낸다. 책마다 `MEASURE {...}` 한 줄 |
 | `browser-check.ts` | k6 브라우저 스크립트. 실제 화면에서 "소장 배치 응답 → 화면에 그려짐" 시간(렌더링 몫)을 잰다. 위치마다 묶음당 1권 |
 | `server-probe.sh` | 운영 서버에서 실행. `read`: 정보나루 호출 수·호출 시간 지표, `reset ISBN...`: 그 책의 스냅샷 행만 삭제 |
+| `api_check.py` | 순서 4(구현 전 API 확인). **운영 서버에서** 정보나루 지역 조회의 응답 꼴(D1)·갈림 규칙 1·2(호출 수·단계 시간)·규칙 3(목록에 없는 도서관이 정말 없는가)을 모으고, 측정 PC에서 `--summarize`로 판정한다. 아래 "API 확인" 절 |
 | `summarize.py` | 결과 폴더를 판정 규칙대로 표로 묶는다(`test_summarize.py`가 판정 함수 시험) |
 
 ## 무엇을 재나 (정의)
@@ -33,6 +34,20 @@
   k6 run --quiet --log-format raw --console-output build\measure\smoke-browser.jsonl -e POSITION=seoul-cityhall -e ISBN=9791161571188 scripts\measure\browser-check.ts
   ```
 
+## API 확인(순서 4, 구현 전 한 번)
+
+운영 서버에서 돌린다(규칙 2의 대상이 운영 서버가 정보나루를 부르는 시간이라서). 운영 설정·DB는 바꾸지 않는다. 정보나루 약 460회, 10분 안팎. 이 호출은 앱의 공급자 예산에는 잡히지 않는다(같은 키라 정보나루 쪽 하루 사용량에는 들어간다).
+```bash
+D=$(mktemp -d)
+sudo git -C /opt/checkbook/app fetch -q origin
+sudo git -C /opt/checkbook/app show origin/main:scripts/measure/api_check.py > "$D/api_check.py"
+sudo git -C /opt/checkbook/app show origin/main:scripts/measure/plan.json > "$D/plan.json"
+sudo python3 "$D/api_check.py" --plan "$D/plan.json" --out "$D/api-check.jsonl"
+```
+알려진 한계: 스크립트(urllib)는 호출마다 TLS 연결을 새로 맺어 연결을 재사용하는 앱보다 단계 시간이 조금 비관 쪽이다. 둘째 쪽부터는 차례로 받지만 쪽 크기 1000이면 시도마다 한 쪽이다. 강원처럼 시도가 작으면 "목록에 없는 가까운 도서관"이 5곳보다 적은 책이 있어 표본이 90보다 작고, 같은 도서관이 책마다 되풀이되므로 거짓 "없음" 비율의 상한은 참고값이다. 시도 응답이 불완전(오류 칸·시간 초과 포함)하면 규칙 1·2는 멈춤이 아닌 한 보류로 두고, 좌표 목록이 일부만·빈 채 오거나 확인 0곳인 목록이 있으면 규칙 3을 보류한다. 규칙 1·2는 모든 시도 응답이 완전한 표본으로만 판정하고, 실행이 덜 끝났으면 남은 표본이 모두 좋아도 뒤집히지 않는 실패(가장 느린 값이 3초 초과, 또는 1.5초 넘은 표본이 전체의 5% 초과)만 멈춤으로 낸다. 규칙 3의 가까운 도서관 좌표는 서버에서 돌리면 운영 DB의 활성 도서관 좌표(앱이 거리 계산에 쓰는 값)를 쓰고, 측정 PC에서는 정보나루 좌표로 대신한다(결과에 출처를 적는다). 정보나루가 429나 키·한도 오류 칸을 주면(그 밖의 오류 칸은 3번 연속일 때) 나머지 호출을 하지 않고 종료 코드 1로 멈춘다(끝 표시가 없어 판정은 보류된다). 서버에서 운영 DB 좌표를 못 읽으면 정보나루 좌표로 대신하되 경고를 남겨 규칙 3을 보류한다. 공지 기관은 이름(`names`)으로만 가려 멈춤을 판정하고, 주소의 도시(`cities`)는 멈춘 뒤 원인을 볼 때만 쓴다.
+
+결과 파일을 측정 PC의 `build\measure\api-check\`로 가져와 판정한다: `python3 scripts/measure/api_check.py --summarize build/measure/api-check/api-check.jsonl`. 판정 규칙은 결정 카드 B2(11-21 규칙 3 고침: 정보나루 공지 기관의 어긋남은 따로 세고 멈추지 않음). 규칙 밖 결과면 그 항목만 멈추고 묻는다.
+
 ## 측정일 순서
 
 맨 먼저 `PROBE read`를 한 번 돌려 `external_budget_used{provider="datanaru"}`와 `http_client_requests_seconds_count{client_name="data4library.kr",...}` 줄이 나오는지 본다. `WARN`이 나오면 라벨 가정을 고친 뒤 시작한다(없으면 외부 원인 판정이 전부 보류된다).
@@ -45,17 +60,17 @@ sudo git -C /opt/checkbook/app fetch -q origin && sudo git -C /opt/checkbook/app
 ```
 `read` 출력은 측정 PC의 `build\measure\<stage>\probe-<label>-pre.txt`·`-post.txt`로 받는다. 예산 지표는 칸마다 10초 간격으로 DB와 따로 맞추므로 고정 대기로는 동기화를 보장할 수 없다. 그래서 `read`는 11초 간격으로 다시 읽어 ① 떠 있는 앱 칸(`docker ps`)이 모두 응답하고 ② 정보나루 예산 값이 그대로이며 칸끼리 같고 ③ 동기화 실패 카운터가 늘지 않았고 ④ DB(`external_call_budget`의 오늘 `DATANARU`) 값이 모든 칸의 게이지와 같을 때만 값을 낸다(최대 5번, 약 45초). ④가 모든 칸의 DB 쓰기와 읽기가 끝났다는 확인이다(안 쓴 증가분이 있으면 게이지가 DB보다 크다). 끝내 안 맞으면 값을 내지 않고 **실패(종료 코드 1)**하니, 잠시 뒤 다시 읽는다. 실행 직후 바로 `read`해도 된다.
 
-위치 순서는 전 측정 `seoul-cityhall → suwon-station → gangseo-office → chuncheon-cityhall`, 후 측정은 거꾸로다(`plan.json`의 `order`). 위치마다:
+위치 순서는 전 측정 `seoul-cityhall → ansan-cityhall → gangseo-office → wonju-cityhall`, 후 측정은 거꾸로다(`plan.json`의 `order`). 위치마다:
 
 1. `PROBE reset <그 위치 책 18권>` → 브라우저 확인(label `<위치>-browser`)
    ```powershell
    k6 run --quiet --log-format raw --console-output build\measure\before\seoul-cityhall-browser.jsonl -e POSITION=seoul-cityhall scripts\measure\browser-check.ts
    ```
-2. 회차 1~3(춘천은 1만): `PROBE reset <18권>` → `PROBE read`(pre) → 실행 → `PROBE read`(post). label `<위치>-r<회차>`
+2. 회차 1~3(원주는 1만): `PROBE reset <18권>` → `PROBE read`(pre) → 실행 → `PROBE read`(post). label `<위치>-r<회차>`
    ```powershell
    k6 run --quiet --log-format raw --console-output build\measure\before\seoul-cityhall-r1.jsonl -e POSITION=seoul-cityhall -e PASS=first -e ROUND=1 scripts\measure\library-explore.ts
    ```
-3. 두 번째 사람(춘천 제외): 행을 지우지 않고 바로 `PASS=second`, label `<위치>-second`(pre·post read).
+3. 두 번째 사람(원주 제외): 행을 지우지 않고 바로 `PASS=second`, label `<위치>-second`(pre·post read).
 
 그다음 한 번씩:
 - 더 찾기 끝까지: `PROBE reset 9788924272703` → `PASS=more`(label `more`, pre·post read)
@@ -79,7 +94,7 @@ python3 scripts/measure/summarize.py build/measure/before
 
 ## 양 어림 (측정일 하루, 최악)
 
-- 우리 IP 요청(한도 1,500, 책 한 권 최대 5 = 검색 1 + 배치 4): 위치 셋 × (브라우저 약 24 + 회차 3 × 18권 × 최대 5 + 두 번째 사람 최대 90) + 춘천 약 114 + 더 찾기 약 42 + 기준 5 ≈ **1,310**. 429가 나오면 그날은 거기서 멈추고 다음 날 잇는다(한도를 더 올리지 않는다).
+- 우리 IP 요청(한도 1,500, 책 한 권 최대 5 = 검색 1 + 배치 4): 위치 셋 × (브라우저 약 24 + 회차 3 × 18권 × 최대 5 + 두 번째 사람 최대 90) + 원주 약 114 + 더 찾기 약 42 + 기준 5 ≈ **1,310**. 429가 나오면 그날은 거기서 멈추고 다음 날 잇는다(한도를 더 올리지 않는다).
 - 정보나루 호출: 회차 약 3,400 + 브라우저 약 280 + 더 찾기 약 205 ≈ **3,900**(차단선 28,500의 약 14%).
 
 ## 알려진 한계

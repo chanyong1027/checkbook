@@ -263,7 +263,7 @@ class Completeness(unittest.TestCase):
     def test_real_plan_expects_four_positions(self):
         exp = s.expected_runs(s.load_plan())
         self.assertEqual(exp["seoul-cityhall-r3"], ("first", 18))
-        self.assertNotIn("chuncheon-cityhall-second", exp)
+        self.assertNotIn("wonju-cityhall-second", exp)
         self.assertEqual(exp["gangseo-office-browser"], ("browser", 4))
 
     def test_partial_folder_holds_first_display_verdict(self):
