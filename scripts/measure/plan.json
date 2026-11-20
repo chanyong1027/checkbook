@@ -1,0 +1,342 @@
+{
+  "note": "2026-11-20 확정. 규칙: notes/todo/2026-11-20-지역조회-측정-규칙과-책목록.md. 책 순서는 묶음(흔한→중간→드문→없는), 묶음 안 ISBN 오름차순",
+  "positions": {
+    "seoul-cityhall": {
+      "label": "서울시청",
+      "lat": 37.5663,
+      "lon": 126.9779,
+      "books": "seoul",
+      "rounds": 3
+    },
+    "suwon-station": {
+      "label": "수원역",
+      "lat": 37.2664,
+      "lon": 127.0001,
+      "books": "gyeonggi",
+      "rounds": 3
+    },
+    "gangseo-office": {
+      "label": "강서구청(경계)",
+      "lat": 37.5509,
+      "lon": 126.8495,
+      "books": "seoul",
+      "rounds": 3
+    },
+    "chuncheon-cityhall": {
+      "label": "춘천시청",
+      "lat": 37.8813,
+      "lon": 127.7298,
+      "books": "gangwon",
+      "rounds": 1
+    }
+  },
+  "order": {
+    "before": [
+      "seoul-cityhall",
+      "suwon-station",
+      "gangseo-office",
+      "chuncheon-cityhall"
+    ],
+    "after": [
+      "chuncheon-cityhall",
+      "gangseo-office",
+      "suwon-station",
+      "seoul-cityhall"
+    ]
+  },
+  "extras": {
+    "more": {
+      "position": "seoul-cityhall",
+      "books": "seoul",
+      "bin": "absent",
+      "pick": "first"
+    },
+    "reference": {
+      "position": "seoul-cityhall",
+      "books": "seoul",
+      "bin": "common",
+      "pick": "first",
+      "referenceLibCode": "111314",
+      "referenceLibName": "서울도서관",
+      "note": "서울시청에서 가장 가까운 도서관(정보나루 libSrch 좌표). 측정일에 서버 DB로 같은지 확인"
+    }
+  },
+  "books": {
+    "seoul": [
+      {
+        "isbn": "9788936434120",
+        "bin": "common",
+        "title": "소년이 온다"
+      },
+      {
+        "isbn": "9788936439743",
+        "bin": "common",
+        "title": "혼모노"
+      },
+      {
+        "isbn": "9788954681155",
+        "bin": "common",
+        "title": "홍학의 자리"
+      },
+      {
+        "isbn": "9788998441012",
+        "bin": "common",
+        "title": "모순"
+      },
+      {
+        "isbn": "9791141602376",
+        "bin": "common",
+        "title": "안녕이라 그랬어"
+      },
+      {
+        "isbn": "9788966263301",
+        "bin": "middle",
+        "title": "1일 1로그 100일 완성 IT 지식"
+      },
+      {
+        "isbn": "9791155813355",
+        "bin": "middle",
+        "title": "IT 좀 아는 사람"
+      },
+      {
+        "isbn": "9791157848676",
+        "bin": "middle",
+        "title": "(박태웅의) AI 강의 2026"
+      },
+      {
+        "isbn": "9791164137176",
+        "bin": "middle",
+        "title": "(흔한남매) 별난 방탈출"
+      },
+      {
+        "isbn": "9791168411692",
+        "bin": "middle",
+        "title": "(흔한남매) 별난 방탈출"
+      },
+      {
+        "isbn": "9788937434129",
+        "bin": "rare",
+        "title": "나인"
+      },
+      {
+        "isbn": "9788958205951",
+        "bin": "rare",
+        "title": "(코딩책과 함께 보는) 소프트웨어 개념 사전"
+      },
+      {
+        "isbn": "9791160501575",
+        "bin": "rare",
+        "title": "(넥스트 모바일) 자율주행혁명"
+      },
+      {
+        "isbn": "9791162243091",
+        "bin": "rare",
+        "title": "혼자 공부하는 컴퓨터구조 + 운영체제"
+      },
+      {
+        "isbn": "9791165219529",
+        "bin": "rare",
+        "title": "(면접을 위한) CS 전공지식 노트"
+      },
+      {
+        "isbn": "9788924272703",
+        "bin": "absent",
+        "title": "명수 [양장]"
+      },
+      {
+        "isbn": "9788924276978",
+        "bin": "absent",
+        "title": "감자 맛 소설 칩"
+      },
+      {
+        "isbn": "9788959409112",
+        "bin": "absent",
+        "title": "결함 있는 아침에 먹는 아스피린"
+      }
+    ],
+    "gyeonggi": [
+      {
+        "isbn": "9788936434120",
+        "bin": "common",
+        "title": "소년이 온다"
+      },
+      {
+        "isbn": "9788936439743",
+        "bin": "common",
+        "title": "혼모노"
+      },
+      {
+        "isbn": "9788954681155",
+        "bin": "common",
+        "title": "홍학의 자리"
+      },
+      {
+        "isbn": "9788966263301",
+        "bin": "common",
+        "title": "1일 1로그 100일 완성 IT 지식"
+      },
+      {
+        "isbn": "9788998441012",
+        "bin": "common",
+        "title": "모순"
+      },
+      {
+        "isbn": "9788937434129",
+        "bin": "middle",
+        "title": "나인"
+      },
+      {
+        "isbn": "9791160501575",
+        "bin": "middle",
+        "title": "(넥스트 모바일) 자율주행혁명"
+      },
+      {
+        "isbn": "9791162243091",
+        "bin": "middle",
+        "title": "혼자 공부하는 컴퓨터구조 + 운영체제"
+      },
+      {
+        "isbn": "9791165219529",
+        "bin": "middle",
+        "title": "(면접을 위한) CS 전공지식 노트"
+      },
+      {
+        "isbn": "9791168411692",
+        "bin": "middle",
+        "title": "(흔한남매) 별난 방탈출"
+      },
+      {
+        "isbn": "9788931554717",
+        "bin": "rare",
+        "title": "(한 권으로 끝내는) PC 조립&스마트 네트워킹&문제해결 bible"
+      },
+      {
+        "isbn": "9788958205951",
+        "bin": "rare",
+        "title": "(코딩책과 함께 보는) 소프트웨어 개념 사전"
+      },
+      {
+        "isbn": "9788965400899",
+        "bin": "rare",
+        "title": "파이썬 해킹 입문"
+      },
+      {
+        "isbn": "9788966262427",
+        "bin": "rare",
+        "title": "밑바닥부터 만드는 컴퓨팅 시스템"
+      },
+      {
+        "isbn": "9788997924974",
+        "bin": "rare",
+        "title": "개발자 상식"
+      },
+      {
+        "isbn": "9788924272703",
+        "bin": "absent",
+        "title": "명수 [양장]"
+      },
+      {
+        "isbn": "9788924276978",
+        "bin": "absent",
+        "title": "감자 맛 소설 칩"
+      },
+      {
+        "isbn": "9788959409112",
+        "bin": "absent",
+        "title": "결함 있는 아침에 먹는 아스피린"
+      }
+    ],
+    "gangwon": [
+      {
+        "isbn": "9788936434120",
+        "bin": "common",
+        "title": "소년이 온다"
+      },
+      {
+        "isbn": "9788936439743",
+        "bin": "common",
+        "title": "혼모노"
+      },
+      {
+        "isbn": "9788954681155",
+        "bin": "common",
+        "title": "홍학의 자리"
+      },
+      {
+        "isbn": "9788966263301",
+        "bin": "common",
+        "title": "1일 1로그 100일 완성 IT 지식"
+      },
+      {
+        "isbn": "9788998441012",
+        "bin": "common",
+        "title": "모순"
+      },
+      {
+        "isbn": "9788937434129",
+        "bin": "middle",
+        "title": "나인"
+      },
+      {
+        "isbn": "9788958205951",
+        "bin": "middle",
+        "title": "(코딩책과 함께 보는) 소프트웨어 개념 사전"
+      },
+      {
+        "isbn": "9791157848676",
+        "bin": "middle",
+        "title": "(박태웅의) AI 강의 2026"
+      },
+      {
+        "isbn": "9791162243091",
+        "bin": "middle",
+        "title": "혼자 공부하는 컴퓨터구조 + 운영체제"
+      },
+      {
+        "isbn": "9791171178155",
+        "bin": "middle",
+        "title": "멍멍말 통역사 김야옹"
+      },
+      {
+        "isbn": "9788931554717",
+        "bin": "rare",
+        "title": "(한 권으로 끝내는) PC 조립&스마트 네트워킹&문제해결 bible"
+      },
+      {
+        "isbn": "9788965400899",
+        "bin": "rare",
+        "title": "파이썬 해킹 입문"
+      },
+      {
+        "isbn": "9788966187607",
+        "bin": "rare",
+        "title": "인프라 엔지니어의 교과서"
+      },
+      {
+        "isbn": "9788966262427",
+        "bin": "rare",
+        "title": "밑바닥부터 만드는 컴퓨팅 시스템"
+      },
+      {
+        "isbn": "9788997924974",
+        "bin": "rare",
+        "title": "개발자 상식"
+      },
+      {
+        "isbn": "9788924272703",
+        "bin": "absent",
+        "title": "명수 [양장]"
+      },
+      {
+        "isbn": "9788924276978",
+        "bin": "absent",
+        "title": "감자 맛 소설 칩"
+      },
+      {
+        "isbn": "9788959409112",
+        "bin": "absent",
+        "title": "결함 있는 아침에 먹는 아스피린"
+      }
+    ]
+  }
+}
