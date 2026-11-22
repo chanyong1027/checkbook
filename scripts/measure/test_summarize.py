@@ -242,13 +242,25 @@ class OutsideShare(unittest.TestCase):
     def test_m_and_threshold(self):
         # 측정 PC 평균 400ms, 서버 평균 (3.6−3.0)/(12−10) = 300ms → m 100ms, T 1.90초. SAVED 모드는 세지 않는다
         text = self.report([{"items": 5, "ms": 300, "status": 200}, {"items": 5, "ms": 500, "status": 200}])
-        self.assertIn("밖 몫 m = 100ms → 규칙 2 새 문턱 T = 2.0 − m = **1.90초**", text)
+        self.assertIn("밖 몫 m = 100ms → 규칙 2 새 문턱 T = 2.0 − m(내림) = **1.90초**", text)
         self.assertNotIn("⚠ seoul-cityhall-r1: 서버 배치", text)
 
     def test_count_mismatch_is_warned(self):
         text = self.report([{"items": 5, "ms": 300, "status": 200}])
         self.assertIn("서버 배치 2건 ≠ 측정 PC 배치 1건", text)
-        self.assertIn("m을 그대로 믿지 말고", text)
+        self.assertIn("**판정 보류**: 측정 PC와 서버의 배치 짝이 안 맞아", text)
+        self.assertNotIn("새 문턱 T", text)
+
+    def test_empty_and_timed_out_batches_are_not_paired(self):
+        # 서버는 빈 배치를 기록하지 않고, k6 시간 초과(status 0)는 측정 PC 쪽에만 있다 — 둘 다 짝에서 뺀다
+        text = self.report([{"items": 5, "ms": 300, "status": 200}, {"items": 5, "ms": 500, "status": 200},
+                            {"items": 0, "ms": 900, "status": 200}, {"items": 0, "ms": 10000, "status": 0}])
+        self.assertIn("**1.90초**", text)
+
+    def test_threshold_range_and_floor(self):
+        self.assertEqual(s.rule2_threshold(0.105), 1.89)  # 1.895 → 내림 1.89
+        self.assertIsNone(s.rule2_threshold(-0.1))  # T ≥ 2.0은 말이 안 된다
+        self.assertIsNone(s.rule2_threshold(2.5))
 
 
 class Completeness(unittest.TestCase):

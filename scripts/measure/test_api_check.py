@@ -116,6 +116,20 @@ class Rules(unittest.TestCase):
         self.assertIn("단계 ≤ 1.80초, 다시 정한 문턱", buf.getvalue())
         self.assertIn("최대 1.70초 → **그대로**", buf.getvalue())
 
+    def test_rule2_target_rejects_nan_and_out_of_range(self):
+        import subprocess
+        script = str(Path(__file__).with_name("api_check.py"))
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "r.jsonl"
+            f.write_text(json.dumps({"phase": "start", "at": "t", "limit": 0}), encoding="utf-8")
+            for bad in ("nan", "0", "2.5"):
+                res = subprocess.run([sys.executable, script, "--summarize", str(f), "--rule2-target", bad],
+                                     capture_output=True, text=True)
+                self.assertNotEqual(res.returncode, 0, bad)
+                self.assertIn("0보다 크고 2초보다 작아야", res.stderr, bad)
+            ok = subprocess.run([sys.executable, script, "--summarize", str(f), "--rule2-target", "1.8"], capture_output=True, text=True)
+            self.assertEqual(ok.returncode, 0, ok.stderr)
+
     def test_aborted_run_holds(self):
         text = report([c([check()]), {"phase": "aborted", "reason": "HTTP 429"}], finished=False)
         self.assertIn("판정 보류(표본 부족: 끝 표시 없음)", text)

@@ -262,32 +262,55 @@ def server_batch(diff):
 
 
 def outside_share(runs, diffs):
-    """캐시 빈 회차의 (측정 PC 배치 응답 평균) − (서버 배치 처리 평균). 표 줄과 (m 초 또는 None, 경고 목록)"""
+    """캐시 빈 회차의 (측정 PC 배치 응답 평균) − (서버 배치 처리 평균).
+
+    짝을 맞추려고 측정 PC 쪽은 응답(200)을 받았고 항목이 있는 배치만 센다(서버는 빈 배치를 기록하지 않고,
+    k6 시간 초과는 측정 PC 쪽에만 빠진다). 수가 안 맞는 회차가 하나라도 있으면 m을 내지 않는다(판정 보류).
+    돌려주는 것: (표 줄, m 초 또는 None, 경고 목록, 참고 값 dict)
+    """
     rows, warns = [], []
     client_n = client_sum = server_n = server_sum = 0.0
+    first_ms = []
+    per_round = []
     for label, recs in runs.items():
         firsts = [r for r in recs if r.get("pass") == "first" and "library" in r]
         if not firsts:
             continue
-        ms = [b["ms"] for r in firsts for b in r["library"].get("batches", []) if b.get("status") == 200]
+        paired = [b for r in firsts for b in r["library"].get("batches", []) if b.get("status") == 200 and b.get("items", 0) > 0]
+        ms = [b["ms"] for b in paired]
+        first_ms += [r["library"]["batches"][0]["ms"] for r in firsts
+                     if r["library"].get("batches") and r["library"]["batches"][0].get("status") == 200]
         d = diffs.get(label)
         if d is None or not d["ports"]:
             warns.append(f"{label}: 서버 지표 없음")
             continue
         n, total = server_batch(d)
-        if n <= 0:
+        if n < 0 or total < 0:
+            warns.append(f"{label}: 서버 카운터가 줄었다(측정 중 칸을 다시 만들었나) — 이 회차는 짝을 못 맞춘다")
+            continue
+        if n == 0:
             warns.append(f"{label}: 서버 library_batch 줄 없음(server-probe.sh가 이 지표를 읽는지 확인)")
             continue
-        if abs(n - len(ms)) > 0:
-            warns.append(f"{label}: 서버 배치 {n:.0f}건 ≠ 측정 PC 배치 {len(ms)}건(실사용이 섞였거나 실패 배치)")
+        if n != len(ms):
+            warns.append(f"{label}: 서버 배치 {n:.0f}건 ≠ 측정 PC 배치 {len(ms)}건(실사용이 섞였거나 시간 초과 배치)")
         rows.append((label, len(ms), sum(ms) / len(ms) if ms else None, n, total / n * 1000))
+        if ms:
+            per_round.append(sum(ms) / len(ms) - total / n * 1000)
         client_n += len(ms)
         client_sum += sum(ms)
         server_n += n
         server_sum += total * 1000
-    if not client_n or not server_n:
-        return rows, None, warns
-    return rows, (client_sum / client_n - server_sum / server_n) / 1000, warns
+    ref = {"firstBatchMeanMs": sum(first_ms) / len(first_ms) if first_ms else None,
+           "worstRoundMs": max(per_round) if per_round else None}
+    if warns or not client_n or not server_n:
+        return rows, None, warns, ref
+    return rows, (client_sum / client_n - server_sum / server_n) / 1000, warns, ref
+
+
+def rule2_threshold(m):
+    """T = 2.0 − m을 소수 둘째 자리로 내림(관대하게 올리지 않게). 0 < T < 2.0이 아니면 None(m이 말이 안 됨)"""
+    t = math.floor((FIRST_DISPLAY_FOR_RULE2_SEC - m) * 100) / 100
+    return t if 0 < t < FIRST_DISPLAY_FOR_RULE2_SEC else None
 
 
 def main(folder):
@@ -341,7 +364,7 @@ def main(folder):
           f"| {cs['notSuccess']:,.0f} | {' '.join(notes)} |")
     p("")
 
-    rows, m, warns = outside_share(runs, diffs)
+    rows, m, warns, ref = outside_share(runs, diffs)
     if rows or warns:
         p("## 규칙 2 다시 판정용: 지역 조회 밖 몫 (측정 규칙 문서 8절)\n")
         p("| 실행 | 측정 PC 배치 수 | 측정 PC 평균 ms | 서버 배치 수 | 서버 평균 ms |")
@@ -350,11 +373,19 @@ def main(folder):
             p(f"| {label} | {n_c} | {rng([mean_c])} | {n_s:.0f} | {mean_s:,.0f} |")
         for w in warns:
             p(f"- ⚠ {w}")
-        if m is not None:
-            t = round(FIRST_DISPLAY_FOR_RULE2_SEC - m, 2)
-            p(f"\n- 밖 몫 m = {m * 1000:,.0f}ms → 규칙 2 새 문턱 T = {FIRST_DISPLAY_FOR_RULE2_SEC} − m = **{t:.2f}초** "
-              f"(다시 판정: `python3 scripts/measure/api_check.py --summarize <파일> --rule2-target {t:.2f}`)"
-              + (" — ⚠ 위 경고가 있어 m을 그대로 믿지 말고 원인부터 본다" if warns else ""))
+        t = rule2_threshold(m) if m is not None else None
+        if m is None:
+            p("\n- **판정 보류**: 측정 PC와 서버의 배치 짝이 안 맞아 m을 내지 않는다(위 경고의 원인을 본 뒤 그 회차를 다시 잰다)")
+        elif t is None:
+            p(f"\n- **판정 보류**: m = {m * 1000:,.0f}ms라 T = 2.0 − m이 0~2초 밖이다(짝이 어긋났을 수 있다)")
+        else:
+            p(f"\n- 밖 몫 m = {m * 1000:,.0f}ms → 규칙 2 새 문턱 T = 2.0 − m(내림) = **{t:.2f}초** "
+              f"(다시 판정: `python3 scripts/measure/api_check.py --summarize <파일> --rule2-target {t:.2f}`)")
+            if ref["worstRoundMs"] is not None:
+                p(f"- 참고(판정 밖): 회차별 밖 몫 중 가장 큰 값 {ref['worstRoundMs']:,.0f}ms → T {rule2_threshold(ref['worstRoundMs'] / 1000) or '범위 밖'}초. "
+                  f"첫 배치만의 측정 PC 평균 {ref['firstBatchMeanMs']:,.0f}ms(검색과 동시에 나가고 첫 연결 수립이 든다)")
+            p("- 한계 [가정]: 서버 배치 처리 시간에는 DB 읽기·응답 구성이 들어 있어 m에서 함께 빠진다. 후 구조에서 지역 조회 단계 밖에 있을 "
+              "DB 일(지역 목록 표 읽기·쓰기, 거리 정렬)은 m에 안 잡혀 T가 그만큼 관대하다. 최종 판정은 1층 후의 첫 표시 직접 측정이다.")
         p("")
 
     browser = [r for recs in runs.values() for r in recs if r.get("pass") == "browser"]
