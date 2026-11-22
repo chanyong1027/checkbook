@@ -4,6 +4,7 @@
 #   read            두 칸(blue 8081·green 8082)의 /actuator/prometheus에서 정보나루 관련 줄만 뽑는다
 #                   - external_budget_used{provider="datanaru"}: 오늘(KST) 나간 정보나루 호출 수(회차 앞뒤 차이가 호출 수의 주 값, R12)
 #                   - http_client_requests_seconds_*: 정보나루 호출 시간 히스토그램(외부 원인 판정 D3, 전후 두 날 비교)
+#                   - library_batch_seconds_count·sum{mode="NEARBY"}: 서버가 잰 주변 배치 처리 시간(규칙 2 다시 판정용 밖 몫)
 #                   떠 있는 칸이 모두 응답하고, 예산 값이 11초(동기화 간격 10초보다 길게) 사이 그대로이며 칸끼리 같고,
 #                   동기화 실패 카운터가 늘지 않았으며, DB 값이 모든 칸 게이지와 같을 때만 값을 낸다(최대 5번, 안 되면 실패).
 #   reset ISBN...   library_availability_snapshot에서 그 ISBN 행만 지운다(운영 DB 변경 — 측정일에 사용자 확인을 받고 쓴다)
@@ -25,7 +26,7 @@ snapshot() {
     if body="$(curl -fsS --max-time 3 "http://127.0.0.1:${port}/actuator/prometheus" 2>/dev/null)"; then
       found=1
       lines="$(printf '%s\n' "$body" \
-        | grep -E '^external_budget_used\{[^}]*provider="datanaru"|^external_budget_sync_failures_total|^http_client_requests_seconds_(count|sum|max|bucket)\{[^}]*(data4library|bookExist|libSrch)' || true)"
+        | grep -E '^external_budget_used\{[^}]*provider="datanaru"|^external_budget_sync_failures_total|^http_client_requests_seconds_(count|sum|max|bucket)\{[^}]*(data4library|bookExist|libSrch)|^library_batch_seconds_(count|sum)\{[^}]*mode="NEARBY"' || true)"
       # 줄이 비면 외부 원인 판정을 못 한다(집계가 "판정 보류"로 둔다). 측정 PC가 바로 알게 표준 오류로 알린다
       if ! grep -q '^external_budget_used' <<<"$lines"; then
         echo "WARN port=${port} external_budget_used(datanaru) 줄 없음" >&2

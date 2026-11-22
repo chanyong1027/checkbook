@@ -103,6 +103,36 @@ class Rules(unittest.TestCase):
                 a.summarize(str(f))
             self.assertIn("최대 3.50초 → **멈춤**", buf.getvalue())
 
+    def test_rule2_target_override(self):
+        recs = [b(sec=1.7)] * 20
+        self.assertIn("최대 1.70초 → **멈춤**", report(recs))
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "r.jsonl"
+            f.write_text("\n".join(json.dumps(r) for r in [{"phase": "start", "at": "t", "limit": 0, "expected": {"A": 0, "B": 20, "C": 0}}]
+                                   + recs + [{"phase": "end"}]), encoding="utf-8")
+            buf = StringIO()
+            with redirect_stdout(buf):
+                a.summarize(str(f), 1.8)
+        self.assertIn("단계 ≤ 1.80초, 다시 정한 문턱", buf.getvalue())
+        self.assertIn("최대 1.70초 → **그대로**", buf.getvalue())
+
+    def test_rule2_target_rejects_nan_and_out_of_range(self):
+        import subprocess
+        script = str(Path(__file__).with_name("api_check.py"))
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "r.jsonl"
+            f.write_text(json.dumps({"phase": "start", "at": "t", "limit": 0}), encoding="utf-8")
+            for bad in ("nan", "0", "2.5"):
+                res = subprocess.run([sys.executable, script, "--summarize", str(f), "--rule2-target", bad],
+                                     capture_output=True, text=True)
+                self.assertNotEqual(res.returncode, 0, bad)
+                self.assertIn("0보다 크고 2초보다 작아야", res.stderr, bad)
+            res = subprocess.run([sys.executable, script, "--summarize", str(f), "--rule2-target", "abc"], capture_output=True, text=True)
+            self.assertIn("숫자여야 한다", res.stderr)
+            self.assertNotIn("Traceback", res.stderr)
+            ok = subprocess.run([sys.executable, script, "--summarize", str(f), "--rule2-target", "1.8"], capture_output=True, text=True)
+            self.assertEqual(ok.returncode, 0, ok.stderr)
+
     def test_aborted_run_holds(self):
         text = report([c([check()]), {"phase": "aborted", "reason": "HTTP 429"}], finished=False)
         self.assertIn("판정 보류(표본 부족: 끝 표시 없음)", text)
@@ -190,6 +220,17 @@ class ClientErrors(unittest.TestCase):
         self.assertIsNone(client.fatal)
         self.call(client, "잘못된 도서관 코드")
         self.assertIn("3회 연속", client.fatal)
+
+    def test_unregistered_ip_limit_stops_at_once(self):
+        client = a.Client("k")
+        original = a.urllib.request.urlopen
+        a.urllib.request.urlopen = lambda req, timeout: FakeResponse(
+            {"response": {"errCode": "outOflimit", "error": "1일 500건 이상 요청 시 IP 등록이 필요합니다."}})
+        try:
+            client.get("libSrchByBook", isbn="1", region=11)
+        finally:
+            a.urllib.request.urlopen = original
+        self.assertIsNotNone(client.fatal)
 
     def test_success_resets_streak(self):
         client = a.Client("k")

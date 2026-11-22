@@ -92,6 +92,13 @@ sudo git -C /opt/checkbook/app fetch -q origin && sudo git -C /opt/checkbook/app
 python3 scripts/measure/summarize.py build/measure/before
 ```
 
+### 규칙 2 다시 판정 (전 측정 날에 함께, 11-22 결정)
+
+11-21 API 확인에서 규칙 2(지역 조회 단계 ≤ 1.5초)가 멈췄다. 1.5초의 근거인 "밖 몫 0.5초"를 전 측정에서 재서 문턱을 다시 정한다.
+1. 위 집계의 "규칙 2 다시 판정용: 지역 조회 밖 몫" 절에서 m과 새 문턱 T(= 2.0 − m)를 읽는다. 캐시 빈 회차의 측정 PC 배치 평균 − 서버 `library_batch{mode="NEARBY"}` 평균이다. 경고(배치 수 불일치 등)가 있으면 원인부터 본다.
+2. 전 측정과 같은 시간대에 운영 서버에서 API 확인의 규칙 1·2 부분만 다시 돌린다(약 105회, 3~4분). 명령은 위 "API 확인" 절과 같고 마지막 줄만 `--phases B --out "$D/api-check-b.jsonl"`로 바꾼다.
+3. 측정 PC에서 그 결과를 T로 판정한다: `python3 scripts/measure/api_check.py --summarize build/measure/api-check/api-check-b.jsonl --rule2-target <T>`.
+
 ## 양 어림 (측정일 하루, 최악)
 
 - 우리 IP 요청(한도 1,500, 책 한 권 최대 5 = 검색 1 + 배치 4): 위치 셋 × (브라우저 약 24 + 회차 3 × 18권 × 최대 5 + 두 번째 사람 최대 90) + 원주 약 114 + 더 찾기 약 42 + 기준 5 ≈ **1,310**. 429가 나오면 그날은 거기서 멈추고 다음 날 잇는다(한도를 더 올리지 않는다).

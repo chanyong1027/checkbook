@@ -219,6 +219,108 @@ class EndToEnd(unittest.TestCase):
         self.assertIn("측정 중단", text)
 
 
+class OutsideShare(unittest.TestCase):
+    """규칙 2 다시 판정용 밖 몫: 측정 PC 배치 평균 − 서버 배치 평균. 계획 대조는 test_plan_short_holds에서만 본다"""
+
+    def setUp(self):
+        self._expected_runs = s.expected_runs
+        s.expected_runs = lambda plan: {}
+
+    def tearDown(self):
+        s.expected_runs = self._expected_runs
+
+    def test_position_without_any_first_record_holds(self):
+        s.expected_runs = self._expected_runs  # 실제 계획(위치 4곳)과 대조 — 서울시청만 기록이 있다
+        text = self.report([{"items": 5, "ms": 300, "status": 200}, {"items": 5, "ms": 500, "status": 200}])
+        self.assertIn("캐시 빈 회차 기록이 하나도 없는 위치: ['ansan-cityhall', 'gangseo-office', 'wonju-cityhall']", text)
+        self.assertNotIn("새 문턱 T", text)
+
+    def test_short_round_only_warns(self):
+        plan = {"positions": {"seoul-cityhall": {"books": "b", "rounds": 2}}, "books": {"b": [{"isbn": "1", "bin": "common"}] * 3}}
+        s.expected_runs = self._expected_runs
+        original = s.load_plan
+        s.load_plan = lambda path=None: plan
+        try:
+            text = self.report([{"items": 5, "ms": 300, "status": 200}, {"items": 5, "ms": 500, "status": 200}])
+        finally:
+            s.load_plan = original
+        self.assertIn("계획보다 모자란 캐시 빈 회차(경고만)", text)
+        self.assertIn("**1.90초**", text)
+
+    def test_reset_on_one_port_is_not_hidden_by_the_other(self):
+        # 8081은 0부터 다시 시작(차이 −8), 8082는 +10 — 합치면 +2로 보이지만 그 회차는 빼야 한다
+        pre = {"8081": {("library_batch_seconds_count", frozenset({("mode", "NEARBY")})): 8.0},
+               "8082": {("library_batch_seconds_count", frozenset({("mode", "NEARBY")})): 0.0}}
+        post = {"8081": {("library_batch_seconds_count", frozenset({("mode", "NEARBY")})): 0.0},
+                "8082": {("library_batch_seconds_count", frozenset({("mode", "NEARBY")})): 10.0}}
+        n, _, reset = s.server_batch(s.probe_diff(pre, post))
+        self.assertEqual(n, 2)
+        self.assertTrue(reset)
+
+    PRE_B = PRE + '2026-11-25T05:00:00Z port=8081 library_batch_seconds_count{mode="NEARBY",stop="NONE"} 10\n' \
+        + '2026-11-25T05:00:00Z port=8081 library_batch_seconds_sum{mode="NEARBY",stop="NONE"} 3.0\n'
+    POST_B = POST + '2026-11-25T05:05:00Z port=8081 library_batch_seconds_count{mode="NEARBY",stop="NONE"} 12\n' \
+        + '2026-11-25T05:05:00Z port=8081 library_batch_seconds_sum{mode="NEARBY",stop="NONE"} 3.6\n' \
+        + '2026-11-25T05:05:00Z port=8081 library_batch_seconds_count{mode="SAVED",stop="NONE"} 99\n'
+
+    def report(self, batches):
+        rec = EndToEnd.rec("1", dict(lib(), batches=batches))
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "seoul-cityhall-r1.jsonl").write_text("MEASURE " + json.dumps(rec), encoding="utf-8")
+            (Path(d) / "probe-seoul-cityhall-r1-pre.txt").write_text(self.PRE_B, encoding="utf-8")
+            (Path(d) / "probe-seoul-cityhall-r1-post.txt").write_text(self.POST_B, encoding="utf-8")
+            buf = StringIO()
+            with redirect_stdout(buf):
+                s.main(d)
+        return buf.getvalue()
+
+    def test_m_and_threshold(self):
+        # 측정 PC 평균 400ms, 서버 평균 (3.6−3.0)/(12−10) = 300ms → m 100ms, T 1.90초. SAVED 모드는 세지 않는다
+        text = self.report([{"items": 5, "ms": 300, "status": 200}, {"items": 5, "ms": 500, "status": 200}])
+        self.assertIn("밖 몫 m = 100ms → 규칙 2 새 문턱 T = 2.0 − m(내림) = **1.90초**", text)
+        self.assertNotIn("⚠ seoul-cityhall-r1: 서버 배치", text)
+
+    def test_count_mismatch_is_warned(self):
+        text = self.report([{"items": 5, "ms": 300, "status": 200}])
+        self.assertIn("서버 배치 2건 ≠ 측정 PC 배치 1건", text)
+        self.assertIn("짝이 맞는 회차가 없는 위치: ['seoul-cityhall']", text)
+        self.assertIn("**판정 보류**: 짝이 맞는 회차나 캐시 빈 회차 기록이 없는 위치가 있어", text)
+        self.assertNotIn("새 문턱 T", text)
+
+    def test_mismatched_round_is_left_out_when_another_round_pairs(self):
+        ok = EndToEnd.rec("1", dict(lib(), batches=[{"items": 5, "ms": 300, "status": 200}, {"items": 5, "ms": 500, "status": 200}]))
+        bad = dict(EndToEnd.rec("2", dict(lib(), batches=[{"items": 5, "ms": 9000, "status": 200}])), round=2)
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "seoul-cityhall-r1.jsonl").write_text("MEASURE " + json.dumps(ok), encoding="utf-8")
+            (Path(d) / "seoul-cityhall-r2.jsonl").write_text("MEASURE " + json.dumps(bad), encoding="utf-8")
+            for label in ("seoul-cityhall-r1", "seoul-cityhall-r2"):
+                (Path(d) / f"probe-{label}-pre.txt").write_text(self.PRE_B, encoding="utf-8")
+                (Path(d) / f"probe-{label}-post.txt").write_text(self.POST_B, encoding="utf-8")
+            buf = StringIO()
+            with redirect_stdout(buf):
+                s.main(d)
+        text = buf.getvalue()
+        self.assertIn("seoul-cityhall-r2: 서버 배치 2건 ≠ 측정 PC 배치 1건", text)
+        self.assertIn("이 회차는 m에서 뺀다", text)
+        self.assertIn("**1.90초**", text)  # r1만으로 m = 100ms
+
+    def test_empty_and_timed_out_batches_are_not_paired(self):
+        # 서버는 빈 배치를 기록하지 않고, k6 시간 초과(status 0)는 측정 PC 쪽에만 있다 — 둘 다 짝에서 뺀다
+        text = self.report([{"items": 5, "ms": 300, "status": 200}, {"items": 5, "ms": 500, "status": 200},
+                            {"items": 0, "ms": 900, "status": 200}, {"items": 0, "ms": 10000, "status": 0}])
+        self.assertIn("**1.90초**", text)
+
+    def test_threshold_range_and_floor(self):
+        self.assertEqual(s.rule2_threshold(0.105), 1.89)  # 1.895 → 내림 1.89
+        self.assertEqual(s.rule2_threshold(0.85), 1.15)  # 부동소수 오차로 1.14가 되지 않는다
+        self.assertEqual(s.rule2_threshold(0.1), 1.90)
+        self.assertEqual(s.rule2_threshold(0.1004), 1.89)  # 100.4ms → 올려 101ms(관대해지지 않게)
+        self.assertEqual(s.rule2_threshold(0.100000001), 1.90)  # 마이크로초 아래(부동소수 잡음)는 올리기 전에 지운다
+        self.assertEqual(s.rule2_threshold(0.100002), 1.89)  # 2µs는 올린다
+        self.assertIsNone(s.rule2_threshold(-0.1))  # T ≥ 2.0은 말이 안 된다
+        self.assertIsNone(s.rule2_threshold(2.5))
+
+
 class Completeness(unittest.TestCase):
     PLAN = {"positions": {"p": {"books": "b", "rounds": 2}}, "books": {"b": [{"isbn": "1", "bin": "common"}, {"isbn": "2", "bin": "absent"}]}}
 

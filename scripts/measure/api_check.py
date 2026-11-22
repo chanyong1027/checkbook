@@ -40,7 +40,7 @@ NEAREST_ABSENT = 5
 TIMEOUT_SECONDS = 15
 # error 칸에 이 말이 있으면 키·한도 오류로 보고 바로 멈춘다. 그 밖의 오류 칸(표본 하나의 잘못된 코드 등)은 연달아
 # ERROR_STREAK_LIMIT번 나올 때만 멈춘다 — 한 건 때문에 표본 전체를 잃지 않게
-FATAL_ERROR_WORDS = ("인증", "키", "key", "한도", "초과", "limit", "auth", "권한", "quota")
+FATAL_ERROR_WORDS = ("인증", "키", "key", "한도", "초과", "limit", "auth", "권한", "quota", "ip 등록")
 ERROR_STREAK_LIMIT = 3
 
 
@@ -89,9 +89,11 @@ class Client:
         if resp.get("error"):
             # 정보나루는 키 오류·한도 초과를 HTTP 200 + error 칸으로 준다(DatanaruClient 주석)
             msg = str(resp.get("error"))[:80]
+            # errCode도 본다: 11-21 "1일 500건 이상 요청 시 IP 등록이 필요합니다"는 errCode outOflimit로 왔다
+            code = str(resp.get("errCode") or "")
             with self._lock:
                 self._error_streak += 1
-                if any(w in msg.lower() for w in FATAL_ERROR_WORDS):
+                if any(w in (msg + " " + code).lower() for w in FATAL_ERROR_WORDS):
                     self.fatal = self.fatal or f"error 칸(키·한도): {msg}"
                 elif self._error_streak >= ERROR_STREAK_LIMIT:
                     self.fatal = self.fatal or f"error 칸 {ERROR_STREAK_LIMIT}회 연속: {msg}"
@@ -345,7 +347,10 @@ RULE2_TARGET_SEC = 1.5  # 첫 표시 2초 − 지역 조회 밖 몫 0.5초 [가�
 RULE2_SHARE = 0.95  # D3: 95% 이상 기준 이하 + 가장 느린 값 기준의 2배 이하
 
 
-def summarize(path):
+def summarize(path, rule2_target=None):
+    """rule2_target: 규칙 2 문턱(초). 없으면 처음 정한 1.5초. 다시 판정할 때는 1층 "전" 측정에서 잰 밖 몫으로
+    정한 T = 2.0 − m을 넘긴다(summarize.py가 m과 T를 낸다, 측정 규칙 문서 8절)"""
+    target = RULE2_TARGET_SEC if rule2_target is None else rule2_target
     recs = [json.loads(line) for line in open(path, encoding="utf-8") if line.strip()]
     start = next((r for r in recs if r.get("phase") == "start"), {})
     expected = start.get("expected") or {}
@@ -399,15 +404,15 @@ def summarize(path):
         if ok:
             calls = [r["calls"] for r in ok]
             secs = sorted(r["stageSec"] for r in ok)
-            over = sum(1 for v in secs if v > RULE2_TARGET_SEC)
+            over = sum(1 for v in secs if v > target)
             # 남은 표본이 모두 좋아도 뒤집히지 않는 실패만 "멈춤"(가장 느린 값이 2배를 넘음, 또는 넘은 표본이 전체의 5% 초과)
             stop1 = max(calls) > RULE1_MAX_CALLS
             # 비율로 확정하려면 전체 기대 수를 알아야 한다(기대 수가 없는 옛 기록이면 최대 시간 기준만 확정)
-            stop2 = secs[-1] > RULE2_TARGET_SEC * 2 or (known_total and over > (1 - RULE2_SHARE) * total)
+            stop2 = secs[-1] > target * 2 or (known_total and over > (1 - RULE2_SHARE) * total)
             r1 = "멈춤(이미 pageSize 1000 — 시도 수가 원인인지 적고 묻는다)" if stop1 else (f"판정 보류({why})" if uncertain else "그대로")
             r2 = "멈춤" if stop2 else (f"판정 보류({why})" if uncertain else ("그대로" if over <= (1 - RULE2_SHARE) * len(secs) else "멈춤"))
             out += ["", f"- 규칙 1(호출 ≤ {RULE1_MAX_CALLS}): 완전한 표본 {len(ok)}건 최대 {max(calls)} → **{r1}**",
-                    f"- 규칙 2(단계 ≤ {RULE2_TARGET_SEC}초, 95% + 최대 {RULE2_TARGET_SEC * 2}초): 완전한 표본 {len(ok)}건(전체 {total}건 중) "
+                    f"- 규칙 2(단계 ≤ {target:.2f}초{'' if rule2_target is None else ', 다시 정한 문턱'}, 95% + 최대 {target * 2:.2f}초): 완전한 표본 {len(ok)}건(전체 {total}건 중) "
                     f"넘은 것 {over}건, 최대 {secs[-1]:.2f}초 → **{r2}**"]
         else:
             out += ["", f"- 규칙 1·2: 완전한 표본이 없음 → **판정 보류({why})**"]
@@ -444,7 +449,15 @@ def summarize(path):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 3 and sys.argv[1] == "--summarize":
-        summarize(sys.argv[2])
+    if len(sys.argv) in (3, 5) and sys.argv[1] == "--summarize":
+        try:
+            target = float(sys.argv[4]) if len(sys.argv) == 5 and sys.argv[3] == "--rule2-target" else None
+        except ValueError:
+            raise SystemExit(f"--rule2-target은 숫자여야 한다: {sys.argv[4]} (사용법: --summarize FILE [--rule2-target 초])")
+        if len(sys.argv) == 5 and target is None:
+            raise SystemExit("사용법: --summarize FILE [--rule2-target 초]")
+        if target is not None and not (0 < target < 2.0):  # nan도 여기서 걸린다(비교가 모두 거짓)
+            raise SystemExit(f"--rule2-target은 0보다 크고 2초보다 작아야 한다: {sys.argv[4]}")
+        summarize(sys.argv[2], target)
     else:
         main()
