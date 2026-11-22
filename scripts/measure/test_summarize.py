@@ -219,6 +219,38 @@ class EndToEnd(unittest.TestCase):
         self.assertIn("측정 중단", text)
 
 
+class OutsideShare(unittest.TestCase):
+    """규칙 2 다시 판정용 밖 몫: 측정 PC 배치 평균 − 서버 배치 평균"""
+
+    PRE_B = PRE + '2026-11-25T05:00:00Z port=8081 library_batch_seconds_count{mode="NEARBY",stop="NONE"} 10\n' \
+        + '2026-11-25T05:00:00Z port=8081 library_batch_seconds_sum{mode="NEARBY",stop="NONE"} 3.0\n'
+    POST_B = POST + '2026-11-25T05:05:00Z port=8081 library_batch_seconds_count{mode="NEARBY",stop="NONE"} 12\n' \
+        + '2026-11-25T05:05:00Z port=8081 library_batch_seconds_sum{mode="NEARBY",stop="NONE"} 3.6\n' \
+        + '2026-11-25T05:05:00Z port=8081 library_batch_seconds_count{mode="SAVED",stop="NONE"} 99\n'
+
+    def report(self, batches):
+        rec = EndToEnd.rec("1", dict(lib(), batches=batches))
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "seoul-cityhall-r1.jsonl").write_text("MEASURE " + json.dumps(rec), encoding="utf-8")
+            (Path(d) / "probe-seoul-cityhall-r1-pre.txt").write_text(self.PRE_B, encoding="utf-8")
+            (Path(d) / "probe-seoul-cityhall-r1-post.txt").write_text(self.POST_B, encoding="utf-8")
+            buf = StringIO()
+            with redirect_stdout(buf):
+                s.main(d)
+        return buf.getvalue()
+
+    def test_m_and_threshold(self):
+        # 측정 PC 평균 400ms, 서버 평균 (3.6−3.0)/(12−10) = 300ms → m 100ms, T 1.90초. SAVED 모드는 세지 않는다
+        text = self.report([{"items": 5, "ms": 300, "status": 200}, {"items": 5, "ms": 500, "status": 200}])
+        self.assertIn("밖 몫 m = 100ms → 규칙 2 새 문턱 T = 2.0 − m = **1.90초**", text)
+        self.assertNotIn("⚠ seoul-cityhall-r1: 서버 배치", text)
+
+    def test_count_mismatch_is_warned(self):
+        text = self.report([{"items": 5, "ms": 300, "status": 200}])
+        self.assertIn("서버 배치 2건 ≠ 측정 PC 배치 1건", text)
+        self.assertIn("m을 그대로 믿지 말고", text)
+
+
 class Completeness(unittest.TestCase):
     PLAN = {"positions": {"p": {"books": "b", "rounds": 2}}, "books": {"b": [{"isbn": "1", "bin": "common"}, {"isbn": "2", "bin": "absent"}]}}
 

@@ -244,6 +244,52 @@ def required_browser_books(plan, position):
     return out
 
 
+FIRST_DISPLAY_FOR_RULE2_SEC = 2.0  # 규칙 2 문턱 T = 첫 표시 2초 − 밖 몫 m(측정 규칙 문서 8절)
+
+
+def server_batch(diff):
+    """서버가 잰 주변 배치 처리 시간의 (수, 합 초) — 칸끼리 더한다(프로세스마다 따로 센다)"""
+    count = total = 0.0
+    for values in diff["ports"].values():
+        for (name, labels), v in values.items():
+            if dict(labels).get("mode") != "NEARBY":
+                continue
+            if name == "library_batch_seconds_count":
+                count += v
+            elif name == "library_batch_seconds_sum":
+                total += v
+    return count, total
+
+
+def outside_share(runs, diffs):
+    """캐시 빈 회차의 (측정 PC 배치 응답 평균) − (서버 배치 처리 평균). 표 줄과 (m 초 또는 None, 경고 목록)"""
+    rows, warns = [], []
+    client_n = client_sum = server_n = server_sum = 0.0
+    for label, recs in runs.items():
+        firsts = [r for r in recs if r.get("pass") == "first" and "library" in r]
+        if not firsts:
+            continue
+        ms = [b["ms"] for r in firsts for b in r["library"].get("batches", []) if b.get("status") == 200]
+        d = diffs.get(label)
+        if d is None or not d["ports"]:
+            warns.append(f"{label}: 서버 지표 없음")
+            continue
+        n, total = server_batch(d)
+        if n <= 0:
+            warns.append(f"{label}: 서버 library_batch 줄 없음(server-probe.sh가 이 지표를 읽는지 확인)")
+            continue
+        if abs(n - len(ms)) > 0:
+            warns.append(f"{label}: 서버 배치 {n:.0f}건 ≠ 측정 PC 배치 {len(ms)}건(실사용이 섞였거나 실패 배치)")
+        rows.append((label, len(ms), sum(ms) / len(ms) if ms else None, n, total / n * 1000))
+        client_n += len(ms)
+        client_sum += sum(ms)
+        server_n += n
+        server_sum += total * 1000
+    if not client_n or not server_n:
+        return rows, None, warns
+    return rows, (client_sum / client_n - server_sum / server_n) / 1000, warns
+
+
 def main(folder):
     folder = Path(folder)
     runs = load_records(folder)
@@ -294,6 +340,22 @@ def main(folder):
         p(f"| {label} | {len(lookups)} | {used:,.0f} | {checked} | {cs['count']:,.0f} | {cs['slow'] if cs['slow'] is not None else '—'} "
           f"| {cs['notSuccess']:,.0f} | {' '.join(notes)} |")
     p("")
+
+    rows, m, warns = outside_share(runs, diffs)
+    if rows or warns:
+        p("## 규칙 2 다시 판정용: 지역 조회 밖 몫 (측정 규칙 문서 8절)\n")
+        p("| 실행 | 측정 PC 배치 수 | 측정 PC 평균 ms | 서버 배치 수 | 서버 평균 ms |")
+        p("|---|---|---|---|---|")
+        for label, n_c, mean_c, n_s, mean_s in rows:
+            p(f"| {label} | {n_c} | {rng([mean_c])} | {n_s:.0f} | {mean_s:,.0f} |")
+        for w in warns:
+            p(f"- ⚠ {w}")
+        if m is not None:
+            t = round(FIRST_DISPLAY_FOR_RULE2_SEC - m, 2)
+            p(f"\n- 밖 몫 m = {m * 1000:,.0f}ms → 규칙 2 새 문턱 T = {FIRST_DISPLAY_FOR_RULE2_SEC} − m = **{t:.2f}초** "
+              f"(다시 판정: `python3 scripts/measure/api_check.py --summarize <파일> --rule2-target {t:.2f}`)"
+              + (" — ⚠ 위 경고가 있어 m을 그대로 믿지 말고 원인부터 본다" if warns else ""))
+        p("")
 
     browser = [r for recs in runs.values() for r in recs if r.get("pass") == "browser"]
     share_by_pos = collections.defaultdict(float)
