@@ -229,12 +229,23 @@ class OutsideShare(unittest.TestCase):
     def tearDown(self):
         s.expected_runs = self._expected_runs
 
-    def test_plan_short_holds(self):
-        s.expected_runs = self._expected_runs  # 실제 계획(위치 4곳)과 대조
+    def test_position_without_any_first_record_holds(self):
+        s.expected_runs = self._expected_runs  # 실제 계획(위치 4곳)과 대조 — 서울시청만 기록이 있다
         text = self.report([{"items": 5, "ms": 300, "status": 200}, {"items": 5, "ms": 500, "status": 200}])
-        self.assertIn("계획보다 모자란 캐시 빈 회차", text)
-        self.assertIn("ansan-cityhall-r1 0/18", text)
+        self.assertIn("캐시 빈 회차 기록이 하나도 없는 위치: ['ansan-cityhall', 'gangseo-office', 'wonju-cityhall']", text)
         self.assertNotIn("새 문턱 T", text)
+
+    def test_short_round_only_warns(self):
+        plan = {"positions": {"seoul-cityhall": {"books": "b", "rounds": 2}}, "books": {"b": [{"isbn": "1", "bin": "common"}] * 3}}
+        s.expected_runs = self._expected_runs
+        original = s.load_plan
+        s.load_plan = lambda path=None: plan
+        try:
+            text = self.report([{"items": 5, "ms": 300, "status": 200}, {"items": 5, "ms": 500, "status": 200}])
+        finally:
+            s.load_plan = original
+        self.assertIn("계획보다 모자란 캐시 빈 회차(경고만)", text)
+        self.assertIn("**1.90초**", text)
 
     def test_reset_on_one_port_is_not_hidden_by_the_other(self):
         # 8081은 0부터 다시 시작(차이 −8), 8082는 +10 — 합치면 +2로 보이지만 그 회차는 빼야 한다
@@ -273,7 +284,7 @@ class OutsideShare(unittest.TestCase):
         text = self.report([{"items": 5, "ms": 300, "status": 200}])
         self.assertIn("서버 배치 2건 ≠ 측정 PC 배치 1건", text)
         self.assertIn("짝이 맞는 회차가 없는 위치: ['seoul-cityhall']", text)
-        self.assertIn("**판정 보류**: 짝이 맞는 회차가 없는 위치가 있거나", text)
+        self.assertIn("**판정 보류**: 짝이 맞는 회차나 캐시 빈 회차 기록이 없는 위치가 있어", text)
         self.assertNotIn("새 문턱 T", text)
 
     def test_mismatched_round_is_left_out_when_another_round_pairs(self):
@@ -302,9 +313,10 @@ class OutsideShare(unittest.TestCase):
     def test_threshold_range_and_floor(self):
         self.assertEqual(s.rule2_threshold(0.105), 1.89)  # 1.895 → 내림 1.89
         self.assertEqual(s.rule2_threshold(0.85), 1.15)  # 부동소수 오차로 1.14가 되지 않는다
-        self.assertEqual(s.rule2_threshold(0.100000001), 1.90)  # m은 정수 ms로 맞춘다(측정 해상도)
-        self.assertEqual(s.rule2_threshold(0.1004), 1.90)
-        self.assertEqual(s.rule2_threshold(0.1006), 1.89)
+        self.assertEqual(s.rule2_threshold(0.1), 1.90)
+        self.assertEqual(s.rule2_threshold(0.1004), 1.89)  # 100.4ms → 올려 101ms(관대해지지 않게)
+        self.assertEqual(s.rule2_threshold(0.100000001), 1.90)  # 마이크로초 아래(부동소수 잡음)는 올리기 전에 지운다
+        self.assertEqual(s.rule2_threshold(0.100002), 1.89)  # 2µs는 올린다
         self.assertIsNone(s.rule2_threshold(-0.1))  # T ≥ 2.0은 말이 안 된다
         self.assertIsNone(s.rule2_threshold(2.5))
 

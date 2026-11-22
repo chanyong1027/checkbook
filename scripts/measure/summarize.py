@@ -318,16 +318,25 @@ def outside_share(runs, diffs, plan=None):
     missing = sorted(positions - paired_positions)
     if missing:
         warns.append(f"짝이 맞는 회차가 없는 위치: {missing} — m을 내지 않는다")
-    # 기록이 통째로 없는 위치는 위 검사에 안 걸린다 — 계획의 캐시 빈 회차와 대조한다
-    short = []
+    # 기록이 통째로 없는 위치는 위 검사에 안 걸린다 — 계획의 위치마다 캐시 빈 회차 기록이 하나라도 있는지 본다.
+    # 회차가 짧은 것(429로 멈춤 등)은 m을 치우치게 하지 않으므로 경고만 한다(어긋난 회차를 빼고 m을 내는 방침과 같다)
+    absent = []
     if plan is not None:
+        got_by_pos, short = {}, []
         for label, (pass_name, n_books) in expected_runs(plan).items():
-            got = sum(1 for r in runs.get(label, []) if r.get("pass") == pass_name and "library" in r)
-            if pass_name == "first" and got < n_books:
+            if pass_name != "first":
+                continue
+            got = sum(1 for r in runs.get(label, []) if r.get("pass") == "first" and "library" in r)
+            pos = label.rsplit("-r", 1)[0]
+            got_by_pos[pos] = got_by_pos.get(pos, 0) + got
+            if got < n_books:
                 short.append(f"{label} {got}/{n_books}")
+        absent = sorted(pos for pos, got in got_by_pos.items() if got == 0)
         if short:
-            warns.append(f"계획보다 모자란 캐시 빈 회차: {short} — m을 내지 않는다")
-    if missing or short or not client_n or not server_n:
+            warns.append(f"계획보다 모자란 캐시 빈 회차(경고만): {short}")
+        if absent:
+            warns.append(f"캐시 빈 회차 기록이 하나도 없는 위치: {absent} — m을 내지 않는다")
+    if missing or absent or not client_n or not server_n:
         return rows, None, warns, ref
     return rows, (client_sum / client_n - server_sum / server_n) / 1000, warns, ref
 
@@ -335,9 +344,10 @@ def outside_share(runs, diffs, plan=None):
 def rule2_threshold(m):
     """T = 2.0 − m을 소수 둘째 자리로 내림(관대하게 올리지 않게). 0 < T < 2.0이 아니면 None(m이 말이 안 됨).
 
-    m은 ms 단위 평균이라 정수 ms로 맞춘 뒤 정수로 계산한다 — 부동소수 오차가 내림을 한 칸 바꾸는 일이 없다
+    m은 두 평균의 차이라 정수 ms가 아니다. 위로 올림해 정수 ms로 맞춘 뒤(T가 관대해지지 않는 쪽) 정수로 계산한다 —
+    부동소수 오차가 내림을 한 칸 바꾸지 않게 올림 전에 마이크로초 아래를 지운다
     """
-    m_ms = round(m * 1000)
+    m_ms = math.ceil(round(m * 1000, 3))
     t_cs = (int(FIRST_DISPLAY_FOR_RULE2_SEC * 1000) - m_ms) // 10
     return t_cs / 100 if 0 < t_cs < int(FIRST_DISPLAY_FOR_RULE2_SEC * 100) else None
 
@@ -404,7 +414,7 @@ def main(folder):
             p(f"- ⚠ {w}")
         t = rule2_threshold(m) if m is not None else None
         if m is None:
-            p("\n- **판정 보류**: 짝이 맞는 회차가 없는 위치가 있거나 계획보다 회차가 모자라 m을 내지 않는다(위 경고의 원인을 본 뒤 그 회차를 다시 잰다)")
+            p("\n- **판정 보류**: 짝이 맞는 회차나 캐시 빈 회차 기록이 없는 위치가 있어 m을 내지 않는다(위 경고의 원인을 본 뒤 그 회차를 다시 잰다)")
         elif t is None:
             p(f"\n- **판정 보류**: m = {m * 1000:,.0f}ms라 T = 2.0 − m이 0~2초 밖이다(짝이 어긋났을 수 있다)")
         else:
