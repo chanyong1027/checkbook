@@ -296,6 +296,7 @@ def outside_share(runs, diffs):
             continue
         if n != len(ms):
             warns.append(f"{label}: 서버 배치 {n:.0f}건 ≠ 측정 PC 배치 {len(ms)}건(실사용이 섞였거나 시간 초과 배치) — 이 회차는 m에서 뺀다")
+            rows.append((label + " (제외)", len(ms), sum(ms) / len(ms) if ms else None, n, total / n * 1000))
             continue
         paired_positions.add(firsts[0]["position"])
         rows.append((label, len(ms), sum(ms) / len(ms) if ms else None, n, total / n * 1000))
