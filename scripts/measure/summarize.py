@@ -248,20 +248,27 @@ FIRST_DISPLAY_FOR_RULE2_SEC = 2.0  # 규칙 2 문턱 T = 첫 표시 2초 − 밖
 
 
 def server_batch(diff):
-    """서버가 잰 주변 배치 처리 시간의 (수, 합 초) — 칸끼리 더한다(프로세스마다 따로 센다)"""
+    """서버가 잰 주변 배치 처리 시간의 (수, 합 초, 줄어든 칸이 있나) — 칸끼리 더한다(프로세스마다 따로 센다).
+    칸 하나가 회차 중에 다시 떠 카운터가 0부터 시작하면 그 칸의 차이가 음수가 된다. 더하면 다른 칸의 증가에
+    가려지므로 더하기 전에 칸마다 본다"""
     count = total = 0.0
+    reset = False
     for values in diff["ports"].values():
+        port_count = port_total = 0.0
         for (name, labels), v in values.items():
             if dict(labels).get("mode") != "NEARBY":
                 continue
             if name == "library_batch_seconds_count":
-                count += v
+                port_count += v
             elif name == "library_batch_seconds_sum":
-                total += v
-    return count, total
+                port_total += v
+        reset = reset or port_count < 0 or port_total < 0
+        count += port_count
+        total += port_total
+    return count, total, reset
 
 
-def outside_share(runs, diffs):
+def outside_share(runs, diffs, plan=None):
     """캐시 빈 회차의 (측정 PC 배치 응답 평균) − (서버 배치 처리 평균).
 
     짝을 맞추려고 측정 PC 쪽은 응답(200)을 받았고 항목이 있는 배치만 센다(서버는 빈 배치를 기록하지 않고,
@@ -287,8 +294,8 @@ def outside_share(runs, diffs):
         if d is None or not d["ports"]:
             warns.append(f"{label}: 서버 지표 없음")
             continue
-        n, total = server_batch(d)
-        if n < 0 or total < 0:
+        n, total, reset = server_batch(d)
+        if reset or n < 0 or total < 0:
             warns.append(f"{label}: 서버 카운터가 줄었다(측정 중 칸을 다시 만들었나) — 이 회차는 짝을 못 맞춘다")
             continue
         if n == 0:
@@ -311,16 +318,28 @@ def outside_share(runs, diffs):
     missing = sorted(positions - paired_positions)
     if missing:
         warns.append(f"짝이 맞는 회차가 없는 위치: {missing} — m을 내지 않는다")
-    if missing or not client_n or not server_n:
+    # 기록이 통째로 없는 위치는 위 검사에 안 걸린다 — 계획의 캐시 빈 회차와 대조한다
+    short = []
+    if plan is not None:
+        for label, (pass_name, n_books) in expected_runs(plan).items():
+            got = sum(1 for r in runs.get(label, []) if r.get("pass") == pass_name and "library" in r)
+            if pass_name == "first" and got < n_books:
+                short.append(f"{label} {got}/{n_books}")
+        if short:
+            warns.append(f"계획보다 모자란 캐시 빈 회차: {short} — m을 내지 않는다")
+    if missing or short or not client_n or not server_n:
         return rows, None, warns, ref
     return rows, (client_sum / client_n - server_sum / server_n) / 1000, warns, ref
 
 
 def rule2_threshold(m):
-    """T = 2.0 − m을 소수 둘째 자리로 내림(관대하게 올리지 않게). 0 < T < 2.0이 아니면 None(m이 말이 안 됨)"""
-    # round로 부동소수 오차를 먼저 지운다(예: 2.0 − 0.85 = 1.15가 1.1499…로 내려 1.14가 되지 않게)
-    t = math.floor(round((FIRST_DISPLAY_FOR_RULE2_SEC - m) * 100, 6)) / 100
-    return t if 0 < t < FIRST_DISPLAY_FOR_RULE2_SEC else None
+    """T = 2.0 − m을 소수 둘째 자리로 내림(관대하게 올리지 않게). 0 < T < 2.0이 아니면 None(m이 말이 안 됨).
+
+    m은 ms 단위 평균이라 정수 ms로 맞춘 뒤 정수로 계산한다 — 부동소수 오차가 내림을 한 칸 바꾸는 일이 없다
+    """
+    m_ms = round(m * 1000)
+    t_cs = (int(FIRST_DISPLAY_FOR_RULE2_SEC * 1000) - m_ms) // 10
+    return t_cs / 100 if 0 < t_cs < int(FIRST_DISPLAY_FOR_RULE2_SEC * 100) else None
 
 
 def main(folder):
@@ -374,7 +393,7 @@ def main(folder):
           f"| {cs['notSuccess']:,.0f} | {' '.join(notes)} |")
     p("")
 
-    rows, m, warns, ref = outside_share(runs, diffs)
+    rows, m, warns, ref = outside_share(runs, diffs, load_plan())
     if rows or warns:
         p("## 규칙 2 다시 판정용: 지역 조회 밖 몫 (측정 규칙 문서 8절)\n")
         p("| 실행 | 측정 PC 배치 수 | 측정 PC 평균 ms | 서버 배치 수 | 서버 평균 ms |")
@@ -385,7 +404,7 @@ def main(folder):
             p(f"- ⚠ {w}")
         t = rule2_threshold(m) if m is not None else None
         if m is None:
-            p("\n- **판정 보류**: 짝이 맞는 회차가 없는 위치가 있어 m을 내지 않는다(위 경고의 원인을 본 뒤 그 회차를 다시 잰다)")
+            p("\n- **판정 보류**: 짝이 맞는 회차가 없는 위치가 있거나 계획보다 회차가 모자라 m을 내지 않는다(위 경고의 원인을 본 뒤 그 회차를 다시 잰다)")
         elif t is None:
             p(f"\n- **판정 보류**: m = {m * 1000:,.0f}ms라 T = 2.0 − m이 0~2초 밖이다(짝이 어긋났을 수 있다)")
         else:

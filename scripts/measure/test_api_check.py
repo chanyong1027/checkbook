@@ -127,6 +127,9 @@ class Rules(unittest.TestCase):
                                      capture_output=True, text=True)
                 self.assertNotEqual(res.returncode, 0, bad)
                 self.assertIn("0보다 크고 2초보다 작아야", res.stderr, bad)
+            res = subprocess.run([sys.executable, script, "--summarize", str(f), "--rule2-target", "abc"], capture_output=True, text=True)
+            self.assertIn("숫자여야 한다", res.stderr)
+            self.assertNotIn("Traceback", res.stderr)
             ok = subprocess.run([sys.executable, script, "--summarize", str(f), "--rule2-target", "1.8"], capture_output=True, text=True)
             self.assertEqual(ok.returncode, 0, ok.stderr)
 

@@ -450,7 +450,10 @@ def summarize(path, rule2_target=None):
 
 if __name__ == "__main__":
     if len(sys.argv) in (3, 5) and sys.argv[1] == "--summarize":
-        target = float(sys.argv[4]) if len(sys.argv) == 5 and sys.argv[3] == "--rule2-target" else None
+        try:
+            target = float(sys.argv[4]) if len(sys.argv) == 5 and sys.argv[3] == "--rule2-target" else None
+        except ValueError:
+            raise SystemExit(f"--rule2-target은 숫자여야 한다: {sys.argv[4]} (사용법: --summarize FILE [--rule2-target 초])")
         if len(sys.argv) == 5 and target is None:
             raise SystemExit("사용법: --summarize FILE [--rule2-target 초]")
         if target is not None and not (0 < target < 2.0):  # nan도 여기서 걸린다(비교가 모두 거짓)

@@ -220,7 +220,31 @@ class EndToEnd(unittest.TestCase):
 
 
 class OutsideShare(unittest.TestCase):
-    """규칙 2 다시 판정용 밖 몫: 측정 PC 배치 평균 − 서버 배치 평균"""
+    """규칙 2 다시 판정용 밖 몫: 측정 PC 배치 평균 − 서버 배치 평균. 계획 대조는 test_plan_short_holds에서만 본다"""
+
+    def setUp(self):
+        self._expected_runs = s.expected_runs
+        s.expected_runs = lambda plan: {}
+
+    def tearDown(self):
+        s.expected_runs = self._expected_runs
+
+    def test_plan_short_holds(self):
+        s.expected_runs = self._expected_runs  # 실제 계획(위치 4곳)과 대조
+        text = self.report([{"items": 5, "ms": 300, "status": 200}, {"items": 5, "ms": 500, "status": 200}])
+        self.assertIn("계획보다 모자란 캐시 빈 회차", text)
+        self.assertIn("ansan-cityhall-r1 0/18", text)
+        self.assertNotIn("새 문턱 T", text)
+
+    def test_reset_on_one_port_is_not_hidden_by_the_other(self):
+        # 8081은 0부터 다시 시작(차이 −8), 8082는 +10 — 합치면 +2로 보이지만 그 회차는 빼야 한다
+        pre = {"8081": {("library_batch_seconds_count", frozenset({("mode", "NEARBY")})): 8.0},
+               "8082": {("library_batch_seconds_count", frozenset({("mode", "NEARBY")})): 0.0}}
+        post = {"8081": {("library_batch_seconds_count", frozenset({("mode", "NEARBY")})): 0.0},
+                "8082": {("library_batch_seconds_count", frozenset({("mode", "NEARBY")})): 10.0}}
+        n, _, reset = s.server_batch(s.probe_diff(pre, post))
+        self.assertEqual(n, 2)
+        self.assertTrue(reset)
 
     PRE_B = PRE + '2026-11-25T05:00:00Z port=8081 library_batch_seconds_count{mode="NEARBY",stop="NONE"} 10\n' \
         + '2026-11-25T05:00:00Z port=8081 library_batch_seconds_sum{mode="NEARBY",stop="NONE"} 3.0\n'
@@ -249,7 +273,7 @@ class OutsideShare(unittest.TestCase):
         text = self.report([{"items": 5, "ms": 300, "status": 200}])
         self.assertIn("서버 배치 2건 ≠ 측정 PC 배치 1건", text)
         self.assertIn("짝이 맞는 회차가 없는 위치: ['seoul-cityhall']", text)
-        self.assertIn("**판정 보류**: 짝이 맞는 회차가 없는 위치가 있어", text)
+        self.assertIn("**판정 보류**: 짝이 맞는 회차가 없는 위치가 있거나", text)
         self.assertNotIn("새 문턱 T", text)
 
     def test_mismatched_round_is_left_out_when_another_round_pairs(self):
@@ -278,6 +302,9 @@ class OutsideShare(unittest.TestCase):
     def test_threshold_range_and_floor(self):
         self.assertEqual(s.rule2_threshold(0.105), 1.89)  # 1.895 → 내림 1.89
         self.assertEqual(s.rule2_threshold(0.85), 1.15)  # 부동소수 오차로 1.14가 되지 않는다
+        self.assertEqual(s.rule2_threshold(0.100000001), 1.90)  # m은 정수 ms로 맞춘다(측정 해상도)
+        self.assertEqual(s.rule2_threshold(0.1004), 1.90)
+        self.assertEqual(s.rule2_threshold(0.1006), 1.89)
         self.assertIsNone(s.rule2_threshold(-0.1))  # T ≥ 2.0은 말이 안 된다
         self.assertIsNone(s.rule2_threshold(2.5))
 
