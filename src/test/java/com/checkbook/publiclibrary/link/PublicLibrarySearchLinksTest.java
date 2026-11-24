@@ -316,4 +316,45 @@ class PublicLibrarySearchLinksTest {
                         .as(s.host() + " " + libCode).isEqualTo(integratedPath.get(s.host()))));
         assertThat(doc.sites().stream().filter(s -> integratedPath.containsKey(s.host())).count()).isEqualTo(7);
     }
+
+    /**
+     * 11-25: 공통 통합 경로가 없는 사이트(첫 화면 검색창부터 특정 도서관 사이트로 감)는 송파처럼 도서관마다 자기 홈페이지
+     * 경로로 간다. 작은도서관·영어도서관은 그 사이트의 공용 사이트(/libsmall/, /englib/, /small/)로, 홈페이지가 없는 파주
+     * 넷은 기존 주소(/gclib/)에 남는다. 표는 기관 · 첫 경로 · 지점 값(-는 지점 값 없는 검색)이고 사이트에서 확인한 값이다.
+     */
+    @Test
+    void 공통_통합_경로가_없는_사이트는_도서관마다_자기_사이트_경로와_지점_값으로_간다() {
+        var links = new PublicLibrarySearchLinks(JsonMapper.builder().build());
+        var doc = PublicLibrarySearchLinks.parse(JsonMapper.builder().build(),
+                PublicLibrarySearchLinksTest.class.getClassLoader().getResourceAsStream(PublicLibrarySearchLinks.RESOURCE));
+        String table = "141040 gclib MB,141041 mslib MC,141049 bwlib MD,141082 jalib MA,141156 ghlib MQ,141242 jslib ME,"
+                + "141243 gtlib MS,141251 jrlib MF,141326 hslib MH,141397 gclib3 MK,141489 mplib ML,141517 hblib MI,"
+                + "141544 grlib MM,141566 thlib MN,141602 pplib MP,141604 hulib MR,141614 wllib MO,141630 srlib MJ,"
+                + "141267 gclib SA,141268 gclib SD,141299 gclib -,741292 gclib SF,"
+                + "111086 sglib MA,111104 libsmall ME,111105 libsmall MF,111106 libsmall MG,111171 libsmall MH,111257 libsmall MB,"
+                + "111258 libsmall MI,111374 libsmall MC,711140 libsmall MJ,111346 englib MK,111469 englib ML,111462 purme HK,"
+                + "111467 mcl HQ,111514 naru MN,711596 metalib DO,"
+                + "128007 miracle MA,128035 bugaech MB,128040 galsan MC,128056 samsan MD,128057 bugae ME,128085 chungcheon MF,"
+                + "111120 cheongpa MB,111473 dream MA,711650 yongmaru OA,111364 small YN,111409 small YD,711023 small YG,"
+                + "711396 small SA,711397 small YB,711398 small YC,711400 small -,711401 small YI,711402 small YJ,"
+                + "711403 small YK,711405 small YM,711466 small YS,711497 small YO";
+        Map<String, String[]> expected = new java.util.HashMap<>();
+        for (String row : table.split(",")) {
+            String[] p = row.split(" ");
+            expected.put(p[0], p);
+        }
+
+        expected.forEach((libCode, p) -> {
+            String url = links.linkFor(libCode, "흰").url();
+            assertThat(java.net.URI.create(url).getPath()).as(libCode).startsWith("/" + p[1] + "/");
+            if ("-".equals(p[2])) {
+                assertThat(url).as(libCode).doesNotContain("searchLibraryArr=");
+            } else {
+                assertThat(url).as(libCode).endsWith("&searchLibraryArr=" + p[2]);
+            }
+        });
+        var hosts = java.util.Set.of("lib.paju.go.kr", "mplib.mapo.go.kr", "www.bppl.or.kr", "www.yslibrary.or.kr");
+        assertThat(doc.sites().stream().filter(s -> hosts.contains(s.host())).flatMap(s -> s.libCodes().stream()))
+                .containsExactlyInAnyOrderElementsOf(expected.keySet());
+    }
 }
