@@ -1583,60 +1583,259 @@
    "host": "lib.paju.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.paju.go.kr/gclib/menu/10174/program/30005/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}",
+   "url": "https://lib.paju.go.kr/gclib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MB",
    "libCodes": [
-    "141040",
-    "141041",
-    "141049",
-    "141082",
-    "141156",
-    "141242",
-    "141243",
-    "141251",
+    "141040"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/gclib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "lib.paju.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://lib.paju.go.kr/mslib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MC",
+   "libCodes": [
+    "141041"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/mslib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "lib.paju.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://lib.paju.go.kr/bwlib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MD",
+   "libCodes": [
+    "141049"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/bwlib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "lib.paju.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://lib.paju.go.kr/jalib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MA",
+   "libCodes": [
+    "141082"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/jalib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "lib.paju.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://lib.paju.go.kr/ghlib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MQ",
+   "libCodes": [
+    "141156"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/ghlib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "lib.paju.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://lib.paju.go.kr/jslib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}&searchLibraryArr=ME",
+   "libCodes": [
+    "141242"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/jslib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "lib.paju.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://lib.paju.go.kr/gtlib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MS",
+   "libCodes": [
+    "141243"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/gtlib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "lib.paju.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://lib.paju.go.kr/jrlib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MF",
+   "libCodes": [
+    "141251"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/jrlib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "lib.paju.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://lib.paju.go.kr/hslib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MH",
+   "libCodes": [
+    "141326"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/hslib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "lib.paju.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://lib.paju.go.kr/gclib3/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MK",
+   "libCodes": [
+    "141397"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/gclib3): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "lib.paju.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://lib.paju.go.kr/mplib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}&searchLibraryArr=ML",
+   "libCodes": [
+    "141489"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/mplib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "lib.paju.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://lib.paju.go.kr/hblib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MI",
+   "libCodes": [
+    "141517"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/hblib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "lib.paju.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://lib.paju.go.kr/grlib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MM",
+   "libCodes": [
+    "141544"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/grlib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "lib.paju.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://lib.paju.go.kr/thlib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MN",
+   "libCodes": [
+    "141566"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/thlib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "lib.paju.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://lib.paju.go.kr/pplib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MP",
+   "libCodes": [
+    "141602"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/pplib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "lib.paju.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://lib.paju.go.kr/hulib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MR",
+   "libCodes": [
+    "141604"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/hulib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "lib.paju.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://lib.paju.go.kr/wllib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MO",
+   "libCodes": [
+    "141614"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/wllib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "lib.paju.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://lib.paju.go.kr/srlib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MJ",
+   "libCodes": [
+    "141630"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/srlib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "lib.paju.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://lib.paju.go.kr/gclib/menu/10174/program/30005/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}",
+   "checkedAt": "2026-11-03",
+   "libCodes": [
     "141267",
     "141268",
     "141299",
-    "141326",
-    "141397",
-    "141489",
-    "141517",
-    "141544",
-    "141566",
-    "141602",
-    "141604",
-    "141614",
-    "141630",
     "741292"
    ],
-   "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
     "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
-    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 4곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인, 나머지 1곳은 이유와 함께 통합"
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 4곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인, 나머지 1곳은 이유와 함께 통합",
+    "11-25 남은 기관: 자기 홈페이지가 없어 지금 주소 유지(페이지 이름은 대표 도서관으로 뜸)"
    ],
    "branch": {
     "param": "searchLibraryArr",
     "codes": {
-     "141040": "MB",
-     "141041": "MC",
-     "141049": "MD",
-     "141082": "MA",
-     "141156": "MQ",
-     "141242": "ME",
-     "141243": "MS",
-     "141251": "MF",
      "141268": "SD",
-     "141326": "MH",
-     "141489": "ML",
-     "141517": "MI",
-     "141544": "MM",
-     "141602": "MP",
-     "141604": "MR",
-     "141614": "MO",
-     "141630": "MJ",
      "141267": "SA",
-     "141397": "MK",
-     "141566": "MN",
      "741292": "SF"
     },
     "unbranched": {
@@ -1649,7 +1848,7 @@
    "host": "lib.pocheon.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.pocheon.go.kr/ildong/menu/10367/program/30004/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
+   "url": "https://lib.pocheon.go.kr/intro/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
    "libCodes": [
     "141094",
     "141102",
@@ -1662,7 +1861,8 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-25 페이지 이름: 대표 도서관 경로라 어느 도서관이든 '일동도서관' 페이지로 뜸 → 첫 화면 검색창의 공통 경로(/intro/plusSearchResultList.do)로 바꿔 '포천시도서관'으로 뜸, 일동(MC) 결과 행 소장처 포천시일동도서관"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -1675,7 +1875,7 @@
      "141553": "MF",
      "141634": "MG"
     },
-    "url": "https://lib.pocheon.go.kr/ildong/menu/10367/program/30004/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
+    "url": "https://lib.pocheon.go.kr/intro/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
    }
   },
   {
@@ -1889,7 +2089,7 @@
    "host": "lib.yongin.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://lib.yongin.go.kr/guseong/menu/10563/program/30013/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
+   "url": "https://lib.yongin.go.kr/intro/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
    "libCodes": [
     "141079",
     "141110",
@@ -1908,7 +2108,8 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 미확인 — 지점 링크만",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-25 페이지 이름: 대표 도서관 경로라 어느 도서관이든 '구성도서관' 페이지로 뜸 → 첫 화면 검색창의 공통 경로(/intro/plusSearchResultList.do)로 바꿔 '도서관사업소'로 뜸, 수지(MB) 결과 행 49개 모두 [수지]"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -1927,7 +2128,7 @@
      "141643": "MZ",
      "141663": "NN"
     },
-    "url": "https://lib.yongin.go.kr/guseong/menu/10563/program/30013/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
+    "url": "https://lib.yongin.go.kr/intro/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
    }
   },
   {
@@ -2206,7 +2407,7 @@
    "host": "library.gangnam.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://library.gangnam.go.kr/dchlib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=TITLE&searchKeyword={title}",
+   "url": "https://library.gangnam.go.kr/intro/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=TITLE&searchKeyword={title}",
    "libCodes": [
     "111039",
     "111056",
@@ -2236,7 +2437,9 @@
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
     "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
-    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 5곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인, 나머지 5곳은 이유와 함께 통합"
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 5곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인, 나머지 5곳은 이유와 함께 통합",
+    "11-25 페이지 이름: 대표 도서관 경로라 어느 도서관이든 '대치도서관(대치2동)' 페이지로 뜸 → 첫 화면 검색창의 공통 경로(/intro/plusSearchResultList.do)로 바꿔 '강남구통합도서관'으로 뜸, 대치(MC) 결과 행 소장처 대치도서관",
+    "11-25 비슷한 이름 확인: 기관 711266 → 사이트 지점 '대치1작은도서관'(SB), 그 지점 결과의 책 3/3권을 정보나루가 이 기관 소장으로 답함"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -2258,16 +2461,16 @@
      "111474": "ME",
      "711268": "SD",
      "711269": "SE",
-     "711492": "SF"
+     "711492": "SF",
+     "711266": "SB"
     },
     "unbranched": {
      "111071": "사이트 목록에 같은 이름이 2개(논현문화마루도서관( 9 ), 논현문화마루도서관 (별관)( 9 ))라 하나로 못 정함",
      "11134707": "사이트 지점 목록에 없음(11-24 확인)",
      "11134712": "사이트 지점 목록에 없음(11-24 확인)",
-     "111533": "사이트 목록에 같은 이름이 2개(논현문화마루도서관( 9 ), 논현문화마루도서관 (별관)( 9 ))라 하나로 못 정함",
-     "711266": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 대치1작은도서관 — 같은 곳인지 확인 못 함)"
+     "111533": "사이트 목록에 같은 이름이 2개(논현문화마루도서관( 9 ), 논현문화마루도서관 (별관)( 9 ))라 하나로 못 정함"
     },
-    "url": "https://library.gangnam.go.kr/dchlib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=TITLE&searchKeyword={title}"
+    "url": "https://library.gangnam.go.kr/intro/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=TITLE&searchKeyword={title}"
    }
   },
   {
@@ -2369,7 +2572,8 @@
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
     "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
-    "11-24 지점 분류: 대응표 밖 1곳을 이유와 함께 통합으로 둠"
+    "11-24 지점 분류: 대응표 밖 1곳을 이유와 함께 통합으로 둠",
+    "11-25 비슷한 이름 확인: 기관 141013 → 사이트 지점 '중앙도서관'(MA), 그 지점 결과의 책 3/3권을 정보나루가 이 기관 소장으로 답함"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -2378,10 +2582,8 @@
      "141228": "MD",
      "141250": "ME",
      "741044": "MF",
-     "741168": "MG"
-    },
-    "unbranched": {
-     "141013": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 중앙도서관 — 같은 곳인지 확인 못 함)"
+     "741168": "MG",
+     "141013": "MA"
     },
     "url": "https://library.yeoncheon.go.kr/searchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=TITLE&searchKeyword={title}"
    }
@@ -2422,53 +2624,122 @@
    "host": "mplib.mapo.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://mplib.mapo.go.kr/sglib/PGM3007/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
+   "url": "https://mplib.mapo.go.kr/sglib/PGM3007/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50&searchLibraryArr=MA",
    "libCodes": [
-    "111086",
+    "111086"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/sglib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "mplib.mapo.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://mplib.mapo.go.kr/libsmall/PGM3007/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
+   "libCodes": [
     "111104",
     "111105",
     "111106",
     "111171",
     "111257",
     "111258",
-    "111346",
     "111374",
-    "111462",
-    "111467",
-    "111469",
-    "111514",
-    "711140",
-    "711596"
+    "711140"
    ],
-   "checkedAt": "2026-11-03",
+   "checkedAt": "2026-11-25",
    "flags": [
-    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
-    "11-24 지점 분류: 대응표 밖 1곳을 이유와 함께 통합으로 둠"
+    "11-25 공용 경로(/libsmall): 같은 경로를 쓰는 기관끼리 묶음, 지점마다 열어 페이지 이름 '작은도서관'과 결과 행 소장처가 그 지점인지 확인"
    ],
    "branch": {
     "param": "searchLibraryArr",
     "codes": {
-     "111086": "MA",
      "111104": "ME",
      "111105": "MF",
      "111106": "MG",
      "111171": "MH",
      "111257": "MB",
      "111258": "MI",
-     "111346": "MK",
      "111374": "MC",
-     "111462": "HK",
-     "111467": "HQ",
-     "111469": "ML",
-     "111514": "MN",
      "711140": "MJ"
     },
-    "unbranched": {
-     "711596": "사이트 지점 목록에 없음(11-24 확인)"
-    },
-    "url": "https://mplib.mapo.go.kr/sglib/PGM3007/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
+    "url": "https://mplib.mapo.go.kr/libsmall/PGM3007/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
    }
+  },
+  {
+   "host": "mplib.mapo.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://mplib.mapo.go.kr/englib/PGM3007/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
+   "libCodes": [
+    "111346",
+    "111469"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 공용 경로(/englib): 같은 경로를 쓰는 기관끼리 묶음, 페이지 이름 '어린이영어도서관' 확인(시험 책 결과 0건이라 지점 필터는 결과로 확인 못 함), 홈페이지 기본값 MK·ML"
+   ],
+   "branch": {
+    "param": "searchLibraryArr",
+    "codes": {
+     "111346": "MK",
+     "111469": "ML"
+    },
+    "url": "https://mplib.mapo.go.kr/englib/PGM3007/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
+   }
+  },
+  {
+   "host": "mplib.mapo.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://mplib.mapo.go.kr/purme/PGM3007/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50&searchLibraryArr=HK",
+   "libCodes": [
+    "111462"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/purme): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "mplib.mapo.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://mplib.mapo.go.kr/mcl/PGM3007/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50&searchLibraryArr=HQ",
+   "libCodes": [
+    "111467"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/mcl): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "mplib.mapo.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://mplib.mapo.go.kr/naru/PGM3007/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50&searchLibraryArr=MN",
+   "libCodes": [
+    "111514"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/naru): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "mplib.mapo.go.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://mplib.mapo.go.kr/metalib/PGM3007/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50&searchLibraryArr=DO",
+   "libCodes": [
+    "711596"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/metalib): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
   },
   {
    "host": "mpllc.sen.go.kr",
@@ -3118,33 +3389,79 @@
    "host": "www.bppl.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.bppl.or.kr/miracle/menu/10285/program/30031/searchResultList.do?searchType=DETAIL&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchCategory=ALL&searchWordTitle={title}",
+   "url": "https://www.bppl.or.kr/miracle/searchResultList.do?searchType=DETAIL&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchCategory=ALL&searchWordTitle={title}&searchLibraryArr=MA",
    "libCodes": [
-    "128007",
-    "128035",
-    "128040",
-    "128056",
-    "128057",
+    "128007"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/miracle): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "www.bppl.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.bppl.or.kr/bugaech/searchResultList.do?searchType=DETAIL&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchCategory=ALL&searchWordTitle={title}&searchLibraryArr=MB",
+   "libCodes": [
+    "128035"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/bugaech): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "www.bppl.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.bppl.or.kr/galsan/searchResultList.do?searchType=DETAIL&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchCategory=ALL&searchWordTitle={title}&searchLibraryArr=MC",
+   "libCodes": [
+    "128040"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/galsan): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "www.bppl.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.bppl.or.kr/samsan/searchResultList.do?searchType=DETAIL&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchCategory=ALL&searchWordTitle={title}&searchLibraryArr=MD",
+   "libCodes": [
+    "128056"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/samsan): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "www.bppl.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.bppl.or.kr/bugae/searchResultList.do?searchType=DETAIL&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchCategory=ALL&searchWordTitle={title}&searchLibraryArr=ME",
+   "libCodes": [
+    "128057"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/bugae): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "www.bppl.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.bppl.or.kr/chungcheon/searchResultList.do?searchType=DETAIL&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchCategory=ALL&searchWordTitle={title}&searchLibraryArr=MF",
+   "libCodes": [
     "128085"
    ],
-   "checkedAt": "2026-11-03",
+   "checkedAt": "2026-11-25",
    "flags": [
-    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
-    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 2곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인"
-   ],
-   "branch": {
-    "param": "searchLibraryArr",
-    "codes": {
-     "128007": "MA",
-     "128040": "MC",
-     "128056": "MD",
-     "128085": "MF",
-     "128035": "MB",
-     "128057": "ME"
-    },
-    "url": "https://www.bppl.or.kr/miracle/menu/10285/program/30031/searchResultList.do?searchType=DETAIL&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchCategory=ALL&searchWordTitle={title}"
-   }
+    "11-25 도서관별 경로(/chungcheon): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
   },
   {
    "host": "www.bsseogu.go.kr",
@@ -3624,7 +3941,7 @@
    "host": "www.goyanglib.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.goyanglib.or.kr/MB/menu/10315/program/30001/searchResultList.do?searchType=SIMPLE&searchKeyword={title}",
+   "url": "https://www.goyanglib.or.kr/center/program/searchResultList.do?searchType=SIMPLE&searchKeyword={title}",
    "libCodes": [
     "141018",
     "141055",
@@ -3657,7 +3974,8 @@
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
     "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
-    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 4곳 코드 추가, 목록의 label 묶임으로 확인(결과 행 소장처 표시를 못 읽어 결과 확인은 못 함), 나머지 8곳은 이유와 함께 통합"
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 4곳 코드 추가, 목록의 label 묶임으로 확인(결과 행 소장처 표시를 못 읽어 결과 확인은 못 함), 나머지 8곳은 이유와 함께 통합",
+    "11-25 페이지 이름: 대표 도서관 경로라 어느 도서관이든 '행신도서관' 페이지로 뜸 → 첫 화면 검색창의 공통 경로(/center/program/searchResultList.do)로 바꿔 '고양시도서관센터'로 뜸, 마두(MA) 결과 행 모두 [마두]"
    ],
    "branch": {
     "param": "searchManageCodeArr",
@@ -3691,7 +4009,7 @@
      "741461": "사이트 지점 목록에 없음(11-24 확인)",
      "741511": "사이트 지점 목록에 없음(11-24 확인)"
     },
-    "url": "https://www.goyanglib.or.kr/MB/menu/10315/program/30001/searchResultList.do?searchType=SIMPLE&searchKeyword={title}"
+    "url": "https://www.goyanglib.or.kr/center/program/searchResultList.do?searchType=SIMPLE&searchKeyword={title}"
    }
   },
   {
@@ -3740,39 +4058,105 @@
    "host": "www.gwangjinlib.seoul.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.gwangjinlib.seoul.kr/gjinfo/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}",
+   "url": "https://www.gwangjinlib.seoul.kr/gjinfo/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MA",
    "libCodes": [
-    "111036",
-    "111115",
-    "111116",
-    "111305",
-    "111495",
-    "111521",
-    "111523",
+    "111036"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/gjinfo): 통합 첫 화면 검색창부터 광진정보도서관(/gjinfo/)으로 가 공통 경로가 없어, 그 도서관 홈페이지의 검색 결과 경로로 — 페이지 이름 '광진정보도서관'과 결과 행 소장처 확인"
+   ]
+  },
+  {
+   "host": "www.gwangjinlib.seoul.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.gwangjinlib.seoul.kr/jy4dong/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MC",
+   "libCodes": [
+    "111115"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/jy4dong): 통합 첫 화면 검색창부터 광진정보도서관(/gjinfo/)으로 가 공통 경로가 없어, 그 도서관 홈페이지의 검색 결과 경로로 — 페이지 이름 '자양제4동도서관'과 결과 행 소장처 확인"
+   ]
+  },
+  {
+   "host": "www.gwangjinlib.seoul.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.gwangjinlib.seoul.kr/jgsports/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MD",
+   "libCodes": [
+    "111116"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/jgsports): 통합 첫 화면 검색창부터 광진정보도서관(/gjinfo/)으로 가 공통 경로가 없어, 그 도서관 홈페이지의 검색 결과 경로로 — 페이지 이름 '중곡도서관'과 결과 행 소장처 확인"
+   ]
+  },
+  {
+   "host": "www.gwangjinlib.seoul.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.gwangjinlib.seoul.kr/gu3dong/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MB",
+   "libCodes": [
+    "111305"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/gu3dong): 통합 첫 화면 검색창부터 광진정보도서관(/gjinfo/)으로 가 공통 경로가 없어, 그 도서관 홈페이지의 검색 결과 경로로 — 페이지 이름 '구의제3동도서관'과 결과 행 소장처 확인 (11-24엔 통합 목록 이름과 안 맞아 통합으로 뒀으나 자기 홈페이지 기본 지점 값이 MB)"
+   ]
+  },
+  {
+   "host": "www.gwangjinlib.seoul.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.gwangjinlib.seoul.kr/jyriver/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MF",
+   "libCodes": [
+    "111495"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/jyriver): 통합 첫 화면 검색창부터 광진정보도서관(/gjinfo/)으로 가 공통 경로가 없어, 그 도서관 홈페이지의 검색 결과 경로로 — 페이지 이름 '자양한강도서관'과 결과 행 소장처 확인"
+   ]
+  },
+  {
+   "host": "www.gwangjinlib.seoul.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.gwangjinlib.seoul.kr/gunja/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MG",
+   "libCodes": [
+    "111521"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/gunja): 통합 첫 화면 검색창부터 광진정보도서관(/gjinfo/)으로 가 공통 경로가 없어, 그 도서관 홈페이지의 검색 결과 경로로 — 페이지 이름 '군자동도서관'과 결과 행 소장처 확인"
+   ]
+  },
+  {
+   "host": "www.gwangjinlib.seoul.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.gwangjinlib.seoul.kr/achasan/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MH",
+   "libCodes": [
+    "111523"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/achasan): 통합 첫 화면 검색창부터 광진정보도서관(/gjinfo/)으로 가 공통 경로가 없어, 그 도서관 홈페이지의 검색 결과 경로로 — 페이지 이름 '아차산숲속도서관'과 결과 행 소장처 확인"
+   ]
+  },
+  {
+   "host": "www.gwangjinlib.seoul.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.gwangjinlib.seoul.kr/childeng/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MI",
+   "libCodes": [
     "111537"
    ],
-   "checkedAt": "2026-11-03",
+   "checkedAt": "2026-11-25",
    "flags": [
-    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
-    "11-24 지점 분류: 대응표 밖 2곳을 이유와 함께 통합으로 둠"
-   ],
-   "branch": {
-    "param": "searchLibraryArr",
-    "codes": {
-     "111036": "MA",
-     "111115": "MC",
-     "111495": "MF",
-     "111521": "MG",
-     "111523": "MH",
-     "111537": "MI"
-    },
-    "unbranched": {
-     "111116": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 중곡도서관 — 같은 곳인지 확인 못 함)",
-     "111305": "사이트 지점 목록에 없음(11-24 확인)"
-    },
-    "url": "https://www.gwangjinlib.seoul.kr/gjinfo/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}"
-   }
+    "11-25 도서관별 경로(/childeng): 통합 첫 화면 검색창부터 광진정보도서관(/gjinfo/)으로 가 공통 경로가 없어, 그 도서관 홈페이지의 검색 결과 경로로 — 페이지 이름 '광진어린이영어도서관'과 결과 행 소장처 확인"
+   ]
   },
   {
    "host": "www.hmlib.or.kr",
@@ -3796,7 +4180,7 @@
    "host": "www.hscitylib.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.hscitylib.or.kr/nylib/menu/10160/program/30001/searchResultList.do?searchType=SIMPLE&searchKeyword={title}",
+   "url": "https://www.hscitylib.or.kr/intro/program/searchResultList.do?searchType=SIMPLE&searchKeyword={title}",
    "libCodes": [
     "141042",
     "141048",
@@ -3834,7 +4218,13 @@
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
     "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
-    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 1곳 코드 추가, 목록의 label 묶임으로 확인(결과 행 소장처 표시를 못 읽어 결과 확인은 못 함), 나머지 5곳은 이유와 함께 통합"
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 1곳 코드 추가, 목록의 label 묶임으로 확인(결과 행 소장처 표시를 못 읽어 결과 확인은 못 함), 나머지 5곳은 이유와 함께 통합",
+    "11-25 페이지 이름: 대표 도서관 경로라 어느 도서관이든 '남양도서관' 페이지로 뜸 → 첫 화면 검색창의 공통 경로(/intro/program/searchResultList.do)로 바꿔 '화성시립도서관'으로 뜸, 남양(MA) 결과 행 20개 모두 [남양]",
+    "11-25 비슷한 이름 확인: 기관 141170 → 사이트 지점 '두빛나래'(MF), 그 지점 결과의 책 3/3권을 정보나루가 이 기관 소장으로 답함",
+    "11-25 비슷한 이름 확인: 기관 141241 → 사이트 지점 '둥지나래'(MH), 그 지점 결과의 책 3/3권을 정보나루가 이 기관 소장으로 답함",
+    "11-25 비슷한 이름 확인: 기관 141661 → 사이트 지점 '달빛나래'(TB), 그 지점 결과의 책 3/3권을 정보나루가 이 기관 소장으로 답함",
+    "11-25 비슷한 이름 확인: 기관 741680 → 사이트 지점 '봉담커피앤북'(MV), 그 지점 결과의 책 3/3권을 정보나루가 이 기관 소장으로 답함",
+    "11-25 비슷한 이름 확인: 기관 141578 → 사이트 지점 '중앙이음터'(MP), 그 지점 결과의 책 3/3권을 정보나루가 이 기관 소장으로 답함"
    ],
    "branch": {
     "param": "searchManageCodeArr",
@@ -3864,16 +4254,14 @@
      "741827": "TA",
      "741828": "MZ",
      "741937": "TC",
-     "141679": "NB"
+     "141679": "NB",
+     "141170": "MF",
+     "141241": "MH",
+     "141661": "TB",
+     "741680": "MV",
+     "141578": "MP"
     },
-    "unbranched": {
-     "141170": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 두빛나래 — 같은 곳인지 확인 못 함)",
-     "141241": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 둥지나래 — 같은 곳인지 확인 못 함)",
-     "141578": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 화성동탄중앙, 중앙이음터 — 같은 곳인지 확인 못 함)",
-     "141661": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 달빛나래 — 같은 곳인지 확인 못 함)",
-     "741680": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 봉담, 봉담커피앤북 — 같은 곳인지 확인 못 함)"
-    },
-    "url": "https://www.hscitylib.or.kr/nylib/menu/10160/program/30001/searchResultList.do?searchType=SIMPLE&searchKeyword={title}"
+    "url": "https://www.hscitylib.or.kr/intro/program/searchResultList.do?searchType=SIMPLE&searchKeyword={title}"
    }
   },
   {
@@ -3997,7 +4385,7 @@
    "host": "www.l4d.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.l4d.or.kr/info/menu/10142/program/30010/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
+   "url": "https://www.l4d.or.kr/intro/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
    "libCodes": [
     "111053",
     "111065",
@@ -4028,7 +4416,9 @@
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
     "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
-    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 14곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인, 나머지 2곳은 이유와 함께 통합"
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 14곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인, 나머지 2곳은 이유와 함께 통합",
+    "11-25 비슷한 이름 확인: 기관 111053 → 사이트 지점 '이문체육문화센터'(MD), 그 지점 결과의 책 2/3권을 정보나루가 이 기관 소장으로 답함",
+    "11-25 페이지 이름: 대표 도서관 경로(/info/)라 어느 도서관이든 '동대문구정보화도서관' 페이지로 뜸 → 첫 화면 검색창의 공통 경로(/intro/plusSearchResultList.do)로 바꿔 '동대문구립도서관'으로 뜸, 장안벚꽃길(MI) 결과 행 소장처와 지점 값 없는 통합 결과 확인"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -4054,13 +4444,13 @@
      "711311": "SI",
      "711410": "SA",
      "711433": "SO",
-     "711485": "SQ"
+     "711485": "SQ",
+     "111053": "MD"
     },
     "unbranched": {
-     "111053": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 이문체육문화센터 — 같은 곳인지 확인 못 함)",
      "711086": "사이트 지점 목록에 없음(11-24 확인)"
     },
-    "url": "https://www.l4d.or.kr/info/menu/10142/program/30010/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
+    "url": "https://www.l4d.or.kr/intro/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
    }
   },
   {
@@ -4238,7 +4628,7 @@
    "host": "www.ptlib.go.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.ptlib.go.kr/pslib/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
+   "url": "https://www.ptlib.go.kr/intro/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
    "libCodes": [
     "141016",
     "141031",
@@ -4258,7 +4648,8 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-25 페이지 이름: 대표 도서관 경로라 어느 도서관이든 '팽성도서관' 페이지로 뜸 → 첫 화면 검색창의 공통 경로(/intro/plusSearchResultList.do)로 바꿔 '평택시도서관'로 뜸, 팽성(MB) 결과 행 소장처 평택시립팽성도서관"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -4278,7 +4669,7 @@
      "141589": "MH",
      "141598": "MJ"
     },
-    "url": "https://www.ptlib.go.kr/pslib/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
+    "url": "https://www.ptlib.go.kr/intro/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
    }
   },
   {
@@ -4737,7 +5128,7 @@
    "host": "www.ydplib.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.ydplib.or.kr/drlib/menu/10077/program/30002/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchRoom=ALL&searchKey1=TITLE&searchOperator1=AND&searchKey2=AUTHOR&searchOperator2=AND&searchKey3=PUBLISHER&searchOperator3=AND&searchKey4=KEYWORD&searchOperator4=AND&searchKey5=ISBN&searchOperator5=AND&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchKeyword1={title}",
+   "url": "https://www.ydplib.or.kr/intro/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchRoom=ALL&searchKey1=TITLE&searchOperator1=AND&searchKey2=AUTHOR&searchOperator2=AND&searchKey3=PUBLISHER&searchOperator3=AND&searchKey4=KEYWORD&searchOperator4=AND&searchKey5=ISBN&searchOperator5=AND&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchKeyword1={title}",
    "libCodes": [
     "111083",
     "111111",
@@ -4751,7 +5142,8 @@
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
     "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
-    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 2곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인"
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 2곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인",
+    "11-25 페이지 이름: 대표 도서관 경로라 어느 도서관이든 '대림도서관' 페이지로 뜸 → 첫 화면 검색창의 공통 경로(/intro/plusSearchResultList.do)로 바꿔 '영등포구립도서관'으로 뜸, 문래(CB) 결과 행 소장처 문래도서관"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -4764,7 +5156,7 @@
      "111083": "CA",
      "111550": "CE"
     },
-    "url": "https://www.ydplib.or.kr/drlib/menu/10077/program/30002/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchRoom=ALL&searchKey1=TITLE&searchOperator1=AND&searchKey2=AUTHOR&searchOperator2=AND&searchKey3=PUBLISHER&searchOperator3=AND&searchKey4=KEYWORD&searchOperator4=AND&searchKey5=ISBN&searchOperator5=AND&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchKeyword1={title}"
+    "url": "https://www.ydplib.or.kr/intro/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchRoom=ALL&searchKey1=TITLE&searchOperator1=AND&searchKey2=AUTHOR&searchOperator2=AND&searchKey3=PUBLISHER&searchOperator3=AND&searchKey4=KEYWORD&searchOperator4=AND&searchKey5=ISBN&searchOperator5=AND&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchKeyword1={title}"
    }
   },
   {
@@ -4807,12 +5199,23 @@
    "host": "www.yslibrary.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.yslibrary.or.kr/cheongpa/searchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
+   "url": "https://www.yslibrary.or.kr/cheongpa/searchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50&searchLibraryArr=MB",
    "libCodes": [
-    "111120",
+    "111120"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/cheongpa): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "www.yslibrary.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.yslibrary.or.kr/small/menu/10178/program/30075/searchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
+   "libCodes": [
     "111364",
     "111409",
-    "111473",
     "711023",
     "711396",
     "711397",
@@ -4823,22 +5226,20 @@
     "711403",
     "711405",
     "711466",
-    "711497",
-    "711650"
+    "711497"
    ],
-   "checkedAt": "2026-11-03",
+   "checkedAt": "2026-11-25",
    "flags": [
-    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
-    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 2곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인, 나머지 1곳은 이유와 함께 통합"
+    "11-25 공용 경로(/small): 같은 경로를 쓰는 기관끼리 묶음, 한강로동(YI)으로 열어 페이지 이름 '용산구 작은도서관'과 결과 행 소장처 확인, 나머지 지점 값은 11-04·11-24 확인 값 그대로",
+    "11-25 비슷한 이름 확인: 기관 711400 → 사이트 지점 '원효로제2동 작은도서관 두드림'(YF), 그 지점 결과의 책 3/3권을 정보나루가 이 기관 소장으로 답함"
    ],
    "branch": {
     "param": "searchLibraryArr",
     "codes": {
      "111364": "YN",
      "111409": "YD",
-     "111473": "MA",
      "711023": "YG",
+     "711396": "SA",
      "711397": "YB",
      "711398": "YC",
      "711401": "YI",
@@ -4847,15 +5248,36 @@
      "711405": "YM",
      "711466": "YS",
      "711497": "YO",
-     "711650": "OA",
-     "111120": "MB",
-     "711396": "SA"
+     "711400": "YF"
     },
-    "unbranched": {
-     "711400": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 원효로제2동 작은도서관 두드림 — 같은 곳인지 확인 못 함)"
-    },
-    "url": "https://www.yslibrary.or.kr/cheongpa/searchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
+    "url": "https://www.yslibrary.or.kr/small/menu/10178/program/30075/searchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
    }
+  },
+  {
+   "host": "www.yslibrary.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.yslibrary.or.kr/dream/searchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50&searchLibraryArr=MA",
+   "libCodes": [
+    "111473"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/dream): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
+  },
+  {
+   "host": "www.yslibrary.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.yslibrary.or.kr/yongmaru/searchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50&searchLibraryArr=OA",
+   "libCodes": [
+    "711650"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/yongmaru): 대표 도서관 경로라 다른 도서관 이름 페이지로 뜨던 것을 그 도서관 홈페이지의 검색 결과 경로로, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인"
+   ]
   },
   {
    "host": "www.yspubliclib.go.kr",

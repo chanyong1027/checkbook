@@ -292,4 +292,93 @@ class PublicLibrarySearchLinksTest {
                             + "&searchKeyword=%EC%8B%AF%EB%8B%A4%EB%A5%B4%ED%83%80&searchLibraryArr=" + parts[1]);
         });
     }
+
+    /**
+     * 11-25: 송파와 같은 종류 — 통합 주소가 대표 도서관 홈페이지 경로(강남 /dchlib/ 등)라 어느 도서관을 눌러도 그 도서관 이름
+     * 페이지로 떴다. 첫 화면 검색창이 쓰는 공통 통합 경로가 있는 사이트는 모든 기관이 그 경로로 간다.
+     */
+    @Test
+    void 공통_통합_경로가_있는_사이트는_모든_기관이_대표_도서관_경로가_아닌_통합_경로로_간다() {
+        var links = new PublicLibrarySearchLinks(JsonMapper.builder().build());
+        var doc = PublicLibrarySearchLinks.parse(JsonMapper.builder().build(),
+                PublicLibrarySearchLinksTest.class.getClassLoader().getResourceAsStream(PublicLibrarySearchLinks.RESOURCE));
+        Map<String, String> integratedPath = Map.of(
+                "lib.pocheon.go.kr", "/intro/plusSearchResultList.do",
+                "lib.yongin.go.kr", "/intro/plusSearchResultList.do",
+                "library.gangnam.go.kr", "/intro/plusSearchResultList.do",
+                "www.goyanglib.or.kr", "/center/program/searchResultList.do",
+                "www.hscitylib.or.kr", "/intro/program/searchResultList.do",
+                "www.ptlib.go.kr", "/intro/plusSearchResultList.do",
+                "www.ydplib.or.kr", "/intro/plusSearchResultList.do",
+                "www.l4d.or.kr", "/intro/plusSearchResultList.do");
+
+        doc.sites().stream().filter(s -> integratedPath.containsKey(s.host())).forEach(s -> s.libCodes().forEach(libCode ->
+                assertThat(java.net.URI.create(links.linkFor(libCode, "흰").url()).getPath())
+                        .as(s.host() + " " + libCode).isEqualTo(integratedPath.get(s.host()))));
+        assertThat(doc.sites().stream().filter(s -> integratedPath.containsKey(s.host())).count()).isEqualTo(8);
+    }
+
+    /**
+     * 11-25: 공통 통합 경로가 없는 사이트(첫 화면 검색창부터 특정 도서관 사이트로 감)는 송파처럼 도서관마다 자기 홈페이지
+     * 경로로 간다(파주·마포·부평·용산, 브라우저 확인에서 찾은 광진). 작은도서관·영어도서관은 그 사이트의 공용 사이트
+     * (/libsmall/, /englib/, /small/)로, 홈페이지가 없는 파주
+     * 넷은 기존 주소(/gclib/)에 남는다. 표는 기관 · 첫 경로 · 지점 값(-는 지점 값 없는 검색)이고 사이트에서 확인한 값이다.
+     */
+    @Test
+    void 공통_통합_경로가_없는_사이트는_도서관마다_자기_사이트_경로와_지점_값으로_간다() {
+        var links = new PublicLibrarySearchLinks(JsonMapper.builder().build());
+        var doc = PublicLibrarySearchLinks.parse(JsonMapper.builder().build(),
+                PublicLibrarySearchLinksTest.class.getClassLoader().getResourceAsStream(PublicLibrarySearchLinks.RESOURCE));
+        String table = "141040 gclib MB,141041 mslib MC,141049 bwlib MD,141082 jalib MA,141156 ghlib MQ,141242 jslib ME,"
+                + "141243 gtlib MS,141251 jrlib MF,141326 hslib MH,141397 gclib3 MK,141489 mplib ML,141517 hblib MI,"
+                + "141544 grlib MM,141566 thlib MN,141602 pplib MP,141604 hulib MR,141614 wllib MO,141630 srlib MJ,"
+                + "141267 gclib SA,141268 gclib SD,141299 gclib -,741292 gclib SF,"
+                + "111086 sglib MA,111104 libsmall ME,111105 libsmall MF,111106 libsmall MG,111171 libsmall MH,111257 libsmall MB,"
+                + "111258 libsmall MI,111374 libsmall MC,711140 libsmall MJ,111346 englib MK,111469 englib ML,111462 purme HK,"
+                + "111467 mcl HQ,111514 naru MN,711596 metalib DO,"
+                + "128007 miracle MA,128035 bugaech MB,128040 galsan MC,128056 samsan MD,128057 bugae ME,128085 chungcheon MF,"
+                + "111120 cheongpa MB,111473 dream MA,711650 yongmaru OA,111364 small YN,111409 small YD,711023 small YG,"
+                + "711396 small SA,711397 small YB,711398 small YC,711400 small YF,711401 small YI,711402 small YJ,"
+                + "711403 small YK,711405 small YM,711466 small YS,711497 small YO,"
+                + "111036 gjinfo MA,111115 jy4dong MC,111116 jgsports MD,111305 gu3dong MB,111495 jyriver MF,111521 gunja MG,"
+                + "111523 achasan MH,111537 childeng MI";
+        Map<String, String[]> expected = new java.util.HashMap<>();
+        for (String row : table.split(",")) {
+            String[] p = row.split(" ");
+            expected.put(p[0], p);
+        }
+
+        expected.forEach((libCode, p) -> {
+            String url = links.linkFor(libCode, "흰").url();
+            assertThat(java.net.URI.create(url).getPath()).as(libCode).startsWith("/" + p[1] + "/");
+            if ("-".equals(p[2])) {
+                assertThat(url).as(libCode).doesNotContain("searchLibraryArr=");
+            } else {
+                assertThat(url).as(libCode).endsWith("&searchLibraryArr=" + p[2]);
+            }
+        });
+        var hosts = java.util.Set.of("lib.paju.go.kr", "mplib.mapo.go.kr", "www.bppl.or.kr", "www.yslibrary.or.kr",
+                "www.gwangjinlib.seoul.kr");
+        assertThat(doc.sites().stream().filter(s -> hosts.contains(s.host())).flatMap(s -> s.libCodes().stream()))
+                .containsExactlyInAnyOrderElementsOf(expected.keySet());
+    }
+
+    /**
+     * 11-25: 이름이 비슷하기만 해 통합으로 뒀던 기관 10곳을 확인해 지점으로 옮겼다(그 지점 결과의 책을 정보나루가 이 기관
+     * 소장으로 답함). 통합으로 되돌아가면 다시 사이트 전체 결과가 뜬다.
+     */
+    @Test
+    void 비슷한_이름으로_확인한_기관은_자기_지점_값으로_간다() {
+        var links = new PublicLibrarySearchLinks(JsonMapper.builder().build());
+        String table = "711266 library.gangnam.go.kr SB,141013 library.yeoncheon.go.kr MA,111116 www.gwangjinlib.seoul.kr MD,"
+                + "141170 www.hscitylib.or.kr MF,141241 www.hscitylib.or.kr MH,141661 www.hscitylib.or.kr TB,"
+                + "741680 www.hscitylib.or.kr MV,141578 www.hscitylib.or.kr MP,111053 www.l4d.or.kr MD,711400 www.yslibrary.or.kr YF";
+
+        for (String row : table.split(",")) {
+            String[] p = row.split(" ");
+            String url = links.linkFor(p[0], "흰").url();
+            assertThat(java.net.URI.create(url).getHost()).as(p[0]).isEqualTo(p[1]);
+            assertThat(url).as(p[0]).endsWith("Arr=" + p[2]); // 화성은 searchManageCodeArr
+        }
+    }
 }
