@@ -4264,40 +4264,159 @@
    "host": "www.splib.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.splib.or.kr/spglib/menu/10468/program/30002/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchKeyword={title}",
+   "url": "https://www.splib.or.kr/spglib/menu/10467/program/30001/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MB",
    "libCodes": [
-    "111049",
-    "111084",
-    "111114",
-    "111117",
-    "111173",
-    "111175",
-    "111191",
-    "111259",
-    "111435",
-    "111448",
-    "111456",
+    "111049"
+   ],
+   "checkedAt": "2026-11-24",
+   "flags": [
+    "11-24 도서관별 경로(/spglib): 홈페이지 간략검색 메뉴·기본 지점 값으로 만든 주소, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인(싯다르타 5건)"
+   ]
+  },
+  {
+   "host": "www.splib.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.splib.or.kr/sppnlib/menu/10795/program/30001/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchKeyword={title}&searchLibraryArr=BA",
+   "libCodes": [
+    "111084"
+   ],
+   "checkedAt": "2026-11-24",
+   "flags": [
+    "11-24 도서관별 경로(/sppnlib): 홈페이지 간략검색 메뉴·기본 지점 값으로 만든 주소, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인(싯다르타 2건)",
+    "정보나루 이름은 소나무언덕1호작은도서관 — 사이트 연혁상 2026-04 풍납도서관으로 이전 개관, 사이트 결과 행도 111084"
+   ]
+  },
+  {
+   "host": "www.splib.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.splib.or.kr/sp2lib/menu/10903/program/30001/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchKeyword={title}&searchLibraryArr=BB",
+   "libCodes": [
+    "111114"
+   ],
+   "checkedAt": "2026-11-24",
+   "flags": [
+    "11-24 도서관별 경로(/sp2lib): 홈페이지 간략검색 메뉴·기본 지점 값으로 만든 주소, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인(싯다르타 2건)"
+   ]
+  },
+  {
+   "host": "www.splib.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.splib.or.kr/spclib/menu/10243/program/30001/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MA",
+   "libCodes": [
+    "111117"
+   ],
+   "checkedAt": "2026-11-24",
+   "flags": [
+    "11-24 도서관별 경로(/spclib): 홈페이지 간략검색 메뉴·기본 지점 값으로 만든 주소, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인(싯다르타 1건)"
+   ]
+  },
+  {
+   "host": "www.splib.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.splib.or.kr/sp3lib/menu/11012/program/30001/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchKeyword={title}&searchLibraryArr=BC",
+   "libCodes": [
+    "111173"
+   ],
+   "checkedAt": "2026-11-24",
+   "flags": [
+    "11-24 도서관별 경로(/sp3lib): 홈페이지 간략검색 메뉴·기본 지점 값으로 만든 주소, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인(싯다르타 1건)"
+   ]
+  },
+  {
+   "host": "www.splib.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.splib.or.kr/sp4lib/menu/11123/program/30001/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchKeyword={title}&searchLibraryArr=BD",
+   "libCodes": [
+    "111175"
+   ],
+   "checkedAt": "2026-11-24",
+   "flags": [
+    "11-24 도서관별 경로(/sp4lib): 홈페이지 간략검색 메뉴·기본 지점 값으로 만든 주소, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인(결과 0건)",
+    "홈페이지 공지: 2026-08-30 운영 종료 — 소장이 없어 지점 필터는 결과로 확인 못 함(페이지 이름만 확인). 화면 노출 여부는 따로"
+   ]
+  },
+  {
+   "host": "www.splib.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.splib.or.kr/spmlib/menu/11229/program/30001/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MC",
+   "libCodes": [
+    "111191"
+   ],
+   "checkedAt": "2026-11-24",
+   "flags": [
+    "11-24 도서관별 경로(/spmlib): 홈페이지 간략검색 메뉴·기본 지점 값으로 만든 주소, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인(싯다르타 2건)"
+   ]
+  },
+  {
+   "host": "www.splib.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.splib.or.kr/spelib/menu/10581/program/30001/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MD",
+   "libCodes": [
+    "111259"
+   ],
+   "checkedAt": "2026-11-24",
+   "flags": [
+    "11-24 도서관별 경로(/spelib): 홈페이지 간략검색 메뉴·기본 지점 값으로 만든 주소, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인(싯다르타 0건이라 Harry Potter 60건(첫 쪽 모두 111259))"
+   ]
+  },
+  {
+   "host": "www.splib.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.splib.or.kr/spjlib/menu/10113/program/30001/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchKeyword={title}&searchLibraryArr=ME",
+   "libCodes": [
+    "111435"
+   ],
+   "checkedAt": "2026-11-24",
+   "flags": [
+    "11-24 도서관별 경로(/spjlib): 홈페이지 간략검색 메뉴·기본 지점 값으로 만든 주소, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인(싯다르타 8건)"
+   ]
+  },
+  {
+   "host": "www.splib.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.splib.or.kr/spdlib/menu/10688/program/30001/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MF",
+   "libCodes": [
+    "111448"
+   ],
+   "checkedAt": "2026-11-24",
+   "flags": [
+    "11-24 도서관별 경로(/spdlib): 홈페이지 간략검색 메뉴·기본 지점 값으로 만든 주소, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인(싯다르타 2건)"
+   ]
+  },
+  {
+   "host": "www.splib.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.splib.or.kr/spalib/menu/11342/program/30001/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MG",
+   "libCodes": [
+    "111456"
+   ],
+   "checkedAt": "2026-11-24",
+   "flags": [
+    "11-24 도서관별 경로(/spalib): 홈페이지 간략검색 메뉴·기본 지점 값으로 만든 주소, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인(싯다르타 2건)"
+   ]
+  },
+  {
+   "host": "www.splib.or.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.splib.or.kr/spwlib/menu/10360/program/30001/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MH",
+   "libCodes": [
     "111472"
    ],
-   "checkedAt": "2026-11-03",
+   "checkedAt": "2026-11-24",
    "flags": [
-    "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
-   ],
-   "branch": {
-    "param": "searchLibraryArr",
-    "codes": {
-     "111049": "MB",
-     "111084": "BA",
-     "111114": "BB",
-     "111173": "BC",
-     "111175": "BD",
-     "111191": "MC",
-     "111448": "MF",
-     "111456": "MG"
-    },
-    "url": "https://www.splib.or.kr/spglib/menu/10468/program/30002/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&searchKeyword={title}"
-   }
+    "11-24 도서관별 경로(/spwlib): 홈페이지 간략검색 메뉴·기본 지점 값으로 만든 주소, 페이지 이름과 결과 행 소장처가 그 도서관인지 확인(싯다르타 6건)"
+   ]
   },
   {
    "host": "www.taebaek.go.kr",

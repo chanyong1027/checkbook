@@ -235,4 +235,29 @@ class PublicLibrarySearchLinksTest {
 
         assertThat(links.size()).isGreaterThanOrEqualTo(900);
     }
+
+    /**
+     * 11-24: 송파 사이트는 대표 도서관(거마) 홈페이지 경로 하나를 12곳이 같이 써서, 어느 도서관을 눌러도 페이지 이름이
+     * "거마도서관"으로 떴다(코드 없는 4곳은 통합 결과까지). 도서관마다 자기 홈페이지 경로와 자기 지점 값으로 가야 한다.
+     */
+    @Test
+    void 송파_도서관은_각자_자기_홈페이지_경로와_지점_값으로_검색한다() {
+        var links = new PublicLibrarySearchLinks(JsonMapper.builder().build());
+        Map<String, String> pathAndBranch = Map.ofEntries(
+                Map.entry("111049", "/spglib/|MB"), Map.entry("111084", "/sppnlib/|BA"),
+                Map.entry("111114", "/sp2lib/|BB"), Map.entry("111117", "/spclib/|MA"),
+                Map.entry("111173", "/sp3lib/|BC"), Map.entry("111175", "/sp4lib/|BD"),
+                Map.entry("111191", "/spmlib/|MC"), Map.entry("111259", "/spelib/|MD"),
+                Map.entry("111435", "/spjlib/|ME"), Map.entry("111448", "/spdlib/|MF"),
+                Map.entry("111456", "/spalib/|MG"), Map.entry("111472", "/spwlib/|MH"));
+
+        pathAndBranch.forEach((libCode, expected) -> {
+            String[] parts = expected.split("\\|");
+            String url = links.linkFor(libCode, "싯다르타").url();
+            assertThat(url).as(libCode)
+                    .startsWith("https://www.splib.or.kr" + parts[0] + "menu/")
+                    .contains("searchKeyword=%EC%8B%AF%EB%8B%A4%EB%A5%B4%ED%83%80")
+                    .endsWith("&searchLibraryArr=" + parts[1]);
+        });
+    }
 }
