@@ -50,9 +50,12 @@ public class PublicLibrarySearchLinks {
         /**
          * 여러 도서관이 한 사이트를 쓸 때의 지점 대응표(11-04: 대표 도서관 지점이 주소에 박혀 다른 도서관이 엉뚱한 지점을
          * 검색하던 결함을 고치며 추가). url·fields는 지점 링크를 확인한 주소 틀이고, param 값을 기관 코드에 맞게 바꾼다.
-         * 대응표에 없는 도서관은 사이트의 통합검색 주소를 쓴다.
+         * unbranched는 일부러 통합검색 주소를 쓰는 기관과 그 이유다. 사이트의 모든 기관은 codes나 unbranched 중 한쪽에
+         * 있어야 한다(11-24: 지점 코드가 이유 없이 빠진 송파 글마루 등이 조용히 통합으로 가던 결함 — 빠진 것과 일부러 둔 것을
+         * 파일에서 구분할 수 없었다).
          */
-        public record Branch(String param, String url, Map<String, String> fields, Map<String, String> codes) {
+        public record Branch(String param, String url, Map<String, String> fields, Map<String, String> codes,
+                             Map<String, String> unbranched) {
         }
     }
 
@@ -192,6 +195,18 @@ public class PublicLibrarySearchLinks {
         if (branchHost == null || !branchHost.equalsIgnoreCase(siteHost)) {
             throw new IllegalStateException(where + "지점 주소 호스트(" + branchHost + ")가 통합검색 주소 호스트와 다르다");
         }
+        Map<String, String> unbranched = branch.unbranched() == null ? Map.of() : branch.unbranched();
+        unbranched.forEach((libCode, reason) -> {
+            if (!site.libCodes().contains(libCode)) {
+                throw new IllegalStateException(where + "통합으로 둔 기관 " + libCode + "이(가) 사이트 기관 목록에 없다");
+            }
+            if (branch.codes().containsKey(libCode)) {
+                throw new IllegalStateException(where + "기관 " + libCode + "이(가) 지점 코드와 통합 양쪽에 있다");
+            }
+            if (reason == null || reason.isBlank()) {
+                throw new IllegalStateException(where + "통합으로 둔 기관 " + libCode + "에 이유가 없다");
+            }
+        });
         branch.codes().forEach((libCode, code) -> {
             if (!site.libCodes().contains(libCode)) {
                 throw new IllegalStateException(where + "지점 대응표의 기관 " + libCode + "이(가) 사이트 기관 목록에 없다");
@@ -200,6 +215,12 @@ public class PublicLibrarySearchLinks {
                 throw new IllegalStateException(where + "지점 코드가 이상하다: " + code);
             }
         });
+        for (String libCode : site.libCodes()) {
+            if (!branch.codes().containsKey(libCode) && !unbranched.containsKey(libCode)) {
+                throw new IllegalStateException(where + "기관 " + libCode
+                        + "이(가) 지점 코드에도 통합 목록에도 없다 — 지점 코드를 넣거나, 통합으로 두는 이유를 unbranched에 적는다");
+            }
+        }
         // 지점 주소 틀도 통합검색 주소와 같은 규칙으로 검사한다
         validate(new Site(site.host(), site.kind(), site.method(), "POST".equals(site.method()) ? site.url() : branch.url(),
                 "POST".equals(site.method()) ? branch.fields() : null, site.libCodes(), site.checkedAt(), site.flags(), null));
