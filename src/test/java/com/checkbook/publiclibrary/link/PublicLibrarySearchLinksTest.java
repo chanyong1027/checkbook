@@ -336,7 +336,7 @@ class PublicLibrarySearchLinksTest {
                 + "111467 mcl HQ,111514 naru MN,711596 metalib DO,"
                 + "128007 miracle MA,128035 bugaech MB,128040 galsan MC,128056 samsan MD,128057 bugae ME,128085 chungcheon MF,"
                 + "111120 cheongpa MB,111473 dream MA,711650 yongmaru OA,111364 small YN,111409 small YD,711023 small YG,"
-                + "711396 small SA,711397 small YB,711398 small YC,711400 small -,711401 small YI,711402 small YJ,"
+                + "711396 small SA,711397 small YB,711398 small YC,711400 small YF,711401 small YI,711402 small YJ,"
                 + "711403 small YK,711405 small YM,711466 small YS,711497 small YO";
         Map<String, String[]> expected = new java.util.HashMap<>();
         for (String row : table.split(",")) {
@@ -356,5 +356,24 @@ class PublicLibrarySearchLinksTest {
         var hosts = java.util.Set.of("lib.paju.go.kr", "mplib.mapo.go.kr", "www.bppl.or.kr", "www.yslibrary.or.kr");
         assertThat(doc.sites().stream().filter(s -> hosts.contains(s.host())).flatMap(s -> s.libCodes().stream()))
                 .containsExactlyInAnyOrderElementsOf(expected.keySet());
+    }
+
+    /**
+     * 11-25: 이름이 비슷하기만 해 통합으로 뒀던 기관 10곳을 확인해 지점으로 옮겼다(그 지점 결과의 책을 정보나루가 이 기관
+     * 소장으로 답함). 통합으로 되돌아가면 다시 사이트 전체 결과가 뜬다.
+     */
+    @Test
+    void 비슷한_이름으로_확인한_기관은_자기_지점_값으로_간다() {
+        var links = new PublicLibrarySearchLinks(JsonMapper.builder().build());
+        String table = "711266 library.gangnam.go.kr SB,141013 library.yeoncheon.go.kr MA,111116 www.gwangjinlib.seoul.kr MD,"
+                + "141170 www.hscitylib.or.kr MF,141241 www.hscitylib.or.kr MH,141661 www.hscitylib.or.kr TB,"
+                + "741680 www.hscitylib.or.kr MV,141578 www.hscitylib.or.kr MP,111053 www.l4d.or.kr MD,711400 www.yslibrary.or.kr YF";
+
+        for (String row : table.split(",")) {
+            String[] p = row.split(" ");
+            String url = links.linkFor(p[0], "흰").url();
+            assertThat(java.net.URI.create(url).getHost()).as(p[0]).isEqualTo(p[1]);
+            assertThat(url).as(p[0]).endsWith("Arr=" + p[2]); // 화성은 searchManageCodeArr
+        }
     }
 }
