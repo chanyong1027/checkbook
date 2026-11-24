@@ -292,4 +292,28 @@ class PublicLibrarySearchLinksTest {
                             + "&searchKeyword=%EC%8B%AF%EB%8B%A4%EB%A5%B4%ED%83%80&searchLibraryArr=" + parts[1]);
         });
     }
+
+    /**
+     * 11-25: 송파와 같은 종류 — 통합 주소가 대표 도서관 홈페이지 경로(강남 /dchlib/ 등)라 어느 도서관을 눌러도 그 도서관 이름
+     * 페이지로 떴다. 첫 화면 검색창이 쓰는 공통 통합 경로가 있는 사이트는 모든 기관이 그 경로로 간다.
+     */
+    @Test
+    void 공통_통합_경로가_있는_사이트는_모든_기관이_대표_도서관_경로가_아닌_통합_경로로_간다() {
+        var links = new PublicLibrarySearchLinks(JsonMapper.builder().build());
+        var doc = PublicLibrarySearchLinks.parse(JsonMapper.builder().build(),
+                PublicLibrarySearchLinksTest.class.getClassLoader().getResourceAsStream(PublicLibrarySearchLinks.RESOURCE));
+        Map<String, String> integratedPath = Map.of(
+                "lib.pocheon.go.kr", "/intro/plusSearchResultList.do",
+                "lib.yongin.go.kr", "/intro/plusSearchResultList.do",
+                "library.gangnam.go.kr", "/intro/plusSearchResultList.do",
+                "www.goyanglib.or.kr", "/center/program/searchResultList.do",
+                "www.hscitylib.or.kr", "/intro/program/searchResultList.do",
+                "www.ptlib.go.kr", "/intro/plusSearchResultList.do",
+                "www.ydplib.or.kr", "/intro/plusSearchResultList.do");
+
+        doc.sites().stream().filter(s -> integratedPath.containsKey(s.host())).forEach(s -> s.libCodes().forEach(libCode ->
+                assertThat(java.net.URI.create(links.linkFor(libCode, "흰").url()).getPath())
+                        .as(s.host() + " " + libCode).isEqualTo(integratedPath.get(s.host()))));
+        assertThat(doc.sites().stream().filter(s -> integratedPath.containsKey(s.host())).count()).isEqualTo(7);
+    }
 }
