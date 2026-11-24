@@ -799,12 +799,28 @@
     "robots 막힘 — 운영자 요청 시 즉시 제거",
     "배포 출처에서 한 번 더 확인",
     "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 대응표 밖 13곳을 이유와 함께 통합으로 둠"
    ],
    "branch": {
     "param": "manage_code",
     "codes": {
      "121002": "AA"
+    },
+    "unbranched": {
+     "121003": "11-24 결과 페이지에서 지점 선택 목록을 찾지 못함",
+     "121004": "11-24 결과 페이지에서 지점 선택 목록을 찾지 못함",
+     "121005": "11-24 결과 페이지에서 지점 선택 목록을 찾지 못함",
+     "121006": "11-24 결과 페이지에서 지점 선택 목록을 찾지 못함",
+     "121007": "11-24 결과 페이지에서 지점 선택 목록을 찾지 못함",
+     "121008": "11-24 결과 페이지에서 지점 선택 목록을 찾지 못함",
+     "121010": "11-24 결과 페이지에서 지점 선택 목록을 찾지 못함",
+     "121011": "11-24 결과 페이지에서 지점 선택 목록을 찾지 못함",
+     "121012": "11-24 결과 페이지에서 지점 선택 목록을 찾지 못함",
+     "121013": "11-24 결과 페이지에서 지점 선택 목록을 찾지 못함",
+     "121015": "11-24 결과 페이지에서 지점 선택 목록을 찾지 못함",
+     "126014": "11-24 결과 페이지에서 지점 선택 목록을 찾지 못함",
+     "126024": "11-24 결과 페이지에서 지점 선택 목록을 찾지 못함"
     },
     "fields": {
      "subType": "library",
@@ -1329,12 +1345,18 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 5곳 코드 추가, 목록의 label 묶임으로 확인(결과 행 소장처 표시를 못 읽어 결과 확인은 못 함)"
    ],
    "branch": {
     "param": "searchManageCodeArr",
     "codes": {
-     "145002": "MA"
+     "145002": "MA",
+     "145029": "BR",
+     "145121": "SB",
+     "145122": "SS",
+     "145151": "OG",
+     "145155": "KG"
     },
     "url": "https://lib.gunsan.go.kr/web/program/searchResultList.do?searchType=SIMPLE&searchKeyword={title}"
    }
@@ -1589,7 +1611,8 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 4곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인, 나머지 1곳은 이유와 함께 통합"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -1610,7 +1633,14 @@
      "141602": "MP",
      "141604": "MR",
      "141614": "MO",
-     "141630": "MJ"
+     "141630": "MJ",
+     "141267": "SA",
+     "141397": "MK",
+     "141566": "MN",
+     "741292": "SF"
+    },
+    "unbranched": {
+     "141299": "사이트 지점 목록에 없음(11-24 확인)"
     },
     "url": "https://lib.paju.go.kr/gclib/menu/10174/program/30005/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=ALL&searchKeyword={title}"
    }
@@ -1720,7 +1750,8 @@
    "checkedAt": "2026-11-04",
    "flags": [
     "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 대응표 밖 1곳을 이유와 함께 통합으로 둠"
    ],
    "branch": {
     "param": "manage_code",
@@ -1739,6 +1770,9 @@
      "150013": "MT",
      "150014": "MU",
      "150016": "NA"
+    },
+    "unbranched": {
+     "150012": "robots.txt가 결과 경로를 막아 11-24 지점 목록 확인 안 함"
     },
     "url": "https://lib.sejong.go.kr/hansol/site/search/bookSearch.do?cmd_name=bookandnonbooksearch&search_type=detail&search_item=search_title&search_txt={title}"
    }
@@ -1970,12 +2004,15 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 2곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인"
    ],
    "branch": {
     "param": "manage_code",
     "codes": {
-     "147075": "MA"
+     "147075": "MA",
+     "147127": "MC",
+     "147134": "MD"
     },
     "url": "https://library.chilgok.go.kr/cg/intro/search/index.do?menu_idx=349&search_type=title&search_text={title}"
    }
@@ -2061,7 +2098,8 @@
    "checkedAt": "2026-11-04",
    "flags": [
     "11-04 범위: 통합 확인(사용자가 준 전체 코드 나열 주소, 결과 331건·여러 도서관 소장 행 — Claude 브라우저 확인)",
-    "11-04 지점: 사용자가 libraryCodes=FX로 지점 검색 주소 제공, 새 브라우저에서 결과 모두 그 지점 확인. 코드는 선택지 이름 정확 대응 51/58, 미대응 5곳(AA·AJ·FD·FA·HU)은 11-04 브라우저로 결과 행 소장처 확인 후 추가, 2.28도서관(127058)은 홈페이지 /228lib가 2·28민주운동기념회관 도서관이라 AL로 확인 57/58"
+    "11-04 지점: 사용자가 libraryCodes=FX로 지점 검색 주소 제공, 새 브라우저에서 결과 모두 그 지점 확인. 코드는 선택지 이름 정확 대응 51/58, 미대응 5곳(AA·AJ·FD·FA·HU)은 11-04 브라우저로 결과 행 소장처 확인 후 추가, 2.28도서관(127058)은 홈페이지 /228lib가 2·28민주운동기념회관 도서관이라 AL로 확인 57/58",
+    "11-24 지점 분류: 대응표 밖 1곳을 이유와 함께 통합으로 둠"
    ],
    "branch": {
     "param": "libraryCodes",
@@ -2124,6 +2162,9 @@
      "727083": "HA",
      "727102": "HE",
      "727107": "HF"
+    },
+    "unbranched": {
+     "727055": "사이트 지점 목록에 없음(11-24 확인)"
     }
    }
   },
@@ -2144,7 +2185,8 @@
     "robots 막힘 — 운영자 요청 시 즉시 제거",
     "약관 미확인(링크 못 찾음)",
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 대응표 밖 1곳을 이유와 함께 통합으로 둠"
    ],
    "branch": {
     "param": "manage_code",
@@ -2153,6 +2195,9 @@
      "131021": "MB",
      "131028": "MD",
      "131082": "ME"
+    },
+    "unbranched": {
+     "131022": "robots.txt가 결과 경로를 막아 11-24 지점 목록 확인 안 함"
     },
     "url": "https://library.donggu.ulsan.kr/main/site/search/bookSearch.do?cmd_name=bookandnonbooksearch&search_type=detail&search_item=search_title&search_txt={title}"
    }
@@ -2190,7 +2235,8 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 5곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인, 나머지 5곳은 이유와 함께 통합"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -2207,7 +2253,19 @@
      "111518": "SH",
      "111526": "MM",
      "711265": "MH",
-     "711267": "SC"
+     "711267": "SC",
+     "111127": "MG",
+     "111474": "ME",
+     "711268": "SD",
+     "711269": "SE",
+     "711492": "SF"
+    },
+    "unbranched": {
+     "111071": "사이트 목록에 같은 이름이 2개(논현문화마루도서관( 9 ), 논현문화마루도서관 (별관)( 9 ))라 하나로 못 정함",
+     "11134707": "사이트 지점 목록에 없음(11-24 확인)",
+     "11134712": "사이트 지점 목록에 없음(11-24 확인)",
+     "111533": "사이트 목록에 같은 이름이 2개(논현문화마루도서관( 9 ), 논현문화마루도서관 (별관)( 9 ))라 하나로 못 정함",
+     "711266": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 대치1작은도서관 — 같은 곳인지 확인 못 함)"
     },
     "url": "https://library.gangnam.go.kr/dchlib/plusSearchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=TITLE&searchKeyword={title}"
    }
@@ -2244,7 +2302,8 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 5곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인"
    ],
    "branch": {
     "param": "manage_code",
@@ -2254,7 +2313,12 @@
      "147128": "MK",
      "147139": "ML",
      "747019": "MH",
-     "747074": "MM"
+     "747074": "MM",
+     "147026": "MF",
+     "147042": "MB",
+     "147044": "MC",
+     "147052": "MD",
+     "147120": "MG"
     },
     "url": "http://library.gyeongju.go.kr/?page_id=search_booklist&mode=tBookList&collection=tot_book&search_field1=IAL&search_txt={title}"
    }
@@ -2304,7 +2368,8 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 대응표 밖 1곳을 이유와 함께 통합으로 둠"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -2314,6 +2379,9 @@
      "141250": "ME",
      "741044": "MF",
      "741168": "MG"
+    },
+    "unbranched": {
+     "141013": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 중앙도서관 — 같은 곳인지 확인 못 함)"
     },
     "url": "https://library.yeoncheon.go.kr/searchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchKey=TITLE&searchKeyword={title}"
    }
@@ -2375,7 +2443,8 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 대응표 밖 1곳을 이유와 함께 통합으로 둠"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -2394,6 +2463,9 @@
      "111469": "ML",
      "111514": "MN",
      "711140": "MJ"
+    },
+    "unbranched": {
+     "711596": "사이트 지점 목록에 없음(11-24 확인)"
     },
     "url": "https://mplib.mapo.go.kr/sglib/PGM3007/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
    }
@@ -2941,7 +3013,8 @@
    "checkedAt": "2026-11-04",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 4곳 코드 추가, 목록의 label 묶임으로 확인(결과 행 소장처 표시를 못 읽어 결과 확인은 못 함)"
    ],
    "branch": {
     "param": "manage_code",
@@ -2963,7 +3036,11 @@
      "131068": "CN",
      "131079": "MG",
      "131083": "SJ",
-     "131084": "GD"
+     "131084": "GD",
+     "131019": "YM",
+     "131029": "CC",
+     "131057": "CM",
+     "131061": "CR"
     },
     "url": "https://usbl.bukgu.ulsan.kr/main/site/search/bookSearch.do?cmd_name=bookandnonbooksearch&search_type=detail&use_facet=N&search_item=search_title&search_txt={title}"
    }
@@ -3053,7 +3130,8 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 2곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -3061,7 +3139,9 @@
      "128007": "MA",
      "128040": "MC",
      "128056": "MD",
-     "128085": "MF"
+     "128085": "MF",
+     "128035": "MB",
+     "128057": "ME"
     },
     "url": "https://www.bppl.or.kr/miracle/menu/10285/program/30031/searchResultList.do?searchType=DETAIL&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchCategory=ALL&searchWordTitle={title}"
    }
@@ -3242,7 +3322,8 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 3곳 코드 추가, 목록의 label 묶임으로 확인(결과 행 소장처 표시를 못 읽어 결과 확인은 못 함), 나머지 3곳은 이유와 함께 통합"
    ],
    "branch": {
     "param": "searchManageCodeArr",
@@ -3255,7 +3336,15 @@
      "111491": "MU",
      "711152": "MG",
      "711307": "MQ",
-     "711308": "ML"
+     "711308": "ML",
+     "111042": "MA",
+     "111132": "MJ",
+     "111452": "MH"
+    },
+    "unbranched": {
+     "111299": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 은평작은도서관 — 같은 곳인지 확인 못 함)",
+     "711304": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 구립응암도서관 — 같은 곳인지 확인 못 함)",
+     "711305": "사이트 지점 목록에 없음(11-24 확인)"
     },
     "url": "https://www.eplib.or.kr/eplib/program/alpasq/searchResultList.do?searchType=SIMPLE&searchKeyword={title}"
    }
@@ -3483,7 +3572,8 @@
    "checkedAt": "2026-11-04",
    "flags": [
     "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 대응표 밖 1곳을 이유와 함께 통합으로 둠"
    ],
    "branch": {
     "param": "manageCode",
@@ -3498,6 +3588,9 @@
      "141640": "MS",
      "141670": "MD",
      "741008": "GR"
+    },
+    "unbranched": {
+     "141057": "robots.txt가 결과 경로를 막아 11-24 지점 목록 확인 안 함"
     },
     "url": "https://www.gimpo.go.kr/modam/bookSearchList.do?key=11488&rep=1&option=0&type=&searchSort=TITLE&orderby=DESC&pageUnit=10&searchCnd=&searchKrwd={title}"
    }
@@ -3563,7 +3656,8 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 4곳 코드 추가, 목록의 label 묶임으로 확인(결과 행 소장처 표시를 못 읽어 결과 확인은 못 함), 나머지 8곳은 이유와 함께 통합"
    ],
    "branch": {
     "param": "searchManageCodeArr",
@@ -3581,7 +3675,21 @@
      "141574": "MT",
      "141631": "MU",
      "141635": "MQ",
-     "141657": "MV"
+     "141657": "MV",
+     "141018": "MB",
+     "141072": "ME",
+     "141125": "MI",
+     "141126": "MH"
+    },
+    "unbranched": {
+     "141059": "사이트 지점 목록에 없음(11-24 확인)",
+     "141202": "사이트 지점 목록에 없음(11-24 확인)",
+     "741189": "사이트 지점 목록에 없음(11-24 확인)",
+     "741192": "사이트 지점 목록에 없음(11-24 확인)",
+     "741210": "사이트 지점 목록에 없음(11-24 확인)",
+     "741224": "사이트 지점 목록에 없음(11-24 확인)",
+     "741461": "사이트 지점 목록에 없음(11-24 확인)",
+     "741511": "사이트 지점 목록에 없음(11-24 확인)"
     },
     "url": "https://www.goyanglib.or.kr/MB/menu/10315/program/30001/searchResultList.do?searchType=SIMPLE&searchKeyword={title}"
    }
@@ -3612,7 +3720,8 @@
    "flags": [
     "robots 막힘 — 운영자 요청 시 즉시 제거",
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 대응표 밖 1곳을 이유와 함께 통합으로 둠"
    ],
    "branch": {
     "param": "searchManageCodeArr",
@@ -3620,6 +3729,9 @@
      "141020": "BR",
      "141225": "TP",
      "141656": "GM"
+    },
+    "unbranched": {
+     "141070": "robots.txt가 결과 경로를 막아 11-24 지점 목록 확인 안 함"
     },
     "url": "https://www.gurilib.go.kr/inlib/program/searchResultList.do?searchType=SIMPLE&mainSearchCondition=book&searchKeyword={title}"
    }
@@ -3642,7 +3754,8 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 대응표 밖 2곳을 이유와 함께 통합으로 둠"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -3653,6 +3766,10 @@
      "111521": "MG",
      "111523": "MH",
      "111537": "MI"
+    },
+    "unbranched": {
+     "111116": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 중곡도서관 — 같은 곳인지 확인 못 함)",
+     "111305": "사이트 지점 목록에 없음(11-24 확인)"
     },
     "url": "https://www.gwangjinlib.seoul.kr/gjinfo/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}"
    }
@@ -3716,7 +3833,8 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 1곳 코드 추가, 목록의 label 묶임으로 확인(결과 행 소장처 표시를 못 읽어 결과 확인은 못 함), 나머지 5곳은 이유와 함께 통합"
    ],
    "branch": {
     "param": "searchManageCodeArr",
@@ -3745,7 +3863,15 @@
      "741568": "MU",
      "741827": "TA",
      "741828": "MZ",
-     "741937": "TC"
+     "741937": "TC",
+     "141679": "NB"
+    },
+    "unbranched": {
+     "141170": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 두빛나래 — 같은 곳인지 확인 못 함)",
+     "141241": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 둥지나래 — 같은 곳인지 확인 못 함)",
+     "141578": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 화성동탄중앙, 중앙이음터 — 같은 곳인지 확인 못 함)",
+     "141661": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 달빛나래 — 같은 곳인지 확인 못 함)",
+     "741680": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 봉담, 봉담커피앤북 — 같은 곳인지 확인 못 함)"
     },
     "url": "https://www.hscitylib.or.kr/nylib/menu/10160/program/30001/searchResultList.do?searchType=SIMPLE&searchKeyword={title}"
    }
@@ -3816,7 +3942,8 @@
     "robots 막힘 — 운영자 요청 시 즉시 제거",
     "약관 미확인(링크 못 찾음)",
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 대응표 밖 2곳을 이유와 함께 통합으로 둠"
    ],
    "branch": {
     "param": "searchManageCodeArr",
@@ -3827,6 +3954,10 @@
      "111511": "MC",
      "111513": "MA",
      "711539": "CA"
+    },
+    "unbranched": {
+     "111498": "robots.txt가 결과 경로를 막아 11-24 지점 목록 확인 안 함",
+     "111517": "robots.txt가 결과 경로를 막아 11-24 지점 목록 확인 안 함"
     },
     "url": "https://www.junggulib.or.kr/SJGL/program/searchResultList.do?searchType=SIMPLE&searchKeyword={title}"
    }
@@ -3896,7 +4027,8 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 14곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인, 나머지 2곳은 이유와 함께 통합"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -3908,7 +4040,25 @@
      "111534": "MN",
      "711079": "MG",
      "711250": "SM",
-     "711427": "SN"
+     "711427": "SN",
+     "111303": "MB",
+     "111446": "MJ",
+     "111522": "MM",
+     "711002": "ME",
+     "711080": "MH",
+     "711081": "MI",
+     "711085": "SL",
+     "711088": "SH",
+     "711089": "SK",
+     "711251": "SF",
+     "711311": "SI",
+     "711410": "SA",
+     "711433": "SO",
+     "711485": "SQ"
+    },
+    "unbranched": {
+     "111053": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 이문체육문화센터 — 같은 곳인지 확인 못 함)",
+     "711086": "사이트 지점 목록에 없음(11-24 확인)"
     },
     "url": "https://www.l4d.or.kr/info/menu/10142/program/30010/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
    }
@@ -4068,7 +4218,8 @@
    "checkedAt": "2026-11-04",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 대응표 밖 1곳을 이유와 함께 통합으로 둠"
    ],
    "branch": {
     "param": "manage_code",
@@ -4076,6 +4227,9 @@
      "142036": "MB",
      "142042": "MA",
      "142115": "MH"
+    },
+    "unbranched": {
+     "142097": "사이트 지점 목록에 없음(11-24 확인)"
     },
     "url": "https://www.pc.go.kr/lib/main/site/search/bookSearch.do?cmd_name=bookandnonbooksearch&search_type=detail&use_facet=N&search_item=search_title&search_txt={title}"
    }
@@ -4198,7 +4352,8 @@
    "flags": [
     "robots 막힘 — 운영자 요청 시 즉시 제거",
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 대응표 밖 1곳을 이유와 함께 통합으로 둠"
    ],
    "branch": {
     "param": "manageCode",
@@ -4207,6 +4362,9 @@
      "144070": "144070_BA",
      "144111": "144111_BB",
      "144123": "144123_BC"
+    },
+    "unbranched": {
+     "144025": "11-24 사이트 접속 실패로 지점 목록 확인 못 함"
     },
     "url": "https://searcheb.seosan.go.kr/dls_le/index.php?mod=wdDataSearch&act=searchIList&reWord%5B%5D=&preItem=total&preCond=&deSearch=2&word1=&word2=&word3=&item1=&item2=&item3=&cond1=&cond1=&cond1=&preWord={title}"
    }
@@ -4238,7 +4396,8 @@
    "checkedAt": "2026-11-04",
    "flags": [
     "11-04 범위: 통합 확인(사용자가 직접 확인 목록에서 통합사이트로 확인 — 결과에 여러 도서관 소장 행)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 대응표 밖 4곳을 이유와 함께 통합으로 둠"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -4256,6 +4415,12 @@
      "141665": "MD",
      "141672": "MO",
      "741042": "BF"
+    },
+    "unbranched": {
+     "141053": "robots.txt가 결과 경로를 막아 11-24 지점 목록 확인 안 함",
+     "141231": "robots.txt가 결과 경로를 막아 11-24 지점 목록 확인 안 함",
+     "141258": "robots.txt가 결과 경로를 막아 11-24 지점 목록 확인 안 함",
+     "141548": "robots.txt가 결과 경로를 막아 11-24 지점 목록 확인 안 함"
     },
     "url": "https://www.snlib.go.kr/bd/plusSearchResultList.do?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL&topSearchType=BOOK&searchKeyword={title}"
    }
@@ -4518,7 +4683,8 @@
    "checkedAt": "2026-11-04",
    "flags": [
     "11-04 범위: 통합 확인(사용자가 준 manage_code 나열 주소, 여러 도서관 소장 행 — Claude 브라우저 확인)",
-    "11-04 지점: 사용자가 manage_code=ME·MA 주소를 시크릿 창에서 확인. 코드는 지점 목록 이름 정확 대응 23/27"
+    "11-04 지점: 사용자가 manage_code=ME·MA 주소를 시크릿 창에서 확인. 코드는 지점 목록 이름 정확 대응 23/27",
+    "11-24 지점 분류: 대응표 밖 4곳을 이유와 함께 통합으로 둠"
    ],
    "branch": {
     "param": "manage_code",
@@ -4547,6 +4713,12 @@
      "711318": "SU",
      "711319": "SA",
      "711320": "SB"
+    },
+    "unbranched": {
+     "111262": "사이트 지점 목록에 없음(11-24 확인)",
+     "111357": "사이트 지점 목록에 없음(11-24 확인)",
+     "711323": "사이트 지점 목록에 없음(11-24 확인)",
+     "711324": "사이트 지점 목록에 없음(11-24 확인)"
     }
    }
   },
@@ -4578,7 +4750,8 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 2곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -4587,7 +4760,9 @@
      "111121": "CC",
      "111444": "MA",
      "111530": "LX",
-     "111536": "LY"
+     "111536": "LY",
+     "111083": "CA",
+     "111550": "CE"
     },
     "url": "https://www.ydplib.or.kr/drlib/menu/10077/program/30002/plusSearchResultList.do?searchType=DETAIL&searchCategory=BOOK&searchRoom=ALL&searchKey1=TITLE&searchOperator1=AND&searchKey2=AUTHOR&searchOperator2=AND&searchKey3=PUBLISHER&searchOperator3=AND&searchKey4=KEYWORD&searchOperator4=AND&searchKey5=ISBN&searchOperator5=AND&searchSort=SIMILAR&searchOrder=DESC&searchRecordCount=10&searchKeyword1={title}"
    }
@@ -4610,7 +4785,8 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 4곳 코드 추가, 목록의 label 묶임으로 확인(결과 행 소장처 표시를 못 읽어 결과 확인은 못 함)"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -4618,7 +4794,11 @@
      "141177": "MC",
      "141331": "MA",
      "141586": "ME",
-     "741094": "MD"
+     "741094": "MD",
+     "141054": "MB",
+     "141600": "MF",
+     "141615": "MG",
+     "141641": "MH"
     },
     "url": "https://www.yjlib.go.kr/web/program/searchResultList.do?searchType=SIMPLE&searchCategory=ALL&searchClassNo1Aggs=ALL&searchField=ALL&searchWord={title}"
    }
@@ -4649,7 +4829,8 @@
    "checkedAt": "2026-11-03",
    "flags": [
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인"
+    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
+    "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 2곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인, 나머지 1곳은 이유와 함께 통합"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -4666,7 +4847,12 @@
      "711405": "YM",
      "711466": "YS",
      "711497": "YO",
-     "711650": "OA"
+     "711650": "OA",
+     "111120": "MB",
+     "711396": "SA"
+    },
+    "unbranched": {
+     "711400": "사이트 지점 목록에 이름이 정확히 같은 지점 없음(비슷한 이름: 원효로제2동 작은도서관 두드림 — 같은 곳인지 확인 못 함)"
     },
     "url": "https://www.yslibrary.or.kr/cheongpa/searchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
    }

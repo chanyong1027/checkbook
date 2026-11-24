@@ -84,15 +84,19 @@ class PublicLibrarySearchLinksTest {
     @Test
     void 지점_코드가_있는_도서관은_지점_주소에서_지점_값만_바꿔_검색한다() {
         var links = new PublicLibrarySearchLinks(List.of(branchSite(new Site.Branch("searchLibraryArr",
-                "https://lib.example.kr/r.do?searchLibraryArr=MB&kwd={title}#list", null, Map.of("111111", "ME")), "111111", "222222")));
+                "https://lib.example.kr/r.do?searchLibraryArr=MB&kwd={title}#list", null, Map.of("111111", "ME"), UNBRANCHED_222222),
+                "111111", "222222")));
 
         assertThat(links.linkFor("111111", "흰").url()).isEqualTo("https://lib.example.kr/r.do?kwd=%ED%9D%B0&searchLibraryArr=ME#list");
     }
 
+    private static final Map<String, String> UNBRANCHED_222222 = Map.of("222222", "사이트 지점 목록에 없음");
+
     @Test
-    void 대응표에_없는_도서관은_통합검색_주소를_쓴다_다른_지점으로_보내지_않는다() {
+    void 통합으로_둔_도서관은_통합검색_주소를_쓴다_다른_지점으로_보내지_않는다() {
         var links = new PublicLibrarySearchLinks(List.of(branchSite(new Site.Branch("searchLibraryArr",
-                "https://lib.example.kr/r.do?searchLibraryArr=MB&kwd={title}", null, Map.of("111111", "ME")), "111111", "222222")));
+                "https://lib.example.kr/r.do?searchLibraryArr=MB&kwd={title}", null, Map.of("111111", "ME"), UNBRANCHED_222222),
+                "111111", "222222")));
 
         assertThat(links.linkFor("222222", "흰").url()).isEqualTo("https://lib.example.kr/r.do?searchLibrary=ALL&kwd=%ED%9D%B0");
     }
@@ -101,7 +105,7 @@ class PublicLibrarySearchLinksTest {
     void POST_사이트는_지점_필드를_바꾼다() {
         var site = new Site("post.example.kr", "RESULT", "POST", "https://post.example.kr/s.do", Map.of("q", "{title}", "lib", ""),
                 List.of("111111"), "2026-11-04", List.of(),
-                new Site.Branch("manage_code", null, Map.of("q", "{title}", "manage_code", "AA"), Map.of("111111", "MD")));
+                new Site.Branch("manage_code", null, Map.of("q", "{title}", "manage_code", "AA"), Map.of("111111", "MD"), null));
 
         assertThat(new PublicLibrarySearchLinks(List.of(site)).linkFor("111111", "흰").fields())
                 .containsExactlyInAnyOrderEntriesOf(Map.of("q", "흰", "manage_code", "MD"));
@@ -110,25 +114,53 @@ class PublicLibrarySearchLinksTest {
     @Test
     void 대응표의_기관이_사이트에_없거나_코드가_이상하면_기동을_멈춘다() {
         assertThatThrownBy(() -> new PublicLibrarySearchLinks(List.of(branchSite(new Site.Branch("searchLibraryArr",
-                "https://lib.example.kr/r.do?kwd={title}", null, Map.of("999999", "ME")), "111111"))))
+                "https://lib.example.kr/r.do?kwd={title}", null, Map.of("999999", "ME"), null), "111111"))))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("999999");
         assertThatThrownBy(() -> new PublicLibrarySearchLinks(List.of(branchSite(new Site.Branch("searchLibraryArr",
-                "https://lib.example.kr/r.do?kwd={title}", null, Map.of("111111", "ME&x=1")), "111111"))))
+                "https://lib.example.kr/r.do?kwd={title}", null, Map.of("111111", "ME&x=1"), null), "111111"))))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void 한_사이트에서_같은_지점_코드가_두_기관에_붙으면_기동을_멈춘다_이름_대조_오매칭_방지() {
         assertThatThrownBy(() -> new PublicLibrarySearchLinks(List.of(branchSite(new Site.Branch("searchLibraryArr",
-                "https://lib.example.kr/r.do?kwd={title}", null, Map.of("111111", "MA", "222222", "MA")), "111111", "222222"))))
+                "https://lib.example.kr/r.do?kwd={title}", null, Map.of("111111", "MA", "222222", "MA"), null), "111111", "222222"))))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("MA");
     }
 
     @Test
     void 지점_주소가_통합검색과_다른_호스트면_기동을_멈춘다() {
         assertThatThrownBy(() -> new PublicLibrarySearchLinks(List.of(branchSite(new Site.Branch("searchLibraryArr",
-                "https://other.example.kr/r.do?kwd={title}", null, Map.of("111111", "MA")), "111111"))))
+                "https://other.example.kr/r.do?kwd={title}", null, Map.of("111111", "MA"), null), "111111"))))
                 .isInstanceOf(IllegalStateException.class).hasMessageContaining("other.example.kr");
+    }
+
+    // 11-24: 지점 코드가 이유 없이 빠진 기관(송파 글마루)이 조용히 통합으로 갔다 — 모든 기관을 지점 코드나 통합(이유 필수)으로 분류한다
+    private static Site.Branch branch(Map<String, String> codes, Map<String, String> unbranched) {
+        return new Site.Branch("searchLibraryArr", "https://lib.example.kr/r.do?kwd={title}", null, codes, unbranched);
+    }
+
+    @Test
+    void 지점_코드에도_통합_목록에도_없는_기관이_있으면_기동을_멈춘다_빠뜨린_것이_조용히_통합으로_가지_않게() {
+        assertThatThrownBy(() -> new PublicLibrarySearchLinks(List.of(branchSite(branch(Map.of("111111", "MA"), null), "111111", "222222"))))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("222222").hasMessageContaining("unbranched");
+    }
+
+    @Test
+    void 지점_코드와_통합_양쪽에_있는_기관은_기동을_멈춘다() {
+        assertThatThrownBy(() -> new PublicLibrarySearchLinks(List.of(branchSite(
+                branch(Map.of("111111", "MA"), Map.of("111111", "이유")), "111111"))))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("양쪽");
+    }
+
+    @Test
+    void 통합으로_둔_이유가_비었거나_사이트에_없는_기관이면_기동을_멈춘다() {
+        assertThatThrownBy(() -> new PublicLibrarySearchLinks(List.of(branchSite(
+                branch(Map.of("111111", "MA"), Map.of("222222", " ")), "111111", "222222"))))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("이유");
+        assertThatThrownBy(() -> new PublicLibrarySearchLinks(List.of(branchSite(
+                branch(Map.of("111111", "MA"), Map.of("999999", "이유")), "111111"))))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("999999");
     }
 
     private static final String DUP_CODES = "{\"version\":1,\"description\":\"x\",\"sites\":[{\"host\":\"lib.example.kr\","
