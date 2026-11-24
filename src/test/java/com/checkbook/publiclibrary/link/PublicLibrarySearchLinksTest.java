@@ -243,21 +243,21 @@ class PublicLibrarySearchLinksTest {
     @Test
     void 송파_도서관은_각자_자기_홈페이지_경로와_지점_값으로_검색한다() {
         var links = new PublicLibrarySearchLinks(JsonMapper.builder().build());
-        Map<String, String> pathAndBranch = Map.ofEntries(
-                Map.entry("111049", "/spglib/|MB"), Map.entry("111084", "/sppnlib/|BA"),
-                Map.entry("111114", "/sp2lib/|BB"), Map.entry("111117", "/spclib/|MA"),
-                Map.entry("111173", "/sp3lib/|BC"), Map.entry("111175", "/sp4lib/|BD"),
-                Map.entry("111191", "/spmlib/|MC"), Map.entry("111259", "/spelib/|MD"),
-                Map.entry("111435", "/spjlib/|ME"), Map.entry("111448", "/spdlib/|MF"),
-                Map.entry("111456", "/spalib/|MG"), Map.entry("111472", "/spwlib/|MH"));
+        // 기관 → 홈페이지 경로/간략검색 메뉴/지점 값(11-24 사이트에서 확인)
+        Map<String, String> homepage = Map.ofEntries(
+                Map.entry("111049", "spglib/menu/10467|MB"), Map.entry("111084", "sppnlib/menu/10795|BA"),
+                Map.entry("111114", "sp2lib/menu/10903|BB"), Map.entry("111117", "spclib/menu/10243|MA"),
+                Map.entry("111173", "sp3lib/menu/11012|BC"), Map.entry("111175", "sp4lib/menu/11123|BD"),
+                Map.entry("111191", "spmlib/menu/11229|MC"), Map.entry("111259", "spelib/menu/10581|MD"),
+                Map.entry("111435", "spjlib/menu/10113|ME"), Map.entry("111448", "spdlib/menu/10688|MF"),
+                Map.entry("111456", "spalib/menu/11342|MG"), Map.entry("111472", "spwlib/menu/10360|MH"));
 
-        pathAndBranch.forEach((libCode, expected) -> {
+        homepage.forEach((libCode, expected) -> {
             String[] parts = expected.split("\\|");
-            String url = links.linkFor(libCode, "싯다르타").url();
-            assertThat(url).as(libCode)
-                    .startsWith("https://www.splib.or.kr" + parts[0] + "menu/")
-                    .contains("searchKeyword=%EC%8B%AF%EB%8B%A4%EB%A5%B4%ED%83%80")
-                    .endsWith("&searchLibraryArr=" + parts[1]);
+            assertThat(links.linkFor(libCode, "싯다르타").url()).as(libCode).isEqualTo(
+                    "https://www.splib.or.kr/" + parts[0] + "/program/30001/plusSearchResultList.do"
+                            + "?searchType=SIMPLE&searchCategory=BOOK&searchKey=ALL"
+                            + "&searchKeyword=%EC%8B%AF%EB%8B%A4%EB%A5%B4%ED%83%80&searchLibraryArr=" + parts[1]);
         });
     }
 }
