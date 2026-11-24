@@ -309,17 +309,19 @@ class PublicLibrarySearchLinksTest {
                 "www.goyanglib.or.kr", "/center/program/searchResultList.do",
                 "www.hscitylib.or.kr", "/intro/program/searchResultList.do",
                 "www.ptlib.go.kr", "/intro/plusSearchResultList.do",
-                "www.ydplib.or.kr", "/intro/plusSearchResultList.do");
+                "www.ydplib.or.kr", "/intro/plusSearchResultList.do",
+                "www.l4d.or.kr", "/intro/plusSearchResultList.do");
 
         doc.sites().stream().filter(s -> integratedPath.containsKey(s.host())).forEach(s -> s.libCodes().forEach(libCode ->
                 assertThat(java.net.URI.create(links.linkFor(libCode, "흰").url()).getPath())
                         .as(s.host() + " " + libCode).isEqualTo(integratedPath.get(s.host()))));
-        assertThat(doc.sites().stream().filter(s -> integratedPath.containsKey(s.host())).count()).isEqualTo(7);
+        assertThat(doc.sites().stream().filter(s -> integratedPath.containsKey(s.host())).count()).isEqualTo(8);
     }
 
     /**
      * 11-25: 공통 통합 경로가 없는 사이트(첫 화면 검색창부터 특정 도서관 사이트로 감)는 송파처럼 도서관마다 자기 홈페이지
-     * 경로로 간다. 작은도서관·영어도서관은 그 사이트의 공용 사이트(/libsmall/, /englib/, /small/)로, 홈페이지가 없는 파주
+     * 경로로 간다(파주·마포·부평·용산, 브라우저 확인에서 찾은 광진). 작은도서관·영어도서관은 그 사이트의 공용 사이트
+     * (/libsmall/, /englib/, /small/)로, 홈페이지가 없는 파주
      * 넷은 기존 주소(/gclib/)에 남는다. 표는 기관 · 첫 경로 · 지점 값(-는 지점 값 없는 검색)이고 사이트에서 확인한 값이다.
      */
     @Test
@@ -337,7 +339,9 @@ class PublicLibrarySearchLinksTest {
                 + "128007 miracle MA,128035 bugaech MB,128040 galsan MC,128056 samsan MD,128057 bugae ME,128085 chungcheon MF,"
                 + "111120 cheongpa MB,111473 dream MA,711650 yongmaru OA,111364 small YN,111409 small YD,711023 small YG,"
                 + "711396 small SA,711397 small YB,711398 small YC,711400 small YF,711401 small YI,711402 small YJ,"
-                + "711403 small YK,711405 small YM,711466 small YS,711497 small YO";
+                + "711403 small YK,711405 small YM,711466 small YS,711497 small YO,"
+                + "111036 gjinfo MA,111115 jy4dong MC,111116 jgsports MD,111305 gu3dong MB,111495 jyriver MF,111521 gunja MG,"
+                + "111523 achasan MH,111537 childeng MI";
         Map<String, String[]> expected = new java.util.HashMap<>();
         for (String row : table.split(",")) {
             String[] p = row.split(" ");
@@ -353,7 +357,8 @@ class PublicLibrarySearchLinksTest {
                 assertThat(url).as(libCode).endsWith("&searchLibraryArr=" + p[2]);
             }
         });
-        var hosts = java.util.Set.of("lib.paju.go.kr", "mplib.mapo.go.kr", "www.bppl.or.kr", "www.yslibrary.or.kr");
+        var hosts = java.util.Set.of("lib.paju.go.kr", "mplib.mapo.go.kr", "www.bppl.or.kr", "www.yslibrary.or.kr",
+                "www.gwangjinlib.seoul.kr");
         assertThat(doc.sites().stream().filter(s -> hosts.contains(s.host())).flatMap(s -> s.libCodes().stream()))
                 .containsExactlyInAnyOrderElementsOf(expected.keySet());
     }

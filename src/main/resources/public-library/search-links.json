@@ -4058,40 +4058,105 @@
    "host": "www.gwangjinlib.seoul.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.gwangjinlib.seoul.kr/gjinfo/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}",
+   "url": "https://www.gwangjinlib.seoul.kr/gjinfo/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MA",
    "libCodes": [
-    "111036",
-    "111115",
-    "111116",
-    "111305",
-    "111495",
-    "111521",
-    "111523",
+    "111036"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/gjinfo): 통합 첫 화면 검색창부터 광진정보도서관(/gjinfo/)으로 가 공통 경로가 없어, 그 도서관 홈페이지의 검색 결과 경로로 — 페이지 이름 '광진정보도서관'과 결과 행 소장처 확인"
+   ]
+  },
+  {
+   "host": "www.gwangjinlib.seoul.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.gwangjinlib.seoul.kr/jy4dong/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MC",
+   "libCodes": [
+    "111115"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/jy4dong): 통합 첫 화면 검색창부터 광진정보도서관(/gjinfo/)으로 가 공통 경로가 없어, 그 도서관 홈페이지의 검색 결과 경로로 — 페이지 이름 '자양제4동도서관'과 결과 행 소장처 확인"
+   ]
+  },
+  {
+   "host": "www.gwangjinlib.seoul.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.gwangjinlib.seoul.kr/jgsports/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MD",
+   "libCodes": [
+    "111116"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/jgsports): 통합 첫 화면 검색창부터 광진정보도서관(/gjinfo/)으로 가 공통 경로가 없어, 그 도서관 홈페이지의 검색 결과 경로로 — 페이지 이름 '중곡도서관'과 결과 행 소장처 확인"
+   ]
+  },
+  {
+   "host": "www.gwangjinlib.seoul.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.gwangjinlib.seoul.kr/gu3dong/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MB",
+   "libCodes": [
+    "111305"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/gu3dong): 통합 첫 화면 검색창부터 광진정보도서관(/gjinfo/)으로 가 공통 경로가 없어, 그 도서관 홈페이지의 검색 결과 경로로 — 페이지 이름 '구의제3동도서관'과 결과 행 소장처 확인 (11-24엔 통합 목록 이름과 안 맞아 통합으로 뒀으나 자기 홈페이지 기본 지점 값이 MB)"
+   ]
+  },
+  {
+   "host": "www.gwangjinlib.seoul.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.gwangjinlib.seoul.kr/jyriver/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MF",
+   "libCodes": [
+    "111495"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/jyriver): 통합 첫 화면 검색창부터 광진정보도서관(/gjinfo/)으로 가 공통 경로가 없어, 그 도서관 홈페이지의 검색 결과 경로로 — 페이지 이름 '자양한강도서관'과 결과 행 소장처 확인"
+   ]
+  },
+  {
+   "host": "www.gwangjinlib.seoul.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.gwangjinlib.seoul.kr/gunja/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MG",
+   "libCodes": [
+    "111521"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/gunja): 통합 첫 화면 검색창부터 광진정보도서관(/gjinfo/)으로 가 공통 경로가 없어, 그 도서관 홈페이지의 검색 결과 경로로 — 페이지 이름 '군자동도서관'과 결과 행 소장처 확인"
+   ]
+  },
+  {
+   "host": "www.gwangjinlib.seoul.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.gwangjinlib.seoul.kr/achasan/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MH",
+   "libCodes": [
+    "111523"
+   ],
+   "checkedAt": "2026-11-25",
+   "flags": [
+    "11-25 도서관별 경로(/achasan): 통합 첫 화면 검색창부터 광진정보도서관(/gjinfo/)으로 가 공통 경로가 없어, 그 도서관 홈페이지의 검색 결과 경로로 — 페이지 이름 '아차산숲속도서관'과 결과 행 소장처 확인"
+   ]
+  },
+  {
+   "host": "www.gwangjinlib.seoul.kr",
+   "kind": "RESULT",
+   "method": "GET",
+   "url": "https://www.gwangjinlib.seoul.kr/childeng/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}&searchLibraryArr=MI",
+   "libCodes": [
     "111537"
    ],
-   "checkedAt": "2026-11-03",
+   "checkedAt": "2026-11-25",
    "flags": [
-    "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
-    "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
-    "11-24 지점 분류: 대응표 밖 2곳을 이유와 함께 통합으로 둠",
-    "11-25 비슷한 이름 확인: 기관 111116 → 사이트 지점 '중곡도서관'(MD), 그 지점 결과의 책 3/3권을 정보나루가 이 기관 소장으로 답함"
-   ],
-   "branch": {
-    "param": "searchLibraryArr",
-    "codes": {
-     "111036": "MA",
-     "111115": "MC",
-     "111495": "MF",
-     "111521": "MG",
-     "111523": "MH",
-     "111537": "MI",
-     "111116": "MD"
-    },
-    "unbranched": {
-     "111305": "사이트 지점 목록에 없음(11-24 확인)"
-    },
-    "url": "https://www.gwangjinlib.seoul.kr/gjinfo/plusSearchResultList.do?searchType=SIMPLE&searchKey=ALL&searchKeyword={title}"
-   }
+    "11-25 도서관별 경로(/childeng): 통합 첫 화면 검색창부터 광진정보도서관(/gjinfo/)으로 가 공통 경로가 없어, 그 도서관 홈페이지의 검색 결과 경로로 — 페이지 이름 '광진어린이영어도서관'과 결과 행 소장처 확인"
+   ]
   },
   {
    "host": "www.hmlib.or.kr",
@@ -4320,7 +4385,7 @@
    "host": "www.l4d.or.kr",
    "kind": "RESULT",
    "method": "GET",
-   "url": "https://www.l4d.or.kr/info/menu/10142/program/30010/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
+   "url": "https://www.l4d.or.kr/intro/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50",
    "libCodes": [
     "111053",
     "111065",
@@ -4352,7 +4417,8 @@
     "11-04 범위: 통합 확인(결과 행 소장처 2곳 이상)",
     "11-04 지점: 결과 행 소장처와 검색 건수로 지점 필터 확인",
     "11-24 지점 분류: 결과 페이지 지점 목록과 이름이 정확히 하나로 같은 14곳 코드 추가, 표본 1곳을 그 코드로 열어 결과 행 소장처가 그 지점인지 확인, 나머지 2곳은 이유와 함께 통합",
-    "11-25 비슷한 이름 확인: 기관 111053 → 사이트 지점 '이문체육문화센터'(MD), 그 지점 결과의 책 2/3권을 정보나루가 이 기관 소장으로 답함"
+    "11-25 비슷한 이름 확인: 기관 111053 → 사이트 지점 '이문체육문화센터'(MD), 그 지점 결과의 책 2/3권을 정보나루가 이 기관 소장으로 답함",
+    "11-25 페이지 이름: 대표 도서관 경로(/info/)라 어느 도서관이든 '동대문구정보화도서관' 페이지로 뜸 → 첫 화면 검색창의 공통 경로(/intro/plusSearchResultList.do)로 바꿔 '동대문구립도서관'으로 뜸, 장안벚꽃길(MI) 결과 행 소장처와 지점 값 없는 통합 결과 확인"
    ],
    "branch": {
     "param": "searchLibraryArr",
@@ -4384,7 +4450,7 @@
     "unbranched": {
      "711086": "사이트 지점 목록에 없음(11-24 확인)"
     },
-    "url": "https://www.l4d.or.kr/info/menu/10142/program/30010/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
+    "url": "https://www.l4d.or.kr/intro/plusSearchResultList.do?searchType=DETAIL&searchCategory=ALL&searchKey1=TITLE&searchKeyword1={title}&searchRoom=ALL&searchSort=SIMILAR&searchRecordCount=50"
    }
   },
   {
