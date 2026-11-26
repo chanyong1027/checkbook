@@ -48,7 +48,7 @@ public class ELibraryContractChecker {
     static final int FAILURES_TO_RECHECK = 2;
     // robots_disallowed 값을 채우기 전에는 후보 대부분이 robots에 막혀 여러 번 뽑는다 — 한 번에 찔러 보는 곳의 상한
     static final int MAX_SITE_ATTEMPTS = 30;
-    // 동시 자리를 기다리는 시간. 사용자 검색의 사이트 마감과 같다
+    // 동시 자리를 기다리는 시간. 사용자 검색의 대기 상한(elibrary.slot-wait-timeout)과 따로 두는 주간 확인 전용 값
     private static final long SLOT_WAIT_MS = 15_000;
     private static final List<String> RESULTS = List.of("pass", "site_failure", "vendor_failure", "undetermined");
 
