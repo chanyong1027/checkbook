@@ -415,11 +415,22 @@ def build_rules():
         Rule(
             uid="cb-elibrary-site-broken", tier=INFO, title="전자도서관 사이트 고장 후보",
             expr=increase("elibrary_contract_site_failed_total", APP, "1h") + " > 0",
-            summary="주간 확인에서 전자도서관 사이트 " + COUNT + "곳이 실패했습니다(업체 공통 장애는 아님) — 정리할지 확인",
+            summary="주간 확인에서 전자도서관 사이트 " + COUNT + "곳이 실패했습니다(업체 공통 장애는 아님)"
+                    " — 같은 서버의 다른 사이트도 함께 확인하고 정리할지 판단",
             runbook=[
-                "사이트 id·이름·이유: Explore(로그) `" + LOKI_APP + ' |= "전자도서관 사이트 고장 후보"`',
-                "브라우저로 열어 본다: 닫혔으면 `UPDATE elibrary SET status = 'INACTIVE' WHERE id = <id>;`, "
-                "주소만 바뀌었으면 base_url 수정, 점검·일시 오류면 그대로",
+                "사이트 id·이름·base_url·이유: Explore(로그) `" + LOKI_APP + ' |= "전자도서관 사이트 고장 후보"`',
+                "브라우저로 열어 본다(점검·폐쇄 공지가 이미지에만 있을 수 있음): 주소만 바뀌었으면 base_url 수정, "
+                "일시 오류면 그대로",
+                # 주간 확인은 서버당 1곳만 뽑아서 같은 서버의 나머지는 알림에 안 보인다.
+                # 주소 모양이 섞여 있어(https, 포트 없음, 경로) http://<호스트>:% 같은 LIKE는 놓친다
+                "닫혔거나 중단이면 같은 서버를 모두 본다(알림은 서버당 1곳만 뽑는다): "
+                "`SELECT id, name, base_url, status FROM elibrary "
+                "WHERE base_url ~* '^https?://<호스트>(:[0-9]+)?(/|$)';` (<호스트>의 `.`은 `\\.`로)",
+                "함께 닫힌 곳만 INACTIVE: 서버 전체면 `UPDATE elibrary SET status = 'INACTIVE' "
+                "WHERE base_url ~* '^https?://<호스트>(:[0-9]+)?(/|$)' AND status = 'ACTIVE';`, "
+                "일부면 `WHERE id IN (<id>, ...)`",
+                "INACTIVE는 자동으로 돌아오지 않고 주간 확인에서도 빠진다 — 기간 미정 중단이면 재개 확인 날짜를 적어 둔다",
+                "참고: 1시간 뒤 오는 RESOLVED는 복구가 아니라 집계 창(1시간)이 지난 것",
             ]),
         Rule(
             uid="cb-elibrary-contract-stale", tier=INFO, title="전자도서관 계약 확인 멈춤",
