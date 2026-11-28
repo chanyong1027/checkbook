@@ -1,6 +1,9 @@
 package com.checkbook.support;
 
+import com.checkbook.featured.scheduler.FeaturedBooksWarmupRunner;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 
 import java.util.List;
@@ -43,6 +46,15 @@ class PostgresEnvironmentTest extends PostgresIntegrationTest {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT source FROM featured_section_snapshot WHERE section_type = 'LOAN'", String.class))
                 .isEqualTo("DATANARU");
+    }
+
+    @Autowired
+    ApplicationContext context;
+
+    // 시드 행이 있는 이 환경에서 시작 워밍업이 돌면 다른 스레드가 가짜 클라이언트를 불러 시험의 반환값 걸기와 겹친다(11-28·11-29 간헐 실패)
+    @Test
+    void startupWarmupIsOffInTests() {
+        assertThat(context.getBeanNamesForType(FeaturedBooksWarmupRunner.class)).isEmpty();
     }
 
     // A 재현의 전제: 같은 (isbn13, lib_code)를 막는 유니크 제약이 실제 표에 있다

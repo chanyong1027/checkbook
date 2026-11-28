@@ -15,6 +15,12 @@ spring:
 # 공급자 주소는 아무도 받지 않는 곳(127.0.0.1:9 — 즉시 연결 거절)으로 — 실수로 불러도 인터넷으로 안 나가게.
 # 지금까지는 "H2 표에 메인 추천 시드 행이 없어 앱 시작 워밍업이 바로 끝난다"는 우연에 기대 안전했다.
 # Flyway를 켠 PostgreSQL 시험에서 시드 행이 생기자 워밍업이 실제 정보나루를 불렀다(10-21). 이 프로필을 얹는 시험 전부에 적용된다
+# 앱 시작 워밍업(추천 섹션 채우기)은 끈다 — 시드가 있는 PostgreSQL 시험에서 시작 직후 다른 스레드가 가짜 DatanaruClient를 불러
+# 시험의 반환값 걸기와 겹쳤다(Mockito WrongTypeOfReturnValue, 11-28·11-29). 워밍업을 보는 시험은 이 값을 true로 덮는다
+featured:
+  warmup:
+    enabled: false
+
 kakao:
   book:
     rest-api-key: test-key
