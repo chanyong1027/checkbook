@@ -1,7 +1,8 @@
 -- Generated from https://ebook.kyobobook.co.kr/dig/cff/e-library
 -- DO NOT re-run on an existing DB: this file predates the 2026-10-20 cleanup (doubled-scheme URLs would come back as new
 -- ACTIVE rows and status would be reset to ACTIVE). Later fixes to these rows live in Flyway migrations (V11 onward:
--- addresses, ACTIVE, names) and re-running this file would undo them. Do not regenerate this file: fix changed rows in
+-- addresses, ACTIVE, names) and re-running this file would undo them. Rows whose address a migration changed (V11, V12)
+-- would come back as duplicate new rows at their old address (the upsert keys on base_url). Do not regenerate this file: fix changed rows in
 -- a migration instead (read KyoboELibrarySeedCollector's comment before running it). If it is ever regenerated, fix
 -- 'http://lib.global.ac.kr/elibary-front' by hand (typo in the source list, the collector keeps it).
 -- Total raw anchors collected from tab_cont sections: 1997
