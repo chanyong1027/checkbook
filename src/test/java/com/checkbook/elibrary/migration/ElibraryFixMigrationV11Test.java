@@ -47,7 +47,7 @@ class ElibraryFixMigrationV11Test extends PostgresIntegrationTest {
         insert(503, "광주광역시북구통합도서관", "http://ebook.bukgu.gwangju.kr", "ACTIVE", false);
         insert(637, "전남도립도서관(구독)", "http://libjeonnam.dkyobobook.co.kr", "ACTIVE", true);
         insert(638, "전라남도교육청통합도서관", "http://ebook.jne.go.kr:8300", "INACTIVE", false);
-        // 대상이 아닌 행: 1757(ACTIVE)과 같은 사이트라 열지 않는 1758, 중계 후보(INACTIVE)
+        // 대상이 아닌 행: 1757(ACTIVE)과 같은 사이트라 열지 않는 1758, 계속 숨겨 두는 곳(INACTIVE)
         insert(1757, "덕성여자대학교", "http://duksunguniv.dkyobobook.co.kr", "ACTIVE", true);
         insert(1758, "덕성여자대학교(구독)", "https://duksunguniv.dkyobobook.co.kr", "INACTIVE", false);
         insert(1943, "다른 대학교", "http://ebook.example.ac.kr:8080", "INACTIVE", false);

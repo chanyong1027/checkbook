@@ -38,7 +38,7 @@ SET status = 'ACTIVE',
 WHERE id = 1906 AND base_url = 'http://ebook.ptu.ac.kr:8091' AND status = 'INACTIVE';
 
 -- 2. 광주광역시·전라남도가 전남광주통합특별시로 바뀐 이름(사용자가 알려 준 6곳). 상태와 주소는 그대로다
--- (502·638은 이름만 바뀌고 계속 숨겨 둔다 — 서울 중계 대상)
+-- (502·638은 이름만 바뀌고 계속 숨겨 둔다 — 운영 서버에서 아직 닿지 않는다)
 UPDATE elibrary SET name = '전남광주통합특별시 서구 통합도서관(구독)', updated_at = CURRENT_TIMESTAMP
 WHERE id = 500 AND name = '광주광역시 서구 통합전자도서관(구독)';
 
